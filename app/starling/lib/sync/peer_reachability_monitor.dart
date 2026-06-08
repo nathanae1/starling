@@ -103,14 +103,22 @@ class PeerReachabilityMonitor {
   // Transport priority order — first reachable wins. LAN beats libp2p
   // when we're on the same network (no NAT, lowest latency). libp2p-direct
   // (Plan 11a) beats Relay and Tor when DCUtR hole-punching succeeds —
-  // QUIC over UDP is multi-second faster than Tor circuits. Relay beats
-  // direct Tor because a paired Relay's onion is always-up while a
-  // phone's is foreground-only; Tor is the universal fallback.
+  // Always prefer a phone↔phone path when one is reachable: LAN first
+  // (QUIC over UDP is multi-second faster than Tor circuits), then
+  // libp2p direct, then the Owner's own onion. The Relay is the last
+  // resort — it only wins when every phone↔phone tier is unreachable
+  // (phone asleep/offline). Preferring the phone keeps content fresh
+  // (the Relay v1 can't serve feed-key rotations) and avoids leaking
+  // Follower access patterns to the always-on box.
+  //
+  // Selection only ever runs over transports the probe loop has already
+  // marked reachable, so ranking Tor above Relay never stalls on an
+  // asleep phone — an unreachable phone simply isn't a candidate.
   static const List<PeerTransport> _priority = [
     PeerTransport.lan,
     PeerTransport.libp2pDirect,
-    PeerTransport.relay,
     PeerTransport.tor,
+    PeerTransport.relay,
   ];
 
   static const List<int> _backoffSeconds = [10, 30, 60, 120];

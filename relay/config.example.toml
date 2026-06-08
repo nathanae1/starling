@@ -1,0 +1,27 @@
+# Starling relay configuration. Copy to /etc/starling-relay/config.toml.
+# Every value can be overridden with a STARLING_RELAY_<UPPER_SNAKE> env var
+# (e.g. STARLING_RELAY_BIND_ADMIN=0.0.0.0:8088).
+
+# Where Tor state, the SQLite DB, media blobs, and the admin socket live.
+data_dir = "/var/lib/starling-relay"
+
+# Admin web UI bind address. Keep it on localhost and reach it over an SSH
+# tunnel (ssh -L 8088:127.0.0.1:8088 user@host). Only bind to a LAN/0.0.0.0
+# address AFTER setting a password (`starling-relay set-password`).
+bind_admin = "127.0.0.1:8088"
+
+# Host-wide storage cap across all Owners, in bytes (5 GiB default).
+disk_cap_bytes = 5368709120
+
+# Default per-Owner cap, in bytes (1 GiB). Applied when an Owner has no
+# explicit cap.
+per_owner_default_cap_bytes = 1073741824
+
+# Log level: error | warn | info | debug | trace.
+log_level = "info"
+
+# How long a pairing token is valid, in seconds.
+pairing_token_ttl_seconds = 600
+
+# Loopback port range Arti reverse-proxies each Owner's onion to.
+local_port_range = [17000, 17999]

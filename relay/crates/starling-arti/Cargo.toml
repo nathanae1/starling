@@ -1,0 +1,32 @@
+[package]
+name = "starling-arti"
+description = "Shared Arti (Tor) integration: a TorClient hosting N onion services. Used by both the phone FFI bridge and the headless relay."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[features]
+# The in-process SOCKS5 listener. The phone needs it (Dart's http.Client
+# tunnels outbound traffic through it); the relay does not. Default-on so
+# the phone bridge gets it without extra config; the relay sets
+# `default-features = false`.
+default = ["socks"]
+socks = ["dep:tor-socksproto"]
+
+[dependencies]
+arti-client.workspace = true
+tor-hsservice.workspace = true
+tor-hsrproxy.workspace = true
+tor-rtcompat.workspace = true
+tor-keymgr.workspace = true
+tor-socksproto = { workspace = true, optional = true }
+fs-mistrust.workspace = true
+safelog.workspace = true
+libsqlite3-sys.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

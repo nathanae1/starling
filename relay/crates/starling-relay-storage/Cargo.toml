@@ -1,0 +1,18 @@
+[package]
+name = "starling-relay-storage"
+description = "SQLite storage for the Starling relay: paired owners, pending pairings, served events + media. Payloads are client-encrypted, so no DB-level encryption."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+# `bundled` compiles SQLite from vendored C source — required for the musl
+# static build and consistent with the phone bridge's libsqlite3-sys pin.
+rusqlite = { workspace = true, features = ["bundled"] }
+r2d2.workspace = true
+r2d2_sqlite.workspace = true
+anyhow.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

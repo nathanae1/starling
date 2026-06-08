@@ -1,0 +1,98 @@
+name: relay
+
+# Build + release the headless relay. Tagged builds (relay-v*) publish
+# multi-arch binaries, a Docker image, and a GitHub release. PRs touching
+# the relay just build + test.
+on:
+  push:
+    branches: [main]
+    paths: ["relay/**", "app/starling/native/starling_bridge/**", ".github/workflows/relay.yml"]
+    tags: ["relay-v*"]
+  pull_request:
+    paths: ["relay/**", ".github/workflows/relay.yml"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: relay
+      # Network-required Arti-bootstrap tests are #[ignore]'d and excluded
+      # here — they're slow/flaky in CI. Run them locally with `-- --ignored`.
+      - name: test
+        working-directory: relay
+        run: cargo test --workspace
+
+  build-binaries:
+    if: startsWith(github.ref, 'refs/tags/relay-v')
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            arch: amd64
+          - target: aarch64-unknown-linux-musl
+            arch: arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: relay
+      - name: install cargo-zigbuild
+        run: |
+          pip install ziglang
+          cargo install cargo-zigbuild
+      - name: build
+        working-directory: relay
+        run: |
+          rustup target add ${{ matrix.target }}
+          cargo zigbuild --release -p starling-relay --target ${{ matrix.target }}
+          cp target/${{ matrix.target }}/release/starling-relay ../starling-relay-${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: starling-relay-${{ matrix.arch }}
+          path: starling-relay-${{ matrix.arch }}
+
+  docker:
+    if: startsWith(github.ref, 'refs/tags/relay-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: relay/docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/starling-relay:${{ github.ref_name }}
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/relay-v')
+    needs: [build-binaries, docker]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**/*

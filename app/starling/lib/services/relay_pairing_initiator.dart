@@ -4,15 +4,15 @@ import 'dart:typed_data';
 import 'package:cbor/simple.dart';
 import 'package:http/http.dart' as http;
 
-import '../relay/services/pairing_service.dart';
 import 'crypto/crockford_base32.dart';
 import 'crypto_service.dart';
 
-/// Phone-side counterpart to [PairingService] (Plan 15).
+/// Phone-side initiator for the `/pair` handshake against the headless
+/// Rust Relay (Plan 15 R3).
 ///
 /// Drives the `/pair` handshake after the Owner scans the Relay's
 /// `starling-relay://pair` QR. Constructs the signed claim, POSTs it over
-/// Tor to the Relay's `.onion`, and returns the Relay-issued
+/// Tor to the Relay's admin `.onion`, and returns the Relay-issued
 /// identifiers so the caller can persist a `paired_relay` row.
 ///
 /// Replay safety lives on both sides: the signed claim binds the
@@ -42,7 +42,7 @@ class RelayPairingInitiator {
   }) async {
     final ownerPubkeyBytes = crockfordBase32Decode(ownerPubkeyStoredText);
 
-    final claimBytes = PairingService.buildClaimBytes(
+    final claimBytes = _buildClaimBytes(
       ownerPubkey: ownerPubkeyBytes,
       relayOnion: payload.relayOnion,
       pairingToken: payload.pairingToken,
@@ -153,4 +153,23 @@ String _padBase64Url(String input) {
   final mod = input.length % 4;
   if (mod == 0) return input;
   return input + ('=' * (4 - mod));
+}
+
+// Domain-separation tag for the signed pairing claim. Bound into
+// blake2b_256(tag || owner_pubkey || admin_onion_address || pairing_token)
+// so a captured token can't be redirected to a different Relay.
+// Mirrored by the Rust relay (Plan 15 R3, "Pairing flow").
+const _pairingClaimTag = 'starling-relay-pair-v1';
+
+Uint8List _buildClaimBytes({
+  required Uint8List ownerPubkey,
+  required String relayOnion,
+  required Uint8List pairingToken,
+}) {
+  final builder = BytesBuilder(copy: false)
+    ..add(utf8.encode(_pairingClaimTag))
+    ..add(ownerPubkey)
+    ..add(utf8.encode(relayOnion))
+    ..add(pairingToken);
+  return builder.toBytes();
 }

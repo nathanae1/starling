@@ -1,0 +1,45 @@
+# Multi-stage build for the Starling relay. Produces a static musl binary
+# in a distroless runtime (single process — no C-tor, no Python, no
+# supervisord).
+#
+# Build from the repo root so the `relay/` workspace and the shared
+# `starling-arti` crate are both in context:
+#   docker build -f relay/docker/Dockerfile -t starling-relay .
+
+# ---- builder ----------------------------------------------------------------
+FROM rust:1-bookworm AS builder
+
+# zig + cargo-zigbuild give painless musl cross-compiles (incl. ring/rustls).
+ARG ZIG_VERSION=0.13.0
+RUN apt-get update && apt-get install -y --no-install-recommends xz-utils ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+RUN ARCH="$(uname -m)" \
+    && curl -sSL "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-${ARCH}-${ZIG_VERSION}.tar.xz" \
+       | tar -xJ -C /opt \
+    && ln -s "/opt/zig-linux-${ARCH}-${ZIG_VERSION}/zig" /usr/local/bin/zig
+RUN cargo install cargo-zigbuild
+
+# Pick the musl target for the build platform's arch.
+ARG TARGETARCH
+RUN case "${TARGETARCH}" in \
+      amd64) echo x86_64-unknown-linux-musl > /target.txt ;; \
+      arm64) echo aarch64-unknown-linux-musl > /target.txt ;; \
+      *) echo "unsupported arch ${TARGETARCH}" && exit 1 ;; \
+    esac
+RUN rustup target add "$(cat /target.txt)"
+
+WORKDIR /src
+COPY . .
+RUN cargo zigbuild --release --manifest-path relay/Cargo.toml \
+        -p starling-relay --target "$(cat /target.txt)" \
+    && cp "relay/target/$(cat /target.txt)/release/starling-relay" /starling-relay
+
+# ---- runtime ----------------------------------------------------------------
+FROM gcr.io/distroless/static:nonroot
+COPY --from=builder /starling-relay /usr/local/bin/starling-relay
+VOLUME ["/var/lib/starling-relay"]
+EXPOSE 8088
+ENV STARLING_RELAY_DATA_DIR=/var/lib/starling-relay \
+    STARLING_RELAY_BIND_ADMIN=0.0.0.0:8088
+ENTRYPOINT ["/usr/local/bin/starling-relay"]
+CMD ["serve"]

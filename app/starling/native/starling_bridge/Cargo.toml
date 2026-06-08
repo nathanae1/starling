@@ -37,24 +37,16 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"
 
 # --- arti / tor (used only by src/arti/) ---
 
-# Arti — pinned to a recent 0.x line. The exact patch version may need a bump
-# when crates.io publishes newer releases.
-arti-client = { version = "0.34", default-features = false, features = ["tokio", "rustls", "onion-service-client", "onion-service-service"] }
-tor-hsservice = { version = "0.34" }
-tor-hsrproxy = { version = "0.34" }
-tor-rtcompat = { version = "0.34", features = ["tokio", "rustls"] }
-tor-keymgr = { version = "0.34" }
-tor-socksproto = { version = "0.34" }
-fs-mistrust = "0.10"
-safelog = "0.5"
-
-# tor-dirmgr → rusqlite → libsqlite3-sys dynamically links against the
-# host libsqlite3 by default. The Android NDK sysroot does not ship
-# libsqlite3, so cross-compiles for *-linux-android fail to link.
-# Cargo feature unification: declaring this dep with `bundled` flips
-# the feature on the single libsqlite3-sys instance in the dep tree,
-# forcing it to compile sqlite from the vendored C source instead.
-libsqlite3-sys = { version = "0.35", features = ["bundled"] }
+# The Tor core (TorClient + onion service + SOCKS listener) lives in the
+# shared `starling-arti` crate, consumed by both this FFI bridge and the
+# headless relay (Plan 15). It owns the arti/tor version pins
+# (arti-client, tor-hsservice/-hsrproxy/-rtcompat/-keymgr/-socksproto,
+# fs-mistrust, safelog) and the `libsqlite3-sys 0.35 bundled` dep that
+# forces vendored SQLite — required because the Android NDK sysroot ships
+# no libsqlite3 (Cargo feature unification flips the single instance in
+# the tree to `bundled`). The `socks` feature (default-on) gives the phone
+# its in-process SOCKS5 listener.
+starling-arti = { path = "../../../../relay/crates/starling-arti" }
 
 # --- libp2p (used only by src/p2p/) ---
 

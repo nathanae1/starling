@@ -99,4 +99,22 @@ app/starling/ios/Runner/GeneratedPluginRegistrant.*
 !default.perspectivev3
 
 # Rust (was app/starling/native/arti_bridge/.gitignore)
-app/starling/native/arti_bridge/target/
+app/starling/native/starling_bridge/target/
+relay/target/
+
+# Relay local runtime state & secrets (only present if a dev points
+# data_dir / config into the repo; the default lives in /var/lib/starling-relay).
+# config.example.toml stays tracked; a real local config and an in-repo data
+# dir (Arti HS keystore = onion private keys, SQLite DB, media) do not.
+relay/config.toml
+relay/data/
+relay/**/*.db
+relay/**/*.db-wal
+relay/**/*.db-shm
+
+# Native bridge build artifacts (rebuilt by native/starling_bridge/build.sh)
+app/starling/ios/Runner/starling_bridge.xcframework/
+app/starling/android/app/src/main/jniLibs/**/libstarling_bridge.so
+
+# Personal notes
+TODO.md

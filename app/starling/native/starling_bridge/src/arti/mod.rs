@@ -27,8 +27,10 @@ use std::sync::Arc;
 use parking_lot::{Mutex, RwLock};
 use tokio::runtime::Runtime;
 
-pub(crate) mod inner;
-use inner::{InitMode, Inner, StatusSnapshot};
+// The Tor core now lives in the shared `starling-arti` crate (consumed by
+// both this FFI bridge and the headless relay). `ArtiNode` is the former
+// local `Inner`; aliased so the rest of this shim is unchanged.
+use starling_arti::{ArtiNode as Inner, InitMode, StatusSnapshot};
 
 thread_local! {
     /// Most recent error message produced by an FFI call on this thread.
@@ -158,7 +160,10 @@ pub unsafe extern "C" fn arti_init(
                 return Err(ARTI_ERR_INIT);
             }
         };
-        let inner = match runtime.block_on(Inner::start(dir, mode)) {
+        // `trust_permissions = true`: disable Arti's fs-mistrust check. The
+        // mobile OS sandbox is the real boundary and inherited file modes
+        // would otherwise trip the check. (The relay passes `false`.)
+        let inner = match runtime.block_on(Inner::start(dir, mode, true)) {
             Ok(i) => Arc::new(RwLock::new(i)),
             Err(e) => {
                 let msg = format!("arti_init failed: {e:?}");

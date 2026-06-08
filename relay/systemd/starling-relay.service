@@ -1,0 +1,36 @@
+[Unit]
+Description=Starling headless relay
+Documentation=https://github.com/starlinghome/starling
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/starling-relay serve --config /etc/starling-relay/config.toml
+Restart=on-failure
+RestartSec=5
+
+# Run as a dedicated unprivileged user. StateDirectory creates and chowns
+# /var/lib/starling-relay as 0700 — required because the relay runs Arti
+# with strict fs-mistrust permission checking.
+User=starling
+Group=starling
+StateDirectory=starling-relay
+StateDirectoryMode=0700
+
+# Hardening.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ReadWritePaths=/var/lib/starling-relay
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

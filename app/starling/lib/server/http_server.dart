@@ -6,13 +6,10 @@ import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
 
-import '../relay/services/pairing_service.dart';
-import '../relay/services/relay_storage_service.dart';
 import '../services/clock.dart';
 import '../services/content_key_service.dart';
 import '../services/crypto_service.dart';
 import '../services/follow_service.dart';
-import '../services/storage/daos/relay_dao.dart';
 import '../services/storage_service.dart';
 import '../services/types.dart';
 import 'handlers/events_handler.dart';
@@ -21,32 +18,20 @@ import 'handlers/follow_accept_handler.dart';
 import 'handlers/follow_request_handler.dart';
 import 'handlers/manifest_handler.dart';
 import 'handlers/media_handler.dart';
-import 'handlers/relay_events_handler.dart';
-import 'handlers/relay_events_push_handler.dart';
-import 'handlers/relay_manifest_handler.dart';
-import 'handlers/relay_media_handler.dart';
-import 'handlers/relay_media_push_handler.dart';
-import 'handlers/relay_pair_handler.dart';
-import 'handlers/relay_status_handler.dart';
 import 'handlers/signaling_handler.dart';
 import 'handlers/status_handler.dart';
 import 'middleware/error_handler.dart';
-import 'middleware/owner_signature_middleware.dart';
 import 'middleware/rate_limit.dart';
 
 /// Embedded shelf HTTP server that exposes content to peers. Binds to a
 /// random ephemeral port (49152–65535) and exposes that port via [port]
 /// so mDNS (Plan 09) and Tor (Plan 11) can advertise it.
 ///
-/// Two modes:
-/// - **social** ([StarlingHttpServer.social]): the Owner's phone serving its
-///   own content. Mounts the full sync API including the social-mode
-///   `POST /events` that decrypts pushes from Followers.
-/// - **relay** ([StarlingHttpServer.relay]): a desktop install serving the
-///   paired Owner's content. Mounts the read-only sync API plus
-///   owner-signed `POST /events`, `POST /media`, and the one-shot
-///   `POST /pair`. Owner-only writes go through
-///   [ownerSignatureMiddleware]; the Relay never decrypts.
+/// Single mode: the Owner's phone serving its own content via
+/// [StarlingHttpServer.social]. The full sync API is mounted, including
+/// the social-mode `POST /events` that decrypts pushes from Followers.
+/// The standalone Relay (Plan 15) is a separate Rust binary; the phone
+/// does not act as a relay for other Owners.
 class StarlingHttpServer {
   StarlingHttpServer._({
     required Router Function() buildRouter,
@@ -88,37 +73,6 @@ class StarlingHttpServer {
         crypto: crypto,
         signalingInboundHandler: signalingInboundHandler,
         followServiceLookup: lookup,
-      ),
-      clock: clock,
-      maxBindAttempts: maxBindAttempts,
-      rateLimitPerMinute: rateLimitPerMinute,
-      maxBodyBytes: maxBodyBytes,
-      random: random,
-    );
-  }
-
-  factory StarlingHttpServer.relay({
-    required RelayDao relayDao,
-    required PairingService pairingService,
-    required RelayMediaStore mediaStore,
-    required CryptoService crypto,
-    required Clock clock,
-    required String Function() relayOnion,
-    int maxBindAttempts = 5,
-    // Bumped from the social default — the Owner's initial backfill push
-    // bursts at higher rates than typical Follower fetches.
-    int rateLimitPerMinute = 360,
-    int maxBodyBytes = 4 * 1024 * 1024,
-    Random? random,
-  }) {
-    return StarlingHttpServer._(
-      buildRouter: () => _buildRelayRouter(
-        relayDao: relayDao,
-        pairingService: pairingService,
-        mediaStore: mediaStore,
-        crypto: crypto,
-        clock: clock,
-        relayOnion: relayOnion,
       ),
       clock: clock,
       maxBindAttempts: maxBindAttempts,
@@ -266,70 +220,3 @@ Router _buildSocialRouter({
   return router;
 }
 
-Router _buildRelayRouter({
-  required RelayDao relayDao,
-  required PairingService pairingService,
-  required RelayMediaStore mediaStore,
-  required CryptoService crypto,
-  required Clock clock,
-  required String Function() relayOnion,
-}) {
-  final router = Router();
-
-  // Public reads — no auth, same wire shape as social mode so existing
-  // Follower-side sync code (PeerReachabilityMonitor, SyncEngine,
-  // RemoteMediaFetcher) consumes Relay responses unchanged.
-  router.get(
-    '/status',
-    relayStatusHandler(dao: relayDao, mediaStore: mediaStore),
-  );
-  router.get(
-    '/manifest',
-    relayManifestHandler(dao: relayDao),
-  );
-  router.get(
-    '/events',
-    relayEventsHandler(dao: relayDao),
-  );
-  router.get(
-    '/media/<hash>',
-    relayMediaHandler(mediaStore: mediaStore),
-  );
-
-  router.post(
-    '/pair',
-    relayPairHandler(
-      pairingService: pairingService,
-      relayOnion: relayOnion,
-    ),
-  );
-
-  // Owner-only writes. The middleware reads & verifies the body before
-  // the inner handler sees it, then re-injects the body for parsing.
-  final ownerAuth = ownerSignatureMiddleware(
-    crypto: crypto,
-    getOwnerPubkey: () async {
-      final row = await relayDao.getPairedOwner();
-      return row?.pubkey;
-    },
-  );
-
-  router.post(
-    '/events',
-    Pipeline().addMiddleware(ownerAuth).addHandler(
-          relayEventsPushHandler(dao: relayDao),
-        ),
-  );
-
-  router.post(
-    '/media/<hash>',
-    Pipeline().addMiddleware(ownerAuth).addHandler(
-          relayMediaPushHandler(
-            mediaStore: mediaStore,
-            clock: clock,
-          ),
-        ),
-  );
-
-  return router;
-}

@@ -1,0 +1,45 @@
+//! `/manifest` and `/status` response shapes
+//! (`server/handlers/{manifest,status}_handler.dart`).
+//!
+//! `pubkey` is Crockford base32 text on both — NOT the base64 form used in
+//! the `X-Starling-Pubkey` auth header. Encode with
+//! [`crate::crockford_base32_encode`] from the raw 32-byte BLOB the relay
+//! stores.
+
+use serde::Serialize;
+
+/// One `{id, created_at}` entry in a manifest page.
+#[derive(Debug, Clone, Serialize)]
+pub struct ManifestEntry {
+    pub id: String,
+    pub created_at: i64,
+}
+
+/// `GET /manifest` CBOR body. The relay omits the optional `new_feed_key`
+/// field the phone may attach — it has no per-follower key-distribution
+/// state (a known v1 limitation; rotation keys come from the phone).
+#[derive(Debug, Clone, Serialize)]
+pub struct ManifestPage {
+    /// Owner pubkey, Crockford base32.
+    pub pubkey: String,
+    pub events: Vec<ManifestEntry>,
+    pub has_older: bool,
+}
+
+impl ManifestPage {
+    pub fn to_cbor(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        ciborium::into_writer(self, &mut buf).expect("serialize ManifestPage");
+        buf
+    }
+}
+
+/// `GET /status` JSON body.
+#[derive(Debug, Clone, Serialize)]
+pub struct StatusJson {
+    /// Owner pubkey, Crockford base32.
+    pub pubkey: String,
+    pub version: String,
+    pub event_count: i64,
+    pub media_storage_used: i64,
+}
