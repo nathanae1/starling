@@ -56,6 +56,10 @@ Handler manifestHandler({
     if (params.containsKey('ack_rotation_at') && ackRotationAt == null) {
       return Response(400, body: 'invalid ack_rotation_at');
     }
+    final cardSeenAt = _parseInt(params['card_seen_at']);
+    if (params.containsKey('card_seen_at') && cardSeenAt == null) {
+      return Response(400, body: 'invalid card_seen_at');
+    }
 
     final body = await buildManifestResponseBytes(
       storage: storage,
@@ -64,6 +68,7 @@ Handler manifestHandler({
       until: until,
       requesterPubkey: requesterPubkey,
       ackRotationAt: ackRotationAt,
+      cardSeenAt: cardSeenAt,
       pageLimit: pageLimit,
     );
     return Response.ok(
@@ -82,13 +87,20 @@ Future<Uint8List> buildManifestResponseBytes({
   int? until,
   String? requesterPubkey,
   int? ackRotationAt,
+  int? cardSeenAt,
   int pageLimit = 1000,
 }) async {
-  // Apply ack first so the freshly-acked rows aren't included below.
+  // Apply acks first so freshly-acked rows aren't re-attached below.
   if (requesterPubkey != null && ackRotationAt != null) {
     await storage.markDistributionsDelivered(
       requesterPubkey,
       ackRotationAt,
+    );
+  }
+  if (requesterPubkey != null && cardSeenAt != null) {
+    await storage.markCardDistributionsDelivered(
+      requesterPubkey,
+      cardSeenAt,
     );
   }
 
@@ -120,6 +132,14 @@ Future<Uint8List> buildManifestResponseBytes({
         'encrypted_feed_key': pending.encryptedFeedKey,
         'nonce': pending.nonce,
         'created_at': pending.createdAt,
+      };
+    }
+    final pendingCard = await storage.latestPendingCardFor(requesterPubkey);
+    if (pendingCard != null) {
+      response['new_connection_card'] = <String, dynamic>{
+        'card_cbor': pendingCard.cardCbor,
+        'sig': pendingCard.sig,
+        'created_at': pendingCard.createdAt,
       };
     }
   }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:typed_data';
 
@@ -28,6 +29,7 @@ abstract class SyncTransport {
     int? until,
     String? requesterPubkey,
     int? ackRotationAt,
+    int? cardSeenAt,
   });
 
   Future<Envelope> fetchEnvelope(PeerConnection peer, {int? since});
@@ -169,6 +171,7 @@ class SyncEngine {
         follow,
         requesterPubkey: identity?.pubkey,
         ackRotationAt: follow.lastReceivedRotationAt,
+        cardSeenAt: follow.lastReceivedCardAt,
       );
     } catch (e) {
       developer.log(
@@ -207,6 +210,24 @@ class SyncEngine {
         );
         // Don't abort the sync — we may still be able to read older events
         // with our existing key, and the rotation will be retried next pass.
+      }
+    }
+
+    // Plan 15: ingest an updated Connection card (e.g. a newly-paired relay
+    // endpoint) so the reachability monitor starts probing the new tier.
+    final cardDelivery = diff.newConnectionCard;
+    if (cardDelivery != null) {
+      try {
+        currentFollow = await _applyConnectionCard(
+          follow: currentFollow,
+          delivery: cardDelivery,
+        );
+      } catch (e) {
+        developer.log(
+          'connection card apply failed for ${follow.pubkey}: $e',
+          name: 'sync_engine',
+        );
+        // Non-fatal — the card is re-offered on the next manifest response.
       }
     }
 
@@ -375,6 +396,44 @@ class SyncEngine {
       'applied rotated feed key for ${follow.pubkey} '
       'oldEpoch=${follow.feedKeyEpoch} newEpoch=0 '
       'newKeyFp=$newKeyFp… rotationAt=${delivery.createdAt}',
+      name: 'sync_engine',
+    );
+    return updated;
+  }
+
+  /// Verifies and persists an updated Connection card from [delivery]
+  /// (Plan 15). Returns the updated [Follow] (new `connectionCard` +
+  /// `lastReceivedCardAt`), stored in the same `jsonEncode(card.toMap())`
+  /// shape `PeerReachabilityMonitor` parses. Throws on signature/format
+  /// mismatch — the caller logs and falls through.
+  Future<Follow> _applyConnectionCard({
+    required Follow follow,
+    required ConnectionCardDelivery delivery,
+  }) async {
+    // Ignore a card no newer than one we've already applied — the peer only
+    // ever advances its card, so an older `created_at` is stale/replayed.
+    if (delivery.createdAt < follow.lastReceivedCardAt) return follow;
+
+    final authorPubkey = crockfordBase32Decode(follow.pubkey);
+    final sigOk =
+        _crypto.verify(authorPubkey, delivery.cardCbor, delivery.sig);
+    if (!sigOk) {
+      throw StateError('connection card signature invalid');
+    }
+    final card = ConnectionCard.fromBytes(delivery.cardCbor);
+    if (card.pubkey != follow.pubkey) {
+      throw StateError(
+        'connection card pubkey ${card.pubkey} != follow ${follow.pubkey}',
+      );
+    }
+    final updated = follow.copyWith(
+      connectionCard: jsonEncode(card.toMap()),
+      lastReceivedCardAt: delivery.createdAt,
+    );
+    await _storage.saveFollow(updated);
+    developer.log(
+      'applied connection card for ${follow.pubkey} '
+      'endpoints=${card.endpoints.length} cardAt=${delivery.createdAt}',
       name: 'sync_engine',
     );
     return updated;

@@ -30,6 +30,7 @@ class MockNetworkService implements NetworkService {
     int? until,
     String? requesterPubkey,
     int? ackRotationAt,
+    int? cardSeenAt,
   }) async =>
       Manifest(
         pubkey: connection.pubkey,
@@ -61,18 +62,5 @@ class MockNetworkService implements NetworkService {
   Future<void> sendFollowAccept(
     PeerConnection connection,
     Uint8List acceptPayload,
-  ) async {}
-
-  @override
-  Future<void> pushEvents(
-    PeerConnection connection,
-    List<EncryptedEvent> events,
-  ) async {}
-
-  @override
-  Future<void> pushMedia(
-    PeerConnection connection,
-    String hash,
-    Uint8List blob,
   ) async {}
 }

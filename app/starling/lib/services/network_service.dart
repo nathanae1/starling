@@ -28,6 +28,7 @@ abstract class NetworkService {
     int? until,
     String? requesterPubkey,
     int? ackRotationAt,
+    int? cardSeenAt,
   });
 
   Future<List<EncryptedEvent>> fetchEvents(
@@ -47,18 +48,5 @@ abstract class NetworkService {
   Future<void> sendFollowAccept(
     PeerConnection connection,
     Uint8List acceptPayload,
-  );
-
-  // --- Push operations (relay / outbound queue) ---
-
-  Future<void> pushEvents(
-    PeerConnection connection,
-    List<EncryptedEvent> events,
-  );
-
-  Future<void> pushMedia(
-    PeerConnection connection,
-    String hash,
-    Uint8List blob,
   );
 }

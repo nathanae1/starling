@@ -141,6 +141,7 @@ class Libp2pNetworkService implements NetworkService, SyncTransport {
     int? until,
     String? requesterPubkey,
     int? ackRotationAt,
+    int? cardSeenAt,
   }) async {
     final req = <String, dynamic>{};
     if (since != null) req['since'] = since;
@@ -148,6 +149,9 @@ class Libp2pNetworkService implements NetworkService, SyncTransport {
     if (requesterPubkey != null) req['requester_pubkey'] = requesterPubkey;
     if (ackRotationAt != null && ackRotationAt > 0) {
       req['ack_rotation_at'] = ackRotationAt;
+    }
+    if (cardSeenAt != null && cardSeenAt > 0) {
+      req['card_seen_at'] = cardSeenAt;
     }
     final body = await _exchange(connection, _pManifest, _encode(req));
     final decoded = cbor.decode(body);
@@ -176,11 +180,21 @@ class Libp2pNetworkService implements NetworkService, SyncTransport {
         createdAt: rawNewKey['created_at'] as int,
       );
     }
+    ConnectionCardDelivery? newConnectionCard;
+    final rawNewCard = decoded['new_connection_card'];
+    if (rawNewCard is Map) {
+      newConnectionCard = ConnectionCardDelivery(
+        cardCbor: _toBytes(rawNewCard['card_cbor'], connection.pubkey),
+        sig: _toBytes(rawNewCard['sig'], connection.pubkey),
+        createdAt: rawNewCard['created_at'] as int,
+      );
+    }
     return Manifest(
       pubkey: decoded['pubkey'] as String,
       events: events,
       hasOlder: (decoded['has_older'] as bool?) ?? false,
       newFeedKey: newFeedKey,
+      newConnectionCard: newConnectionCard,
     );
   }
 
@@ -242,7 +256,7 @@ class Libp2pNetworkService implements NetworkService, SyncTransport {
     );
   }
 
-  // --- Push (used by post fanout and the relay push service) ---
+  // --- Push (used by post fanout) ---
 
   @override
   Future<void> pushEnvelope(
@@ -250,29 +264,6 @@ class Libp2pNetworkService implements NetworkService, SyncTransport {
     Envelope envelope,
   ) async {
     await _exchange(connection, _pEventsPush, envelope.toBytes());
-  }
-
-  @override
-  Future<void> pushEvents(
-    PeerConnection connection,
-    List<EncryptedEvent> events,
-  ) async {
-    throw UnimplementedError(
-      'pushEvents is the per-relay API path (Plan 15). The libp2p tier '
-      'uses pushEnvelope.',
-    );
-  }
-
-  @override
-  Future<void> pushMedia(
-    PeerConnection connection,
-    String hash,
-    Uint8List blob,
-  ) async {
-    throw UnimplementedError(
-      'pushMedia arrives with Plan 15 relay support; reachable via the '
-      'Plan 11a transport when the relay peer is libp2p-direct.',
-    );
   }
 
   /// Round-trip the `/starling/sync/ping/1` protocol on an already-promoted

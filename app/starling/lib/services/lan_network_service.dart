@@ -66,6 +66,7 @@ class LanNetworkService implements NetworkService, SyncTransport {
     int? until,
     String? requesterPubkey,
     int? ackRotationAt,
+    int? cardSeenAt,
   }) async {
     final query = <String, String>{};
     if (since != null) query['since'] = since.toString();
@@ -73,6 +74,9 @@ class LanNetworkService implements NetworkService, SyncTransport {
     if (requesterPubkey != null) query['requester_pubkey'] = requesterPubkey;
     if (ackRotationAt != null && ackRotationAt > 0) {
       query['ack_rotation_at'] = ackRotationAt.toString();
+    }
+    if (cardSeenAt != null && cardSeenAt > 0) {
+      query['card_seen_at'] = cardSeenAt.toString();
     }
     final uri = Uri.parse('${connection.baseUrl}/manifest')
         .replace(queryParameters: query.isEmpty ? null : query);
@@ -103,11 +107,21 @@ class LanNetworkService implements NetworkService, SyncTransport {
         createdAt: rawNewKey['created_at'] as int,
       );
     }
+    ConnectionCardDelivery? newConnectionCard;
+    final rawNewCard = decoded['new_connection_card'];
+    if (rawNewCard is Map) {
+      newConnectionCard = ConnectionCardDelivery(
+        cardCbor: _toBytes(rawNewCard['card_cbor']),
+        sig: _toBytes(rawNewCard['sig']),
+        createdAt: rawNewCard['created_at'] as int,
+      );
+    }
     return Manifest(
       pubkey: decoded['pubkey'] as String,
       events: events,
       hasOlder: (decoded['has_older'] as bool?) ?? false,
       newFeedKey: newFeedKey,
+      newConnectionCard: newConnectionCard,
     );
   }
 
@@ -115,7 +129,7 @@ class LanNetworkService implements NetworkService, SyncTransport {
     if (value is Uint8List) return value;
     if (value is List<int>) return Uint8List.fromList(value);
     throw NetworkException(
-      'expected bytes in new_feed_key, got ${value.runtimeType}',
+      'expected bytes in manifest payload, got ${value.runtimeType}',
       '',
     );
   }
@@ -222,7 +236,8 @@ class LanNetworkService implements NetworkService, SyncTransport {
     }
   }
 
-  // --- Push: peer-to-peer envelope (Plan 10) and relay (Plan 15) ---
+  // --- Push: peer-to-peer envelope (Plan 10). Owner→relay push lives in
+  //     RelayPushService, which keeps the owner key out of this transport. ---
 
   @override
   Future<void> pushEnvelope(
@@ -243,23 +258,6 @@ class LanNetworkService implements NetworkService, SyncTransport {
         connection.pubkey,
       );
     }
-  }
-
-  @override
-  Future<void> pushEvents(
-    PeerConnection connection,
-    List<EncryptedEvent> events,
-  ) async {
-    throw UnimplementedError('pushEvents arrives in Plan 15 (relay).');
-  }
-
-  @override
-  Future<void> pushMedia(
-    PeerConnection connection,
-    String hash,
-    Uint8List blob,
-  ) async {
-    throw UnimplementedError('pushMedia arrives in Plan 15 (relay).');
   }
 
   /// Closes the underlying HTTP client. Tests should call this in tearDown

@@ -188,4 +188,69 @@ void main() {
         await get('/manifest?requester_pubkey=follower-1&ack_rotation_at=abc');
     expect(res.statusCode, 400);
   });
+
+  // --- Plan 15: connection card distribution piggybacked on /manifest ---
+
+  test('omits new_connection_card when no requester_pubkey is given',
+      () async {
+    await storage.queueCardDistribution(
+      targetPubkey: 'follower-1',
+      cardCbor: Uint8List.fromList([10, 20, 30]),
+      sig: Uint8List.fromList(List.filled(64, 0xCC)),
+      createdAt: 600,
+    );
+    final body = decodeBody(
+      Uint8List.fromList(
+        await (await get('/manifest')).read().expand((c) => c).toList(),
+      ),
+    );
+    expect(body.containsKey('new_connection_card'), isFalse);
+  });
+
+  test('includes new_connection_card when requester has an undelivered card',
+      () async {
+    await storage.queueCardDistribution(
+      targetPubkey: 'follower-1',
+      cardCbor: Uint8List.fromList([10, 20, 30]),
+      sig: Uint8List.fromList(List.filled(64, 0xCC)),
+      createdAt: 600,
+    );
+    final res = await get('/manifest?requester_pubkey=follower-1');
+    final body = decodeBody(
+      Uint8List.fromList(await res.read().expand((c) => c).toList()),
+    );
+    final card = body['new_connection_card'] as Map<dynamic, dynamic>;
+    expect(card['created_at'], equals(600));
+    expect(card['card_cbor'], equals([10, 20, 30]));
+    expect((card['sig'] as List<dynamic>).first, equals(0xCC));
+  });
+
+  test('card_seen_at marks card delivered; subsequent calls omit it',
+      () async {
+    await storage.queueCardDistribution(
+      targetPubkey: 'follower-1',
+      cardCbor: Uint8List.fromList([10, 20, 30]),
+      sig: Uint8List.fromList(List.filled(64, 0xCC)),
+      createdAt: 600,
+    );
+    final first = await get('/manifest?requester_pubkey=follower-1');
+    final firstBody = decodeBody(
+      Uint8List.fromList(await first.read().expand((c) => c).toList()),
+    );
+    expect(firstBody.containsKey('new_connection_card'), isTrue);
+
+    final second = await get(
+      '/manifest?requester_pubkey=follower-1&card_seen_at=600',
+    );
+    final secondBody = decodeBody(
+      Uint8List.fromList(await second.read().expand((c) => c).toList()),
+    );
+    expect(secondBody.containsKey('new_connection_card'), isFalse);
+  });
+
+  test('invalid card_seen_at → 400', () async {
+    final res =
+        await get('/manifest?requester_pubkey=follower-1&card_seen_at=abc');
+    expect(res.statusCode, 400);
+  });
 }

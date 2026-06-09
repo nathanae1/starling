@@ -15,6 +15,10 @@ part of 'follow_provider.dart';
 /// emulator's 10.0.2.0/24). Returns an empty list until Arti has
 /// published our onion service — callers (QR sheet, follow request) gate
 /// their UX on that.
+///
+/// Plan 15: once the Owner pairs a relay, its `.onion` is appended as a
+/// `type:'relay'` endpoint. Followers rank it last (phone-onion first),
+/// so it only carries traffic when the phone is unreachable.
 
 @ProviderFor(ownEndpoints)
 final ownEndpointsProvider = OwnEndpointsProvider._();
@@ -26,6 +30,10 @@ final ownEndpointsProvider = OwnEndpointsProvider._();
 /// emulator's 10.0.2.0/24). Returns an empty list until Arti has
 /// published our onion service — callers (QR sheet, follow request) gate
 /// their UX on that.
+///
+/// Plan 15: once the Owner pairs a relay, its `.onion` is appended as a
+/// `type:'relay'` endpoint. Followers rank it last (phone-onion first),
+/// so it only carries traffic when the phone is unreachable.
 
 final class OwnEndpointsProvider
     extends $FunctionalProvider<List<Endpoint>, List<Endpoint>, List<Endpoint>>
@@ -37,6 +45,10 @@ final class OwnEndpointsProvider
   /// emulator's 10.0.2.0/24). Returns an empty list until Arti has
   /// published our onion service — callers (QR sheet, follow request) gate
   /// their UX on that.
+  ///
+  /// Plan 15: once the Owner pairs a relay, its `.onion` is appended as a
+  /// `type:'relay'` endpoint. Followers rank it last (phone-onion first),
+  /// so it only carries traffic when the phone is unreachable.
   OwnEndpointsProvider._()
     : super(
         from: null,
@@ -70,7 +82,7 @@ final class OwnEndpointsProvider
   }
 }
 
-String _$ownEndpointsHash() => r'72e3051fcf128a41c57d0dc0bce45f9a1c308df1';
+String _$ownEndpointsHash() => r'5407d1282bde2f5e53e58a8cfcfb749e4ec9995a';
 
 /// Singleton [KeyRotationService] (Plan 13) — generates a new feed key on
 /// follower removal and queues per-follower wrapped distributions.

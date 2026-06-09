@@ -308,6 +308,68 @@ class DriftStorageService implements StorageService {
   Future<void> clearPendingDistributionsFor(String targetPubkey) =>
       _db.keyRotationDao.clearPendingDistributionsFor(targetPubkey);
 
+  // --- Paired relay + card distributions (Plan 15) ---
+
+  @override
+  Future<PairedRelay?> getPairedRelay() async {
+    final row = await _db.pairedRelayDao.getPairedRelay();
+    return row == null ? null : pairedRelayFromRow(row);
+  }
+
+  @override
+  Future<void> setPairedRelay({
+    required String relayId,
+    required String relayOnion,
+    required int pairedAt,
+  }) =>
+      _db.pairedRelayDao.setPairedRelay(
+        relayId: relayId,
+        relayOnion: relayOnion,
+        pairedAt: pairedAt,
+      );
+
+  @override
+  Future<void> markRelayBackfillComplete(String relayId) =>
+      _db.pairedRelayDao.markBackfillComplete(relayId);
+
+  @override
+  Future<void> clearPairedRelay() => _db.pairedRelayDao.clearPairedRelay();
+
+  @override
+  Future<void> queueCardDistribution({
+    required String targetPubkey,
+    required Uint8List cardCbor,
+    required Uint8List sig,
+    required int createdAt,
+  }) =>
+      _db.pairedRelayDao.queueCardDistribution(
+        PendingCardDistributionEntriesCompanion.insert(
+          targetPubkey: targetPubkey,
+          cardCbor: cardCbor,
+          sig: sig,
+          createdAt: createdAt,
+        ),
+      );
+
+  @override
+  Future<PendingCardDistribution?> latestPendingCardFor(
+    String targetPubkey,
+  ) async {
+    final row = await _db.pairedRelayDao.latestPendingCardFor(targetPubkey);
+    return row == null ? null : pendingCardDistributionFromRow(row);
+  }
+
+  @override
+  Future<void> markCardDistributionsDelivered(
+    String targetPubkey,
+    int upTo,
+  ) =>
+      _db.pairedRelayDao.markCardDistributionsDelivered(targetPubkey, upTo);
+
+  @override
+  Future<void> clearCardDistributionsFor(String targetPubkey) =>
+      _db.pairedRelayDao.clearCardDistributionsFor(targetPubkey);
+
   // --- Follow requests ---
 
   @override

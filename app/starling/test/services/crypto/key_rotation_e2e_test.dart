@@ -432,6 +432,7 @@ class _DirectSyncTransport implements SyncTransport {
     int? until,
     String? requesterPubkey,
     int? ackRotationAt,
+    int? cardSeenAt,
   }) async {
     if (requesterPubkey != null && ackRotationAt != null && ackRotationAt > 0) {
       await _source.storage

@@ -11,11 +11,13 @@ class ManifestDiff {
     required this.peerEvents,
     required this.windowSince,
     this.newFeedKey,
+    this.newConnectionCard,
   });
   final List<String> missingIds;
   final List<ManifestEntry> peerEvents;
   final int? windowSince;
   final RotatedFeedKeyDelivery? newFeedKey;
+  final ConnectionCardDelivery? newConnectionCard;
 }
 
 /// Asks a peer for its manifest, compares against our local event IDs for
@@ -37,6 +39,7 @@ class ManifestExchange {
     int? since,
     String? requesterPubkey,
     int? ackRotationAt,
+    int? cardSeenAt,
   }) async {
     final windowSince = since ?? follow.lastSyncedAt;
     final manifest = await _transport.fetchManifest(
@@ -44,6 +47,7 @@ class ManifestExchange {
       since: windowSince,
       requesterPubkey: requesterPubkey,
       ackRotationAt: ackRotationAt,
+      cardSeenAt: cardSeenAt,
     );
     if (manifest.pubkey != follow.pubkey) {
       // Peer is serving someone else's content under this connection. Drop.
@@ -74,6 +78,7 @@ class ManifestExchange {
       peerEvents: manifest.events,
       windowSince: windowSince,
       newFeedKey: manifest.newFeedKey,
+      newConnectionCard: manifest.newConnectionCard,
     );
   }
 }

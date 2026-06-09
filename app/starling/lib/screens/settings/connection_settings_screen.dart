@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../providers/follow_profile_provider.dart';
 import '../../providers/follows_provider.dart';
+import '../../providers/relay_providers.dart';
 import '../../providers/service_providers.dart';
 import '../../providers/sync_provider.dart';
 import '../../services/types.dart';
@@ -13,6 +14,8 @@ import '../../sync/peer_reachability_provider.dart';
 import '../../theme/starling_theme.dart';
 import '../../utils/starling_address.dart';
 import '../../widgets/buttons.dart';
+import '../../widgets/sheet.dart';
+import '../friends/scan_screen.dart';
 
 /// Surfaces the per-peer reachability state maintained by
 /// [PeerReachabilityMonitor]. Used for connection troubleshooting:
@@ -33,6 +36,7 @@ class ConnectionSettingsScreen extends ConsumerWidget {
         child: Column(
           children: [
             const _Header(),
+            const _RelaySection(),
             Expanded(
               child: followsAsync.when(
                 loading: () =>
@@ -110,6 +114,123 @@ class _Header extends ConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+/// Plan 15 — pair/unpair an always-on relay and show its status. Sits
+/// above the per-peer list so it reads as "my reach" before "their reach."
+class _RelaySection extends ConsumerStatefulWidget {
+  const _RelaySection();
+
+  @override
+  ConsumerState<_RelaySection> createState() => _RelaySectionState();
+}
+
+class _RelaySectionState extends ConsumerState<_RelaySection> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final starling = StarlingTheme.of(context);
+    final relay = ref.watch(pairedRelayControllerProvider).value;
+    final serviceReady =
+        ref.watch(relayPairingServiceProvider).value != null;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: starling.colors.hairline)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Relay',
+                  style: starling.typography.body.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: starling.colors.ink,
+                  ),
+                ),
+              ),
+              if (relay == null)
+                SecondaryButton(
+                  label: 'Pair a relay',
+                  onPressed: _openScanner,
+                )
+              else
+                SecondaryButton(
+                  label: _busy ? 'Unpairing…' : 'Unpair',
+                  onPressed: (_busy || !serviceReady) ? null : _unpair,
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            relay == null
+                ? 'No relay paired — friends only reach you while your phone '
+                    'is online.'
+                : '${_shortOnion(relay.relayOnion)} · '
+                    '${relay.backfillComplete ? 'synced' : 'syncing…'}',
+            style: starling.typography.micro.copyWith(
+              color: starling.colors.stone,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openScanner() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const ScanScreen()),
+    );
+  }
+
+  Future<void> _unpair() async {
+    final confirmed = await showStarlingSheet<bool>(
+      context: context,
+      builder: (ctx) {
+        final starling = StarlingTheme.of(ctx);
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Unpair this relay?', style: starling.typography.h3),
+            const SizedBox(height: 8),
+            Text(
+              'Friends will stop reaching your feed through the relay. Its '
+              'stored copy stays until you remove it from the relay’s admin '
+              'page.',
+              style: starling.typography.body,
+            ),
+            const SizedBox(height: 20),
+            PrimaryButton(
+              label: 'Unpair',
+              onPressed: () => Navigator.of(ctx).pop(true),
+              block: true,
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) return;
+    setState(() => _busy = true);
+    try {
+      final service = ref.read(relayPairingServiceProvider).value;
+      await service?.unpair();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  static String _shortOnion(String onion) {
+    final host = onion.split(':').first;
+    return host.length > 16 ? '${host.substring(0, 16)}…' : host;
   }
 }
 

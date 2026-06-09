@@ -18,6 +18,7 @@ class _CapturingTransport implements SyncTransport {
     int? until,
     String? requesterPubkey,
     int? ackRotationAt,
+    int? cardSeenAt,
   }) async =>
       throw UnimplementedError();
 

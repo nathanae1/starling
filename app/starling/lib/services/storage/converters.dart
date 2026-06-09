@@ -72,6 +72,7 @@ Follow followFromRow(FollowEntry row) => Follow(
       feedKeyEpoch: row.feedKeyEpoch,
       lastSyncedAt: row.lastSyncedAt,
       lastReceivedRotationAt: row.lastReceivedRotationAt,
+      lastReceivedCardAt: row.lastReceivedCardAt,
       lastDecryptFailureAt: row.lastDecryptFailureAt,
       status: row.status,
     );
@@ -86,8 +87,28 @@ FollowEntriesCompanion followToCompanion(Follow follow) =>
       feedKeyEpoch: Value(follow.feedKeyEpoch),
       lastSyncedAt: Value(follow.lastSyncedAt),
       lastReceivedRotationAt: Value(follow.lastReceivedRotationAt),
+      lastReceivedCardAt: Value(follow.lastReceivedCardAt),
       lastDecryptFailureAt: Value(follow.lastDecryptFailureAt),
       status: Value(follow.status),
+    );
+
+// --- Paired relay + card distributions (Plan 15) ---
+
+PairedRelay pairedRelayFromRow(PairedRelayEntry row) => PairedRelay(
+      relayId: row.relayId,
+      relayOnion: row.relayOnion,
+      pairedAt: row.pairedAt,
+      backfillComplete: row.relayBackfillComplete == 1,
+    );
+
+PendingCardDistribution pendingCardDistributionFromRow(
+  PendingCardDistributionEntry row,
+) =>
+    PendingCardDistribution(
+      targetPubkey: row.targetPubkey,
+      cardCbor: row.cardCbor,
+      sig: row.sig,
+      createdAt: row.createdAt,
     );
 
 // --- Event ---

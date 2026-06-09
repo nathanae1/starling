@@ -48,4 +48,4 @@ final class PostServiceProvider
   }
 }
 
-String _$postServiceHash() => r'fee69b4d635b754d867389104896210117405b32';
+String _$postServiceHash() => r'f042c4f8323594a0332cd8cae9d0e7e1fdc61ad9';

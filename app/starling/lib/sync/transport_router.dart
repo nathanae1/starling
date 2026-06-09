@@ -58,6 +58,7 @@ class TransportRouter implements SyncTransport {
     int? until,
     String? requesterPubkey,
     int? ackRotationAt,
+    int? cardSeenAt,
   }) =>
       _pick(peer).fetchManifest(
         peer,
@@ -65,6 +66,7 @@ class TransportRouter implements SyncTransport {
         until: until,
         requesterPubkey: requesterPubkey,
         ackRotationAt: ackRotationAt,
+        cardSeenAt: cardSeenAt,
       );
 
   @override

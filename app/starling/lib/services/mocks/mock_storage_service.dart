@@ -473,6 +473,99 @@ class MockStorageService implements StorageService {
     _deliveredKeys.removeWhere((k) => k.startsWith('$targetPubkey|'));
   }
 
+  // --- Paired relay + card distributions (Plan 15) ---
+
+  PairedRelay? _pairedRelay;
+  final List<PendingCardDistribution> _pendingCards = [];
+  final Set<String> _deliveredCards = {}; // "pubkey|createdAt" markers
+
+  @override
+  Future<PairedRelay?> getPairedRelay() async => _pairedRelay;
+
+  @override
+  Future<void> setPairedRelay({
+    required String relayId,
+    required String relayOnion,
+    required int pairedAt,
+  }) async {
+    _pairedRelay = PairedRelay(
+      relayId: relayId,
+      relayOnion: relayOnion,
+      pairedAt: pairedAt,
+    );
+  }
+
+  @override
+  Future<void> markRelayBackfillComplete(String relayId) async {
+    final relay = _pairedRelay;
+    if (relay != null && relay.relayId == relayId) {
+      _pairedRelay = PairedRelay(
+        relayId: relay.relayId,
+        relayOnion: relay.relayOnion,
+        pairedAt: relay.pairedAt,
+        backfillComplete: true,
+      );
+    }
+  }
+
+  @override
+  Future<void> clearPairedRelay() async {
+    _pairedRelay = null;
+  }
+
+  @override
+  Future<void> queueCardDistribution({
+    required String targetPubkey,
+    required Uint8List cardCbor,
+    required Uint8List sig,
+    required int createdAt,
+  }) async {
+    _pendingCards
+      ..removeWhere(
+        (d) => d.targetPubkey == targetPubkey && d.createdAt == createdAt,
+      )
+      ..add(PendingCardDistribution(
+        targetPubkey: targetPubkey,
+        cardCbor: cardCbor,
+        sig: sig,
+        createdAt: createdAt,
+      ));
+    _deliveredCards.remove(_distKey(targetPubkey, createdAt));
+  }
+
+  @override
+  Future<PendingCardDistribution?> latestPendingCardFor(
+    String targetPubkey,
+  ) async {
+    PendingCardDistribution? best;
+    for (final d in _pendingCards) {
+      if (d.targetPubkey != targetPubkey) continue;
+      if (_deliveredCards.contains(_distKey(d.targetPubkey, d.createdAt))) {
+        continue;
+      }
+      if (best == null || d.createdAt > best.createdAt) best = d;
+    }
+    return best;
+  }
+
+  @override
+  Future<void> markCardDistributionsDelivered(
+    String targetPubkey,
+    int upTo,
+  ) async {
+    for (final d in _pendingCards) {
+      if (d.targetPubkey == targetPubkey && d.createdAt <= upTo) {
+        _deliveredCards.add(_distKey(d.targetPubkey, d.createdAt));
+      }
+    }
+  }
+
+  @override
+  Future<void> clearCardDistributionsFor(String targetPubkey) async {
+    _pendingCards.removeWhere((d) => d.targetPubkey == targetPubkey);
+    _deliveredCards.removeWhere((k) => k.startsWith('$targetPubkey|'));
+  }
+
   // --- Follow requests ---
 
   @override

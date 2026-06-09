@@ -11,6 +11,7 @@ import '../services/storage/keychain_manager.dart';
 import '../services/tor/tor_http_client.dart';
 import '../sync/peer_reachability_provider.dart';
 import 'identity_provider.dart';
+import 'relay_providers.dart';
 import 'service_providers.dart';
 
 part 'follow_provider.g.dart';
@@ -22,11 +23,20 @@ part 'follow_provider.g.dart';
 /// emulator's 10.0.2.0/24). Returns an empty list until Arti has
 /// published our onion service — callers (QR sheet, follow request) gate
 /// their UX on that.
+///
+/// Plan 15: once the Owner pairs a relay, its `.onion` is appended as a
+/// `type:'relay'` endpoint. Followers rank it last (phone-onion first),
+/// so it only carries traffic when the phone is unreachable.
 @riverpod
 List<Endpoint> ownEndpoints(Ref ref) {
   final onion = ref.watch(onionAddressProvider);
   if (onion == null) return const [];
-  return [Endpoint(type: 'onion', address: '$onion:80')];
+  final endpoints = [Endpoint(type: 'onion', address: '$onion:80')];
+  final relay = ref.watch(pairedRelayControllerProvider).value;
+  if (relay != null) {
+    endpoints.add(Endpoint(type: 'relay', address: '${relay.relayOnion}:80'));
+  }
+  return endpoints;
 }
 
 /// Singleton [KeyRotationService] (Plan 13) — generates a new feed key on

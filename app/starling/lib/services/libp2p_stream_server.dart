@@ -104,11 +104,13 @@ class Libp2pStreamServer {
     int? until;
     String? requesterPubkey;
     int? ackRotationAt;
+    int? cardSeenAt;
     if (decoded is Map) {
       since = decoded['since'] as int?;
       until = decoded['until'] as int?;
       requesterPubkey = decoded['requester_pubkey'] as String?;
       ackRotationAt = decoded['ack_rotation_at'] as int?;
+      cardSeenAt = decoded['card_seen_at'] as int?;
     }
     return buildManifestResponseBytes(
       storage: _storage,
@@ -117,6 +119,7 @@ class Libp2pStreamServer {
       until: until,
       requesterPubkey: requesterPubkey,
       ackRotationAt: ackRotationAt,
+      cardSeenAt: cardSeenAt,
     );
   }
 

@@ -73,7 +73,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -143,6 +143,12 @@ class AppDatabase extends _$AppDatabase {
             await customStatement(
               'DROP INDEX IF EXISTS idx_served_events_pubkey_created',
             );
+          }
+          if (from < 5) {
+            // Plan 15: track the most recent Connection card update accepted
+            // from each peer, so the follower can ack card distributions the
+            // same way it acks key rotations.
+            await m.addColumn(followEntries, followEntries.lastReceivedCardAt);
           }
         },
       );

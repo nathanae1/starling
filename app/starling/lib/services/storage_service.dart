@@ -177,6 +177,44 @@ abstract class StorageService {
 
   Future<void> clearPendingDistributionsFor(String targetPubkey);
 
+  // --- Paired relay + card distributions (Plan 15) ---
+
+  /// The single Relay this Owner has paired with, or null if none.
+  Future<PairedRelay?> getPairedRelay();
+
+  /// Replace the paired-relay record (one Relay per Owner in v1).
+  Future<void> setPairedRelay({
+    required String relayId,
+    required String relayOnion,
+    required int pairedAt,
+  });
+
+  /// Flip the one-shot history-backfill flag once the Owner's full event +
+  /// media history has been pushed to the Relay.
+  Future<void> markRelayBackfillComplete(String relayId);
+
+  /// Forget the paired Relay (unpair).
+  Future<void> clearPairedRelay();
+
+  /// Queue a signed Connection card update for [targetPubkey], delivered on
+  /// that follower's next `/manifest` response.
+  Future<void> queueCardDistribution({
+    required String targetPubkey,
+    required Uint8List cardCbor,
+    required Uint8List sig,
+    required int createdAt,
+  });
+
+  /// Latest undelivered card update for [targetPubkey], or null.
+  Future<PendingCardDistribution?> latestPendingCardFor(String targetPubkey);
+
+  /// Mark card distributions for [targetPubkey] with `createdAt <= upTo`
+  /// as delivered. Idempotent.
+  Future<void> markCardDistributionsDelivered(String targetPubkey, int upTo);
+
+  /// Drop every queued card update for [targetPubkey] (e.g. on unfollow).
+  Future<void> clearCardDistributionsFor(String targetPubkey);
+
   // --- Follow requests ---
 
   Future<List<FollowRequest>> getInboundRequests();

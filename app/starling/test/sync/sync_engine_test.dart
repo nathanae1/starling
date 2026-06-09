@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:starling/models/models.dart';
@@ -102,6 +103,59 @@ void main() {
       // last_synced_at advanced.
       final follow = await bob.storage.getFollow(alice.identity.pubkey);
       expect(follow!.lastSyncedAt, greaterThan(0));
+    });
+
+    test('ingests a validly-signed connection card from the peer (Plan 15)',
+        () async {
+      final card = ConnectionCard(
+        pubkey: alice.identity.pubkey,
+        endpoints: const [
+          Endpoint(type: 'onion', address: 'phone.onion:80'),
+          Endpoint(type: 'relay', address: 'relayhost.onion:80'),
+        ],
+      );
+      final cardCbor = card.toBytes();
+      transport.queueCardFor(
+        peerPubkey: alice.identity.pubkey,
+        delivery: ConnectionCardDelivery(
+          cardCbor: cardCbor,
+          sig: crypto.sign(alice.secretKey, cardCbor),
+          createdAt: 5000,
+        ),
+      );
+
+      await bobEngine.syncOnePeerByPubkey(alice.identity.pubkey);
+
+      final follow = await bob.storage.getFollow(alice.identity.pubkey);
+      expect(follow!.connectionCard, isNotEmpty);
+      expect(follow.lastReceivedCardAt, equals(5000));
+      final stored = ConnectionCard.fromMap(
+        jsonDecode(follow.connectionCard) as Map<String, dynamic>,
+      );
+      expect(stored.endpoints.any((e) => e.type == 'relay'), isTrue);
+    });
+
+    test('rejects a connection card with an invalid signature (Plan 15)',
+        () async {
+      final card = ConnectionCard(
+        pubkey: alice.identity.pubkey,
+        endpoints: const [Endpoint(type: 'relay', address: 'evil.onion:80')],
+      );
+      transport.queueCardFor(
+        peerPubkey: alice.identity.pubkey,
+        delivery: ConnectionCardDelivery(
+          cardCbor: card.toBytes(),
+          sig: Uint8List(64), // not a valid signature
+          createdAt: 5000,
+        ),
+      );
+
+      await bobEngine.syncOnePeerByPubkey(alice.identity.pubkey);
+
+      // The seeded follow's card was empty; a bad sig must leave it untouched.
+      final follow = await bob.storage.getFollow(alice.identity.pubkey);
+      expect(follow!.connectionCard, isEmpty);
+      expect(follow.lastReceivedCardAt, equals(0));
     });
 
     test('re-running syncNow does not duplicate events', () async {
@@ -517,12 +571,20 @@ class _RouteableTransport implements SyncTransport {
   String? injectExtraItemFor;
   EnvelopeItem? injectedItem;
   final Map<String, RotatedFeedKeyDelivery> _queuedDeliveries = {};
+  final Map<String, ConnectionCardDelivery> _queuedCards = {};
 
   void queueRotationFor({
     required String peerPubkey,
     required RotatedFeedKeyDelivery delivery,
   }) {
     _queuedDeliveries[peerPubkey] = delivery;
+  }
+
+  void queueCardFor({
+    required String peerPubkey,
+    required ConnectionCardDelivery delivery,
+  }) {
+    _queuedCards[peerPubkey] = delivery;
   }
 
   @override
@@ -532,6 +594,7 @@ class _RouteableTransport implements SyncTransport {
     int? until,
     String? requesterPubkey,
     int? ackRotationAt,
+    int? cardSeenAt,
   }) async {
     if (failNextManifestFor == peer.pubkey) {
       failNextManifestFor = null;
@@ -543,6 +606,7 @@ class _RouteableTransport implements SyncTransport {
       since: since,
     );
     final delivery = _queuedDeliveries.remove(peer.pubkey);
+    final cardDelivery = _queuedCards.remove(peer.pubkey);
     return Manifest(
       pubkey: peer.pubkey,
       events: events
@@ -550,6 +614,7 @@ class _RouteableTransport implements SyncTransport {
           .toList(),
       hasOlder: false,
       newFeedKey: delivery,
+      newConnectionCard: cardDelivery,
     );
   }
 

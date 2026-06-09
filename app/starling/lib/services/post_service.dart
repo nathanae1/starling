@@ -43,6 +43,7 @@ class DefaultPostService implements PostService {
     required Clock clock,
     required Future<Identity?> Function() identityLookup,
     PostFanoutService fanout = PostFanoutService.noop,
+    Future<void> Function(Event signed, Uint8List encryptedBytes)? onPublished,
     PublishLock? publishLock,
   })  : _contentKey = contentKey,
         _crypto = crypto,
@@ -51,6 +52,7 @@ class DefaultPostService implements PostService {
         _clock = clock,
         _identityLookup = identityLookup,
         _fanout = fanout,
+        _onPublished = onPublished,
         _publishLock = publishLock ?? PublishLock();
 
   final ContentKeyService _contentKey;
@@ -60,6 +62,10 @@ class DefaultPostService implements PostService {
   final Clock _clock;
   final Future<Identity?> Function() _identityLookup;
   final PostFanoutService _fanout;
+  // Plan 15: fired after fanout with the freshly-published event so the
+  // relay push coordinator can mirror it to the paired relay (if any).
+  final Future<void> Function(Event signed, Uint8List encryptedBytes)?
+      _onPublished;
   final PublishLock _publishLock;
 
   @override
@@ -126,6 +132,7 @@ class DefaultPostService implements PostService {
           identity.copyWith(msgSeqCounter: msgSeq + 1),
         );
         unawaited(_fanout.fanout(encryptedBytes));
+        _notifyPublished(result.signed, encryptedBytes);
         return result.signed.id;
       });
 
@@ -166,8 +173,14 @@ class DefaultPostService implements PostService {
           identity.copyWith(msgSeqCounter: msgSeq + 1),
         );
         unawaited(_fanout.fanout(encryptedBytes));
+        _notifyPublished(result.signed, encryptedBytes);
         return result.signed.id;
       });
+
+  void _notifyPublished(Event signed, Uint8List encryptedBytes) {
+    final cb = _onPublished;
+    if (cb != null) unawaited(cb(signed, encryptedBytes));
+  }
 }
 
 String _fpPostSvc(Uint8List bytes) {

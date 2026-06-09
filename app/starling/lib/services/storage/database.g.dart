@@ -591,6 +591,17 @@ class $FollowEntriesTable extends FollowEntries
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _lastReceivedCardAtMeta =
+      const VerificationMeta('lastReceivedCardAt');
+  @override
+  late final GeneratedColumn<int> lastReceivedCardAt = GeneratedColumn<int>(
+    'last_received_card_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _lastDecryptFailureAtMeta =
       const VerificationMeta('lastDecryptFailureAt');
   @override
@@ -612,6 +623,7 @@ class $FollowEntriesTable extends FollowEntries
     lastSyncedAt,
     status,
     lastReceivedRotationAt,
+    lastReceivedCardAt,
     lastDecryptFailureAt,
   ];
   @override
@@ -701,6 +713,15 @@ class $FollowEntriesTable extends FollowEntries
         ),
       );
     }
+    if (data.containsKey('last_received_card_at')) {
+      context.handle(
+        _lastReceivedCardAtMeta,
+        lastReceivedCardAt.isAcceptableOrUnknown(
+          data['last_received_card_at']!,
+          _lastReceivedCardAtMeta,
+        ),
+      );
+    }
     if (data.containsKey('last_decrypt_failure_at')) {
       context.handle(
         _lastDecryptFailureAtMeta,
@@ -755,6 +776,10 @@ class $FollowEntriesTable extends FollowEntries
         DriftSqlType.int,
         data['${effectivePrefix}last_received_rotation_at'],
       )!,
+      lastReceivedCardAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_received_card_at'],
+      )!,
       lastDecryptFailureAt: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}last_decrypt_failure_at'],
@@ -778,6 +803,7 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
   final int lastSyncedAt;
   final String status;
   final int lastReceivedRotationAt;
+  final int lastReceivedCardAt;
   final int? lastDecryptFailureAt;
   const FollowEntry({
     required this.pubkey,
@@ -789,6 +815,7 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
     required this.lastSyncedAt,
     required this.status,
     required this.lastReceivedRotationAt,
+    required this.lastReceivedCardAt,
     this.lastDecryptFailureAt,
   });
   @override
@@ -807,6 +834,7 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
     map['last_synced_at'] = Variable<int>(lastSyncedAt);
     map['status'] = Variable<String>(status);
     map['last_received_rotation_at'] = Variable<int>(lastReceivedRotationAt);
+    map['last_received_card_at'] = Variable<int>(lastReceivedCardAt);
     if (!nullToAbsent || lastDecryptFailureAt != null) {
       map['last_decrypt_failure_at'] = Variable<int>(lastDecryptFailureAt);
     }
@@ -828,6 +856,7 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
       lastSyncedAt: Value(lastSyncedAt),
       status: Value(status),
       lastReceivedRotationAt: Value(lastReceivedRotationAt),
+      lastReceivedCardAt: Value(lastReceivedCardAt),
       lastDecryptFailureAt: lastDecryptFailureAt == null && nullToAbsent
           ? const Value.absent()
           : Value(lastDecryptFailureAt),
@@ -851,6 +880,7 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
       lastReceivedRotationAt: serializer.fromJson<int>(
         json['lastReceivedRotationAt'],
       ),
+      lastReceivedCardAt: serializer.fromJson<int>(json['lastReceivedCardAt']),
       lastDecryptFailureAt: serializer.fromJson<int?>(
         json['lastDecryptFailureAt'],
       ),
@@ -869,6 +899,7 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
       'lastSyncedAt': serializer.toJson<int>(lastSyncedAt),
       'status': serializer.toJson<String>(status),
       'lastReceivedRotationAt': serializer.toJson<int>(lastReceivedRotationAt),
+      'lastReceivedCardAt': serializer.toJson<int>(lastReceivedCardAt),
       'lastDecryptFailureAt': serializer.toJson<int?>(lastDecryptFailureAt),
     };
   }
@@ -883,6 +914,7 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
     int? lastSyncedAt,
     String? status,
     int? lastReceivedRotationAt,
+    int? lastReceivedCardAt,
     Value<int?> lastDecryptFailureAt = const Value.absent(),
   }) => FollowEntry(
     pubkey: pubkey ?? this.pubkey,
@@ -895,6 +927,7 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
     status: status ?? this.status,
     lastReceivedRotationAt:
         lastReceivedRotationAt ?? this.lastReceivedRotationAt,
+    lastReceivedCardAt: lastReceivedCardAt ?? this.lastReceivedCardAt,
     lastDecryptFailureAt: lastDecryptFailureAt.present
         ? lastDecryptFailureAt.value
         : this.lastDecryptFailureAt,
@@ -922,6 +955,9 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
       lastReceivedRotationAt: data.lastReceivedRotationAt.present
           ? data.lastReceivedRotationAt.value
           : this.lastReceivedRotationAt,
+      lastReceivedCardAt: data.lastReceivedCardAt.present
+          ? data.lastReceivedCardAt.value
+          : this.lastReceivedCardAt,
       lastDecryptFailureAt: data.lastDecryptFailureAt.present
           ? data.lastDecryptFailureAt.value
           : this.lastDecryptFailureAt,
@@ -940,6 +976,7 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
           ..write('lastSyncedAt: $lastSyncedAt, ')
           ..write('status: $status, ')
           ..write('lastReceivedRotationAt: $lastReceivedRotationAt, ')
+          ..write('lastReceivedCardAt: $lastReceivedCardAt, ')
           ..write('lastDecryptFailureAt: $lastDecryptFailureAt')
           ..write(')'))
         .toString();
@@ -956,6 +993,7 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
     lastSyncedAt,
     status,
     lastReceivedRotationAt,
+    lastReceivedCardAt,
     lastDecryptFailureAt,
   );
   @override
@@ -971,6 +1009,7 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
           other.lastSyncedAt == this.lastSyncedAt &&
           other.status == this.status &&
           other.lastReceivedRotationAt == this.lastReceivedRotationAt &&
+          other.lastReceivedCardAt == this.lastReceivedCardAt &&
           other.lastDecryptFailureAt == this.lastDecryptFailureAt);
 }
 
@@ -984,6 +1023,7 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
   final Value<int> lastSyncedAt;
   final Value<String> status;
   final Value<int> lastReceivedRotationAt;
+  final Value<int> lastReceivedCardAt;
   final Value<int?> lastDecryptFailureAt;
   final Value<int> rowid;
   const FollowEntriesCompanion({
@@ -996,6 +1036,7 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
     this.lastSyncedAt = const Value.absent(),
     this.status = const Value.absent(),
     this.lastReceivedRotationAt = const Value.absent(),
+    this.lastReceivedCardAt = const Value.absent(),
     this.lastDecryptFailureAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -1009,6 +1050,7 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
     this.lastSyncedAt = const Value.absent(),
     this.status = const Value.absent(),
     this.lastReceivedRotationAt = const Value.absent(),
+    this.lastReceivedCardAt = const Value.absent(),
     this.lastDecryptFailureAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : pubkey = Value(pubkey),
@@ -1024,6 +1066,7 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
     Expression<int>? lastSyncedAt,
     Expression<String>? status,
     Expression<int>? lastReceivedRotationAt,
+    Expression<int>? lastReceivedCardAt,
     Expression<int>? lastDecryptFailureAt,
     Expression<int>? rowid,
   }) {
@@ -1038,6 +1081,8 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
       if (status != null) 'status': status,
       if (lastReceivedRotationAt != null)
         'last_received_rotation_at': lastReceivedRotationAt,
+      if (lastReceivedCardAt != null)
+        'last_received_card_at': lastReceivedCardAt,
       if (lastDecryptFailureAt != null)
         'last_decrypt_failure_at': lastDecryptFailureAt,
       if (rowid != null) 'rowid': rowid,
@@ -1054,6 +1099,7 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
     Value<int>? lastSyncedAt,
     Value<String>? status,
     Value<int>? lastReceivedRotationAt,
+    Value<int>? lastReceivedCardAt,
     Value<int?>? lastDecryptFailureAt,
     Value<int>? rowid,
   }) {
@@ -1068,6 +1114,7 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
       status: status ?? this.status,
       lastReceivedRotationAt:
           lastReceivedRotationAt ?? this.lastReceivedRotationAt,
+      lastReceivedCardAt: lastReceivedCardAt ?? this.lastReceivedCardAt,
       lastDecryptFailureAt: lastDecryptFailureAt ?? this.lastDecryptFailureAt,
       rowid: rowid ?? this.rowid,
     );
@@ -1105,6 +1152,9 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
         lastReceivedRotationAt.value,
       );
     }
+    if (lastReceivedCardAt.present) {
+      map['last_received_card_at'] = Variable<int>(lastReceivedCardAt.value);
+    }
     if (lastDecryptFailureAt.present) {
       map['last_decrypt_failure_at'] = Variable<int>(
         lastDecryptFailureAt.value,
@@ -1128,6 +1178,7 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
           ..write('lastSyncedAt: $lastSyncedAt, ')
           ..write('status: $status, ')
           ..write('lastReceivedRotationAt: $lastReceivedRotationAt, ')
+          ..write('lastReceivedCardAt: $lastReceivedCardAt, ')
           ..write('lastDecryptFailureAt: $lastDecryptFailureAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -6167,6 +6218,7 @@ typedef $$FollowEntriesTableCreateCompanionBuilder =
       Value<int> lastSyncedAt,
       Value<String> status,
       Value<int> lastReceivedRotationAt,
+      Value<int> lastReceivedCardAt,
       Value<int?> lastDecryptFailureAt,
       Value<int> rowid,
     });
@@ -6181,6 +6233,7 @@ typedef $$FollowEntriesTableUpdateCompanionBuilder =
       Value<int> lastSyncedAt,
       Value<String> status,
       Value<int> lastReceivedRotationAt,
+      Value<int> lastReceivedCardAt,
       Value<int?> lastDecryptFailureAt,
       Value<int> rowid,
     });
@@ -6236,6 +6289,11 @@ class $$FollowEntriesTableFilterComposer
 
   ColumnFilters<int> get lastReceivedRotationAt => $composableBuilder(
     column: $table.lastReceivedRotationAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastReceivedCardAt => $composableBuilder(
+    column: $table.lastReceivedCardAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6299,6 +6357,11 @@ class $$FollowEntriesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get lastReceivedCardAt => $composableBuilder(
+    column: $table.lastReceivedCardAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get lastDecryptFailureAt => $composableBuilder(
     column: $table.lastDecryptFailureAt,
     builder: (column) => ColumnOrderings(column),
@@ -6353,6 +6416,11 @@ class $$FollowEntriesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<int> get lastReceivedCardAt => $composableBuilder(
+    column: $table.lastReceivedCardAt,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get lastDecryptFailureAt => $composableBuilder(
     column: $table.lastDecryptFailureAt,
     builder: (column) => column,
@@ -6399,6 +6467,7 @@ class $$FollowEntriesTableTableManager
                 Value<int> lastSyncedAt = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<int> lastReceivedRotationAt = const Value.absent(),
+                Value<int> lastReceivedCardAt = const Value.absent(),
                 Value<int?> lastDecryptFailureAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FollowEntriesCompanion(
@@ -6411,6 +6480,7 @@ class $$FollowEntriesTableTableManager
                 lastSyncedAt: lastSyncedAt,
                 status: status,
                 lastReceivedRotationAt: lastReceivedRotationAt,
+                lastReceivedCardAt: lastReceivedCardAt,
                 lastDecryptFailureAt: lastDecryptFailureAt,
                 rowid: rowid,
               ),
@@ -6425,6 +6495,7 @@ class $$FollowEntriesTableTableManager
                 Value<int> lastSyncedAt = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<int> lastReceivedRotationAt = const Value.absent(),
+                Value<int> lastReceivedCardAt = const Value.absent(),
                 Value<int?> lastDecryptFailureAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FollowEntriesCompanion.insert(
@@ -6437,6 +6508,7 @@ class $$FollowEntriesTableTableManager
                 lastSyncedAt: lastSyncedAt,
                 status: status,
                 lastReceivedRotationAt: lastReceivedRotationAt,
+                lastReceivedCardAt: lastReceivedCardAt,
                 lastDecryptFailureAt: lastDecryptFailureAt,
                 rowid: rowid,
               ),

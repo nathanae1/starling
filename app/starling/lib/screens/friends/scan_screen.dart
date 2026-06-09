@@ -12,6 +12,7 @@ import '../../theme/starling_theme.dart';
 import '../../utils/connection_card_parser.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/sheet.dart';
+import 'confirm_relay_pairing_sheet.dart';
 import 'confirm_request_sheet.dart';
 
 class ScanScreen extends ConsumerStatefulWidget {
@@ -65,13 +66,16 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   Future<void> _handleScan(String payload) async {
     if (_busy) return;
     final parsed = parseInvite(payload);
-    if (parsed is! ValidInvite) return;
+    // Ignore anything that isn't a recognized Starling QR — keep scanning.
+    if (parsed is! ValidInvite && parsed is! ValidRelayPair) return;
     setState(() => _busy = true);
     if (!mounted) return;
     Navigator.of(context).pop();
     await showStarlingSheet(
       context: context,
-      builder: (_) => ConfirmRequestSheet(card: parsed.card),
+      builder: (_) => parsed is ValidRelayPair
+          ? ConfirmRelayPairingSheet(payload: parsed.payload)
+          : ConfirmRequestSheet(card: (parsed as ValidInvite).card),
     );
   }
 
@@ -111,14 +115,10 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
     );
     if (result == null || result.isEmpty) return;
     final parsed = parseInvite(result);
-    if (parsed is! ValidInvite) {
+    if (parsed is InvalidInvite) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            (parsed as InvalidInvite).reason,
-          ),
-        ),
+        SnackBar(content: Text(parsed.reason)),
       );
       return;
     }
@@ -126,7 +126,9 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
     Navigator.of(context).pop();
     await showStarlingSheet(
       context: context,
-      builder: (_) => ConfirmRequestSheet(card: parsed.card),
+      builder: (_) => parsed is ValidRelayPair
+          ? ConfirmRelayPairingSheet(payload: parsed.payload)
+          : ConfirmRequestSheet(card: (parsed as ValidInvite).card),
     );
   }
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -18,6 +19,7 @@ import '../sync/sync_engine.dart';
 import '../sync/transport_router.dart';
 import 'app_paths_provider.dart';
 import 'follow_provider.dart';
+import 'relay_providers.dart';
 import 'service_providers.dart';
 
 part 'sync_provider.g.dart';
@@ -267,6 +269,10 @@ class SyncController extends _$SyncController {
         lastReport: report,
         lastSyncAt: report.finishedAt,
       );
+      // Plan 15: best-effort self-heal — re-push any own events the paired
+      // relay is missing (e.g. published while it was unreachable). No-ops
+      // when no relay is paired.
+      unawaited(_reconcileRelay());
       return report;
     } catch (e) {
       state = state.copyWith(
@@ -274,6 +280,15 @@ class SyncController extends _$SyncController {
         lastError: e.toString(),
       );
       rethrow;
+    }
+  }
+
+  Future<void> _reconcileRelay() async {
+    try {
+      final coord = await ref.read(relayPushCoordinatorProvider.future);
+      await coord?.reconcile();
+    } catch (_) {
+      // Best-effort; the next sync pass retries.
     }
   }
 }

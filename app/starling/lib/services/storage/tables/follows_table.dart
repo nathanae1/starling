@@ -18,6 +18,12 @@ class FollowEntries extends Table {
   // distribution row delivered. 0 means "no rotation received yet."
   IntColumn get lastReceivedRotationAt =>
       integer().withDefault(const Constant(0))();
+  // The `created_at` stamp on the most recent Connection card update we've
+  // accepted from this peer (Plan 15). Sent back as `card_seen_at` on the
+  // next /manifest call so the peer can mark the card distribution row
+  // delivered. 0 means "no card update received yet."
+  IntColumn get lastReceivedCardAt =>
+      integer().withDefault(const Constant(0))();
   // Unix-second timestamp of the most recent decrypt failure attributable
   // to this peer's stored feed key (event or media). Set when we observe
   // a stale-key signal, cleared when a fresh rotation lands. Drives the

@@ -49,6 +49,7 @@ class Manifest {
     required this.events,
     required this.hasOlder,
     this.newFeedKey,
+    this.newConnectionCard,
   });
   final String pubkey;
   final List<ManifestEntry> events;
@@ -58,6 +59,11 @@ class Manifest {
   // derived against the peer's pubkey, then persist as `follow.feedKey`
   // and ack via `ack_rotation_at` on the next /manifest call.
   final RotatedFeedKeyDelivery? newFeedKey;
+  // Plan 15: when present, the peer has added/rotated a relay endpoint and
+  // is handing us its freshly-signed Connection card. Verify the Ed25519
+  // signature against the peer's pubkey, persist as `follow.connectionCard`,
+  // and ack via `card_seen_at` on the next /manifest call.
+  final ConnectionCardDelivery? newConnectionCard;
 }
 
 class ManifestEntry {
@@ -76,6 +82,21 @@ class RotatedFeedKeyDelivery {
   });
   final Uint8List encryptedFeedKey;
   final Uint8List nonce;
+  final int createdAt;
+}
+
+/// Wire-level payload of an inline Connection card update in a manifest
+/// response (Plan 15). [cardCbor] is the CBOR `ConnectionCard.toBytes()`;
+/// [sig] is the author's Ed25519 detached signature over those bytes.
+/// The syncing follower verifies, persists, and acks via `card_seen_at`.
+class ConnectionCardDelivery {
+  const ConnectionCardDelivery({
+    required this.cardCbor,
+    required this.sig,
+    required this.createdAt,
+  });
+  final Uint8List cardCbor;
+  final Uint8List sig;
   final int createdAt;
 }
 
@@ -152,6 +173,39 @@ class PendingKeyDistribution {
   final int createdAt;
 }
 
+/// A signed Connection card waiting to be delivered to a follower (Plan
+/// 15). [cardCbor] is `ConnectionCard.toBytes()` and [sig] the owner's
+/// Ed25519 signature over it. Delivered via the `/manifest` response and
+/// acked with `card_seen_at`.
+class PendingCardDistribution {
+  const PendingCardDistribution({
+    required this.targetPubkey,
+    required this.cardCbor,
+    required this.sig,
+    required this.createdAt,
+  });
+  final String targetPubkey;
+  final Uint8List cardCbor;
+  final Uint8List sig;
+  final int createdAt;
+}
+
+/// The single Relay this Owner has paired with (Plan 15). [relayOnion] is
+/// the per-Owner `.onion` the Relay launched at pair time; [backfillComplete]
+/// flips true once the one-shot history push has finished.
+class PairedRelay {
+  const PairedRelay({
+    required this.relayId,
+    required this.relayOnion,
+    required this.pairedAt,
+    this.backfillComplete = false,
+  });
+  final String relayId;
+  final String relayOnion;
+  final int pairedAt;
+  final bool backfillComplete;
+}
+
 class Follow {
   const Follow({
     required this.pubkey,
@@ -162,6 +216,7 @@ class Follow {
     this.feedKeyEpoch = 0,
     this.lastSyncedAt = 0,
     this.lastReceivedRotationAt = 0,
+    this.lastReceivedCardAt = 0,
     this.lastDecryptFailureAt,
     this.status = 'active',
   });
@@ -176,6 +231,10 @@ class Follow {
   // accepted from this peer. Sent back as `ack_rotation_at` on the next
   // /manifest call so the peer can mark the distribution as delivered.
   final int lastReceivedRotationAt;
+  // Plan 15: `created_at` of the most recent Connection card update we've
+  // accepted from this peer. Sent back as `card_seen_at` on the next
+  // /manifest call so the peer can mark the card distribution delivered.
+  final int lastReceivedCardAt;
   // Unix-second timestamp of the most recent decrypt failure on this
   // peer's content (event or media). Set when a stale-key signal lands;
   // cleared when a fresh rotation is applied. Drives the "Key" status
@@ -184,10 +243,12 @@ class Follow {
   final String status;
 
   Follow copyWith({
+    String? connectionCard,
     Uint8List? feedKey,
     int? feedKeyEpoch,
     int? lastSyncedAt,
     int? lastReceivedRotationAt,
+    int? lastReceivedCardAt,
     int? lastDecryptFailureAt,
     bool clearLastDecryptFailureAt = false,
     String? status,
@@ -196,12 +257,13 @@ class Follow {
         pubkey: pubkey,
         displayName: displayName,
         avatarHash: avatarHash,
-        connectionCard: connectionCard,
+        connectionCard: connectionCard ?? this.connectionCard,
         feedKey: feedKey ?? this.feedKey,
         feedKeyEpoch: feedKeyEpoch ?? this.feedKeyEpoch,
         lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
         lastReceivedRotationAt:
             lastReceivedRotationAt ?? this.lastReceivedRotationAt,
+        lastReceivedCardAt: lastReceivedCardAt ?? this.lastReceivedCardAt,
         lastDecryptFailureAt: clearLastDecryptFailureAt
             ? null
             : (lastDecryptFailureAt ?? this.lastDecryptFailureAt),
