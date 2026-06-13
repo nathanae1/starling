@@ -218,11 +218,17 @@ class _RelaySectionState extends ConsumerState<_RelaySection> {
         );
       },
     );
-    if (confirmed != true) return;
+    if (confirmed != true || !mounted) return;
     setState(() => _busy = true);
     try {
       final service = ref.read(relayPairingServiceProvider).value;
       await service?.unpair();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Couldn’t unpair — try again.')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

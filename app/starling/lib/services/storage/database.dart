@@ -73,7 +73,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -149,6 +149,27 @@ class AppDatabase extends _$AppDatabase {
             // from each peer, so the follower can ack card distributions the
             // same way it acks key rotations.
             await m.addColumn(followEntries, followEntries.lastReceivedCardAt);
+          }
+          if (from < 6) {
+            // S2/S3b: card deliveries are now sealed per follower
+            // (encrypted_card + nonce replace card_cbor + sig). Old
+            // cleartext rows are a transient outbox — drop and recreate;
+            // they're re-queued on the next pair/unpair.
+            await customStatement(
+              'DROP TABLE IF EXISTS pending_card_distribution_entries',
+            );
+            await m.createTable(pendingCardDistributionEntries);
+            await customStatement(
+              'CREATE INDEX idx_pending_card_distributions_undelivered '
+              'ON pending_card_distribution_entries (target_pubkey) '
+              'WHERE distributed = 0',
+            );
+          }
+          if (from < 7) {
+            // D1: per-follow timestamp of the last FULL (un-windowed)
+            // manifest diff; the periodic full pass catches events that
+            // arrived at a store out of author-time order.
+            await m.addColumn(followEntries, followEntries.lastFullSyncAt);
           }
         },
       );

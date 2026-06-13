@@ -29,7 +29,7 @@ class WelcomeScreen extends StatelessWidget {
                     ),
                     alignment: Alignment.center,
                     child: Text(
-                      'F',
+                      'S',
                       style: TextStyle(
                         fontFamily: 'Fraunces',
                         color: starling.colors.sageDeep,

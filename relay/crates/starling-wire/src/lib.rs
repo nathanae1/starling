@@ -28,3 +28,12 @@ pub const PROTOCOL_VERSION: &str = "2026-04-28";
 
 pub use base32::{crockford_base32_decode, crockford_base32_encode};
 pub use sig::{blake2b256, verify_ed25519, verify_owner_sig};
+
+/// Current unix time in seconds. Shared by every relay crate (timestamps in
+/// wire payloads, token expiry, DB rows).
+pub fn now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}

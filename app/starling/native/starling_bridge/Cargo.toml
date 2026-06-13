@@ -40,8 +40,8 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"
 # The Tor core (TorClient + onion service + SOCKS listener) lives in the
 # shared `starling-arti` crate, consumed by both this FFI bridge and the
 # headless relay (Plan 15). It owns the arti/tor version pins
-# (arti-client, tor-hsservice/-hsrproxy/-rtcompat/-keymgr/-socksproto,
-# fs-mistrust, safelog) and the `libsqlite3-sys 0.35 bundled` dep that
+# (arti-client, tor-hsservice/-hsrproxy/-rtcompat/-socksproto, safelog)
+# and the `libsqlite3-sys 0.35 bundled` dep that
 # forces vendored SQLite — required because the Android NDK sysroot ships
 # no libsqlite3 (Cargo feature unification flips the single instance in
 # the tree to `bundled`). The `socks` feature (default-on) gives the phone

@@ -34,12 +34,24 @@ RUN cargo zigbuild --release --manifest-path relay/Cargo.toml \
         -p starling-relay --target "$(cat /target.txt)" \
     && cp "relay/target/$(cat /target.txt)/release/starling-relay" /starling-relay
 
+# Empty skeleton for the data dir — distroless has no shell to mkdir with.
+RUN mkdir -p /data
+
 # ---- runtime ----------------------------------------------------------------
 FROM gcr.io/distroless/static:nonroot
 COPY --from=builder /starling-relay /usr/local/bin/starling-relay
+# The relay runs as distroless `nonroot` (uid 65532) and must own its data
+# dir. Numeric ids avoid a passwd lookup; this COPY must precede VOLUME
+# (changes to a volume path after the VOLUME instruction are discarded).
+# Named volumes inherit this ownership on first use; bind mounts must be
+# `chown -R 65532:65532` on the host.
+COPY --from=builder --chown=65532:65532 /data /var/lib/starling-relay
 VOLUME ["/var/lib/starling-relay"]
 EXPOSE 8088
-ENV STARLING_RELAY_DATA_DIR=/var/lib/starling-relay \
-    STARLING_RELAY_BIND_ADMIN=0.0.0.0:8088
+# Admin UI stays on the config default (127.0.0.1:8088) — unreachable from
+# outside the container until the operator opts in. To expose it: set a
+# password first (`docker run … set-password`), then run with
+# `-e STARLING_RELAY_BIND_ADMIN=0.0.0.0:8088 -p 127.0.0.1:8088:8088`.
+ENV STARLING_RELAY_DATA_DIR=/var/lib/starling-relay
 ENTRYPOINT ["/usr/local/bin/starling-relay"]
 CMD ["serve"]

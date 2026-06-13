@@ -8,6 +8,8 @@ import 'sync_engine.dart' show SyncTransport;
 /// `connection.transport`. Backings:
 ///   - LAN: `LanNetworkService` with a default `http.Client`
 ///   - Tor: `LanNetworkService` with a `TorHttpClient` (SOCKS5 → Arti)
+///   - Relay (Plan 15): same backing as Tor — relay endpoints are `.onion`
+///     hosts, reachable only through the Tor dialer
 ///   - libp2p-direct (Plan 11a): `Libp2pNetworkService` over libp2p streams
 ///
 /// The wire-level code is identical for LAN and Tor (HTTP/1.1 to a Starling
@@ -43,10 +45,12 @@ class TransportRouter implements SyncTransport {
           );
         }
         return t;
+      // Tor and relay both dial .onion endpoints — keep this grouping in
+      // sync with PeerTransportDialing.dialsViaTor (types.dart).
       case PeerTransport.tor:
+      case PeerTransport.relay:
         return _tor;
       case PeerTransport.lan:
-      case PeerTransport.relay:
         return _lan;
     }
   }
@@ -56,17 +60,21 @@ class TransportRouter implements SyncTransport {
     PeerConnection peer, {
     int? since,
     int? until,
+    String? untilId,
     String? requesterPubkey,
     int? ackRotationAt,
     int? cardSeenAt,
+    Uint8List? ackSig,
   }) =>
       _pick(peer).fetchManifest(
         peer,
         since: since,
         until: until,
+        untilId: untilId,
         requesterPubkey: requesterPubkey,
         ackRotationAt: ackRotationAt,
         cardSeenAt: cardSeenAt,
+        ackSig: ackSig,
       );
 
   @override

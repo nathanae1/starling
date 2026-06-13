@@ -1,10 +1,8 @@
 import 'dart:typed_data';
 
-import 'package:starling/services/content_key_service.dart';
 import 'package:starling/services/crypto/crockford_base32.dart';
 import 'package:starling/services/crypto/key_cache.dart';
 import 'package:starling/services/crypto/key_rotation_service.dart';
-import 'package:starling/services/crypto/pairwise_content_key_service.dart';
 import 'package:starling/services/crypto/publish_lock.dart';
 import 'package:starling/services/crypto/sodium_crypto_service.dart';
 import 'package:starling/services/crypto_service.dart';
@@ -190,7 +188,6 @@ class _RotatorFixture {
     required this.secretKey,
     required this.storage,
     required this.cache,
-    required this.contentKey,
     required this.rotation,
     required this.clock,
   });
@@ -199,7 +196,6 @@ class _RotatorFixture {
   final Uint8List secretKey;
   final MockStorageService storage;
   final FeedKeyCache cache;
-  final ContentKeyService contentKey;
   final KeyRotationService rotation;
   final MockClock clock;
 
@@ -216,16 +212,9 @@ class _RotatorFixture {
     await storage.saveIdentity(identity);
     final cache = FeedKeyCache()
       ..put(identity.pubkey, identity.feedKey, identity.feedKeyEpoch);
-    final contentKey = PairwiseContentKeyService(
-      crypto: crypto,
-      cache: cache,
-      ownPubkey: identity.pubkey,
-      ownSecretKey: kp.secretKey,
-    );
     final clock = MockClock(2_000_000);
     final rotation = KeyRotationService(
       crypto: crypto,
-      contentKey: contentKey,
       storage: storage,
       clock: clock,
       feedKeyCache: cache,
@@ -237,7 +226,6 @@ class _RotatorFixture {
       secretKey: kp.secretKey,
       storage: storage,
       cache: cache,
-      contentKey: contentKey,
       rotation: rotation,
       clock: clock,
     );

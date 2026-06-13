@@ -15,6 +15,7 @@ import '../server/handlers/media_handler.dart';
 import '../server/handlers/ping_handler.dart';
 import 'clock.dart';
 import 'content_key_service.dart';
+import 'crypto_service.dart';
 import 'follow_service.dart';
 import 'libp2p/libp2p_service.dart';
 import 'storage_service.dart';
@@ -36,6 +37,7 @@ class Libp2pStreamServer {
     required Libp2pService libp2p,
     required StorageService storage,
     required ContentKeyService contentKey,
+    required CryptoService crypto,
     required Clock clock,
     required Directory appSupportDir,
     required Future<Identity?> Function() identityLookup,
@@ -43,6 +45,7 @@ class Libp2pStreamServer {
   })  : _libp2p = libp2p,
         _storage = storage,
         _contentKey = contentKey,
+        _crypto = crypto,
         _clock = clock,
         _appSupportDir = appSupportDir,
         _identityLookup = identityLookup,
@@ -51,6 +54,7 @@ class Libp2pStreamServer {
   final Libp2pService _libp2p;
   final StorageService _storage;
   final ContentKeyService _contentKey;
+  final CryptoService _crypto;
   final Clock _clock;
   final Directory _appSupportDir;
   final Future<Identity?> Function() _identityLookup;
@@ -102,24 +106,31 @@ class Libp2pStreamServer {
     final decoded = cbor.decode(req);
     int? since;
     int? until;
+    String? untilId;
     String? requesterPubkey;
     int? ackRotationAt;
     int? cardSeenAt;
+    Uint8List? ackSig;
     if (decoded is Map) {
       since = decoded['since'] as int?;
       until = decoded['until'] as int?;
+      untilId = decoded['until_id'] as String?;
       requesterPubkey = decoded['requester_pubkey'] as String?;
       ackRotationAt = decoded['ack_rotation_at'] as int?;
       cardSeenAt = decoded['card_seen_at'] as int?;
+      ackSig = _asBytes(decoded['ack_sig']);
     }
     return buildManifestResponseBytes(
       storage: _storage,
+      crypto: _crypto,
       identity: identity,
       since: since,
       until: until,
+      untilId: untilId,
       requesterPubkey: requesterPubkey,
       ackRotationAt: ackRotationAt,
       cardSeenAt: cardSeenAt,
+      ackSig: ackSig,
     );
   }
 

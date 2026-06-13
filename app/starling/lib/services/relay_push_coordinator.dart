@@ -10,15 +10,32 @@ import 'relay_push_service.dart';
 import 'storage_service.dart';
 import 'types.dart';
 
+/// Cap one `POST /events` batch: whichever of these trips first closes the
+/// chunk. ~100 text posts ≈ 200 KB stays far under the relay's 4 MiB body
+/// limit and keeps a single Tor request inside the 30s timeout; a mid-
+/// backfill failure re-sends at most one chunk (inserts are idempotent).
+const int kPushBatchMaxItems = 100;
+const int kPushBatchMaxBytes = 1 << 20; // 1 MiB
+
+/// Runaway guard for manifest paging (50 pages × 1000 = 50k events). On
+/// hitting the cap the partial id set stands — worst case some present
+/// events are re-pushed, which the relay dedups.
+const int kMaxManifestPages = 50;
+
 /// Owner-side push of content to the paired Relay (Plan 15), using the
 /// "best-effort + reconcile" model:
 ///
 /// - [backfill] runs once at pair time: pushes the Owner's full own-event
-///   history + media, then flips `relayBackfillComplete`.
+///   history + media.
 /// - [pushPublished] fires after each new post: a single best-effort push.
-/// - [reconcile] self-heals: diffs local own-event ids against the Relay's
-///   `/manifest` and re-pushes anything missing. Safe to call often — the
+/// - [reconcile] self-heals: diffs local own-event ids AND media hashes
+///   against the Relay's `/manifest` + `/media-manifest` (both paged to
+///   completion) and re-pushes anything missing. Safe to call often — the
 ///   Relay's `POST /events` / `POST /media` are idempotent.
+///
+/// `relayBackfillComplete` is flipped by EITHER pass once events and media
+/// have both converged, so a backfill stranded by one transport error
+/// (D2) heals on the next reconcile instead of showing "syncing…" forever.
 ///
 /// All methods no-op when no Relay is paired, and swallow/log transport
 /// errors (the next reconcile retries). They never throw into callers.
@@ -61,66 +78,137 @@ class RelayPushCoordinator {
           ),
         ],
       );
-      await _pushMediaFor([signed], ctx);
+      final failures = await _pushMediaHashes(
+        {for (final m in signed.media) m.hash},
+        ctx,
+      );
       developer.log(
-        'relay push published ${signed.id} media=${signed.media.length}',
+        'relay push published ${signed.id} media=${signed.media.length} '
+        'mediaFailures=$failures',
         name: 'relay_push',
       );
     });
   }
 
-  /// One-shot: push the Owner's full own-event + media history to the
-  /// Relay, then mark the backfill complete. Idempotent on the Relay.
-  Future<void> backfill() async {
+  /// One-shot at pair time: the relay manifest is empty, so the diff IS
+  /// the full history push.
+  Future<void> backfill() => _reconcileAndMark('backfill');
+
+  /// Self-heal: push any own events / media blobs the Relay doesn't hold.
+  Future<void> reconcile() => _reconcileAndMark('reconcile');
+
+  // --- internals ---
+
+  Future<void> _reconcileAndMark(String what) async {
     await _withRelay((ctx) async {
-      final events = await _ownEventsWithPayloads(ctx.pubkey);
-      if (events.items.isNotEmpty) {
-        await _push.pushEvents(
-          relayBaseUrl: ctx.baseUrl,
-          ownerPubkeyBytes: ctx.pubkeyBytes,
-          ownerSecretKey: ctx.secretKey,
-          items: events.items,
-        );
+      final converged = await _syncToRelay(ctx);
+      if (converged && !ctx.backfillComplete) {
+        await _storage.markRelayBackfillComplete(ctx.relayId);
+        developer.log('relay $what complete', name: 'relay_push');
       }
-      await _pushMediaFor(events.events, ctx);
-      await _storage.markRelayBackfillComplete(ctx.relayId);
-      developer.log(
-        'relay backfill complete: ${events.items.length} events',
-        name: 'relay_push',
-      );
     });
   }
 
-  /// Self-heal: push any own events the Relay's `/manifest` doesn't list.
-  Future<void> reconcile() async {
-    await _withRelay((ctx) async {
-      final present = await _relayEventIds(ctx.baseUrl);
-      if (present == null) return; // relay unreachable — try again next tick
-      final all = await _ownEventsWithPayloads(ctx.pubkey);
-      final missingEvents = <Event>[];
-      final missingItems = <RelayPushItem>[];
-      for (var i = 0; i < all.items.length; i++) {
-        if (!present.contains(all.items[i].id)) {
-          missingItems.add(all.items[i]);
-          missingEvents.add(all.events[i]);
-        }
+  /// Diff the relay's events + media against local state and push what's
+  /// missing. Returns true when the relay verifiably holds everything we
+  /// can give it (events pushed, media diffed, zero push failures). Event
+  /// push errors propagate to [_withRelay]; media errors are per-blob.
+  Future<bool> _syncToRelay(_RelayCtx ctx) async {
+    final present = await _relayEventIds(ctx.baseUrl);
+    if (present == null) return false; // relay unreachable — next tick
+
+    // Diff ids first; encrypted payloads are loaded only for the missing
+    // ids (the common nothing-missing pass reads no payload bytes at all).
+    final events = await _storage.getEvents(pubkey: ctx.pubkey);
+    final missingItems = <RelayPushItem>[];
+    for (final e in events) {
+      if (present.contains(e.id)) continue;
+      // Own events authored before schema v2 have no stored wire payload
+      // and are skipped (the Relay can't serve what we can't hand it
+      // verbatim).
+      final payload = await _storage.getEncryptedPayload(e.id);
+      if (payload == null) continue;
+      missingItems.add(RelayPushItem(
+        id: e.id,
+        encryptedEvent: EncryptedEvent.fromBytes(payload),
+      ));
+    }
+    if (missingItems.isNotEmpty) {
+      await _pushEventsChunked(missingItems, ctx);
+      developer.log(
+        'relay sync pushed ${missingItems.length} missing events',
+        name: 'relay_push',
+      );
+    }
+
+    // D8: diff media presence too. Expected = every hash referenced by an
+    // own event (payload-less pre-v2 events included — pushing their media
+    // is harmless); blobs no longer on disk are skipped below.
+    final relayHashes = await _relayMediaHashes(ctx);
+    if (relayHashes == null) return false; // retry next tick
+    final expected = <String>{
+      for (final e in events)
+        for (final m in e.media)
+          if (m.hash.isNotEmpty) m.hash,
+    };
+    final failures =
+        await _pushMediaHashes(expected.difference(relayHashes), ctx);
+    return failures == 0;
+  }
+
+  /// Push [items] as bounded batches — one signed POST each. Throws on the
+  /// first failed batch (already-sent chunks are idempotent on re-push).
+  Future<void> _pushEventsChunked(
+    List<RelayPushItem> items,
+    _RelayCtx ctx,
+  ) async {
+    var start = 0;
+    while (start < items.length) {
+      var end = start;
+      var bytes = 0;
+      while (end < items.length && end - start < kPushBatchMaxItems) {
+        final itemBytes = items[end].encryptedEvent.payload.length;
+        // An item that would overshoot closes the chunk — unless it's the
+        // chunk's first item (an oversized single event ships alone).
+        if (end > start && bytes + itemBytes > kPushBatchMaxBytes) break;
+        bytes += itemBytes;
+        end++;
       }
-      if (missingItems.isEmpty) return;
       await _push.pushEvents(
         relayBaseUrl: ctx.baseUrl,
         ownerPubkeyBytes: ctx.pubkeyBytes,
         ownerSecretKey: ctx.secretKey,
-        items: missingItems,
+        items: items.sublist(start, end),
       );
-      await _pushMediaFor(missingEvents, ctx);
-      developer.log(
-        'relay reconcile pushed ${missingItems.length} missing events',
-        name: 'relay_push',
-      );
-    });
+      start = end;
+    }
   }
 
-  // --- internals ---
+  /// Push the blobs for [hashes], tolerating per-blob failures (one bad
+  /// upload must not strand the rest, D8). Returns the failure count.
+  /// Hashes with no bytes on disk are skipped — they can never heal, so
+  /// they don't count against convergence.
+  Future<int> _pushMediaHashes(Set<String> hashes, _RelayCtx ctx) async {
+    var failures = 0;
+    for (final hash in hashes) {
+      if (hash.isEmpty) continue;
+      final blob = await _mediaBytesLookup(hash);
+      if (blob == null) continue;
+      try {
+        await _push.pushMedia(
+          relayBaseUrl: ctx.baseUrl,
+          ownerPubkeyBytes: ctx.pubkeyBytes,
+          ownerSecretKey: ctx.secretKey,
+          hash: hash,
+          blob: blob,
+        );
+      } catch (e) {
+        failures++;
+        developer.log('media push failed for $hash: $e', name: 'relay_push');
+      }
+    }
+    return failures;
+  }
 
   /// Resolves the paired relay + identity + secret key into a [_RelayCtx]
   /// and runs [body]. No-ops (logs) when anything required is missing or
@@ -134,75 +222,89 @@ class RelayPushCoordinator {
       if (identity == null || secretKey == null) return;
       await body(_RelayCtx(
         relayId: relay.relayId,
-        baseUrl: _baseUrl(relay.relayOnion),
+        baseUrl: httpBaseUrlForAddress(relay.relayOnion),
         pubkey: identity.pubkey,
         pubkeyBytes: decodeStoredPubkey(identity.pubkey),
         secretKey: secretKey,
+        backfillComplete: relay.backfillComplete,
       ));
     } catch (e) {
       developer.log('relay push skipped: $e', name: 'relay_push');
     }
   }
 
-  Future<void> _pushMediaFor(List<Event> events, _RelayCtx ctx) async {
-    final seen = <String>{};
-    for (final e in events) {
-      for (final m in e.media) {
-        if (m.hash.isEmpty || !seen.add(m.hash)) continue;
-        final blob = await _mediaBytesLookup(m.hash);
-        if (blob == null) continue;
-        await _push.pushMedia(
+  /// All event ids the Relay holds, paging `/manifest` to completion via
+  /// the `until`/`until_id` keyset cursor. Null if the Relay is
+  /// unreachable or answers garbage.
+  Future<Set<String>?> _relayEventIds(String baseUrl) async {
+    final ids = <String>{};
+    int? until;
+    String? untilId;
+    for (var page = 0; page < kMaxManifestPages; page++) {
+      final query = <String, String>{
+        if (until != null) 'until': until.toString(),
+        if (until != null && untilId != null) 'until_id': untilId,
+      };
+      final uri = Uri.parse('$baseUrl/manifest')
+          .replace(queryParameters: query.isEmpty ? null : query);
+      final List<dynamic> events;
+      final bool hasOlder;
+      try {
+        final res = await _client.get(uri).timeout(_timeout);
+        if (res.statusCode != 200) return null;
+        final decoded = cbor.decode(res.bodyBytes);
+        if (decoded is! Map) return null;
+        events = decoded['events'] as List<dynamic>? ?? const [];
+        hasOlder = (decoded['has_older'] as bool?) ?? false;
+      } catch (_) {
+        return null;
+      }
+      for (final e in events) {
+        if (e is Map && e['id'] is String) ids.add(e['id'] as String);
+      }
+      if (!hasOlder || events.isEmpty) return ids;
+      final oldest = events.last as Map;
+      until = oldest['created_at'] as int?;
+      untilId = oldest['id'] as String?;
+      if (until == null || untilId == null) return ids;
+    }
+    developer.log(
+      'relay manifest paging hit $kMaxManifestPages-page cap; '
+      'continuing with a partial id set',
+      name: 'relay_push',
+    );
+    return ids;
+  }
+
+  /// All media hashes the Relay holds, paging `/media-manifest` to
+  /// completion. Null on any failure (the caller retries next pass).
+  Future<Set<String>?> _relayMediaHashes(_RelayCtx ctx) async {
+    final hashes = <String>{};
+    String? after;
+    for (var page = 0; page < kMaxManifestPages; page++) {
+      final RelayMediaManifestPage result;
+      try {
+        result = await _push.fetchMediaManifest(
           relayBaseUrl: ctx.baseUrl,
           ownerPubkeyBytes: ctx.pubkeyBytes,
           ownerSecretKey: ctx.secretKey,
-          hash: m.hash,
-          blob: blob,
+          after: after,
         );
+      } catch (e) {
+        developer.log('media-manifest fetch failed: $e', name: 'relay_push');
+        return null;
       }
+      hashes.addAll(result.hashes);
+      if (!result.hasOlder || result.hashes.isEmpty) return hashes;
+      after = result.hashes.last;
     }
+    developer.log(
+      'relay media-manifest paging hit $kMaxManifestPages-page cap; '
+      'continuing with a partial hash set',
+      name: 'relay_push',
+    );
+    return hashes;
   }
-
-  /// Own events paired with their stored wire-`EncryptedEvent` bytes. Own
-  /// events authored before schema v2 have no stored payload and are
-  /// skipped (the Relay can't serve what we can't hand it verbatim).
-  Future<_OwnEvents> _ownEventsWithPayloads(String pubkey) async {
-    final events = await _storage.getEvents(pubkey: pubkey);
-    final items = <RelayPushItem>[];
-    final kept = <Event>[];
-    for (final e in events) {
-      final payload = await _storage.getEncryptedPayload(e.id);
-      if (payload == null) continue;
-      items.add(RelayPushItem(
-        id: e.id,
-        encryptedEvent: EncryptedEvent.fromBytes(payload),
-      ));
-      kept.add(e);
-    }
-    return _OwnEvents(items: items, events: kept);
-  }
-
-  /// Fetches the Relay's `/manifest` and returns the set of event ids it
-  /// holds, or null if the Relay is unreachable.
-  Future<Set<String>?> _relayEventIds(String baseUrl) async {
-    try {
-      final res =
-          await _client.get(Uri.parse('$baseUrl/manifest')).timeout(_timeout);
-      if (res.statusCode != 200) return null;
-      final decoded = cbor.decode(res.bodyBytes);
-      if (decoded is! Map) return null;
-      final events = decoded['events'] as List<dynamic>? ?? const [];
-      return events
-          .whereType<Map<dynamic, dynamic>>()
-          .map((e) => e['id'])
-          .whereType<String>()
-          .toSet();
-    } catch (_) {
-      return null;
-    }
-  }
-
-  String _baseUrl(String onion) =>
-      onion.contains(':') ? 'http://$onion' : 'http://$onion:80';
 }
 
 class _RelayCtx {
@@ -212,16 +314,12 @@ class _RelayCtx {
     required this.pubkey,
     required this.pubkeyBytes,
     required this.secretKey,
+    required this.backfillComplete,
   });
   final String relayId;
   final String baseUrl;
   final String pubkey;
   final Uint8List pubkeyBytes;
   final Uint8List secretKey;
-}
-
-class _OwnEvents {
-  _OwnEvents({required this.items, required this.events});
-  final List<RelayPushItem> items;
-  final List<Event> events;
+  final bool backfillComplete;
 }

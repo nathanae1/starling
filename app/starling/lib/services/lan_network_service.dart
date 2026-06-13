@@ -5,6 +5,8 @@ import 'package:cbor/simple.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/models.dart';
+import '../sync/manifest_ack.dart' show hexEncodeAckSig;
+import '../sync/manifest_codec.dart';
 import '../sync/sync_engine.dart' show SyncTransport;
 import 'mdns_service.dart';
 import 'network_service.dart';
@@ -64,19 +66,36 @@ class LanNetworkService implements NetworkService, SyncTransport {
     PeerConnection connection, {
     int? since,
     int? until,
+    String? untilId,
     String? requesterPubkey,
     int? ackRotationAt,
     int? cardSeenAt,
+    Uint8List? ackSig,
   }) async {
     final query = <String, String>{};
     if (since != null) query['since'] = since.toString();
     if (until != null) query['until'] = until.toString();
-    if (requesterPubkey != null) query['requester_pubkey'] = requesterPubkey;
-    if (ackRotationAt != null && ackRotationAt > 0) {
-      query['ack_rotation_at'] = ackRotationAt.toString();
-    }
-    if (cardSeenAt != null && cardSeenAt > 0) {
-      query['card_seen_at'] = cardSeenAt.toString();
+    // Paging cursor, not identity — sent on every transport (incl. relay).
+    if (until != null && untilId != null) query['until_id'] = untilId;
+    // S7: never identify ourselves to a relay. The relay ignores these
+    // params (it holds no per-follower state), but sending them would hand
+    // the relay operator each follower's pubkey + poll cadence — exactly
+    // the access-pattern leak the relay tier is designed to avoid. Direct
+    // peer connections (lan/tor/libp2p) keep them: the peer needs them to
+    // attach pending deliveries and honor acks.
+    if (connection.transport != PeerTransport.relay) {
+      if (requesterPubkey != null) {
+        query['requester_pubkey'] = requesterPubkey;
+      }
+      if (ackRotationAt != null && ackRotationAt > 0) {
+        query['ack_rotation_at'] = ackRotationAt.toString();
+      }
+      if (cardSeenAt != null && cardSeenAt > 0) {
+        query['card_seen_at'] = cardSeenAt.toString();
+      }
+      if (ackSig != null) {
+        query['ack_sig'] = hexEncodeAckSig(ackSig);
+      }
     }
     final uri = Uri.parse('${connection.baseUrl}/manifest')
         .replace(queryParameters: query.isEmpty ? null : query);
@@ -85,44 +104,14 @@ class LanNetworkService implements NetworkService, SyncTransport {
       throw NetworkException(
         'manifest fetch failed: ${res.statusCode}',
         connection.pubkey,
+        statusCode: res.statusCode,
       );
     }
     final decoded = cbor.decode(res.bodyBytes);
     if (decoded is! Map) {
       throw NetworkException('manifest body not a CBOR map', connection.pubkey);
     }
-    final events = (decoded['events'] as List<dynamic>? ?? const [])
-        .map((e) => e as Map<dynamic, dynamic>)
-        .map((e) => ManifestEntry(
-              id: e['id'] as String,
-              createdAt: e['created_at'] as int,
-            ))
-        .toList();
-    RotatedFeedKeyDelivery? newFeedKey;
-    final rawNewKey = decoded['new_feed_key'];
-    if (rawNewKey is Map) {
-      newFeedKey = RotatedFeedKeyDelivery(
-        encryptedFeedKey: _toBytes(rawNewKey['encrypted_feed_key']),
-        nonce: _toBytes(rawNewKey['nonce']),
-        createdAt: rawNewKey['created_at'] as int,
-      );
-    }
-    ConnectionCardDelivery? newConnectionCard;
-    final rawNewCard = decoded['new_connection_card'];
-    if (rawNewCard is Map) {
-      newConnectionCard = ConnectionCardDelivery(
-        cardCbor: _toBytes(rawNewCard['card_cbor']),
-        sig: _toBytes(rawNewCard['sig']),
-        createdAt: rawNewCard['created_at'] as int,
-      );
-    }
-    return Manifest(
-      pubkey: decoded['pubkey'] as String,
-      events: events,
-      hasOlder: (decoded['has_older'] as bool?) ?? false,
-      newFeedKey: newFeedKey,
-      newConnectionCard: newConnectionCard,
-    );
+    return parseManifestResponse(decoded, toBytes: _toBytes);
   }
 
   Uint8List _toBytes(dynamic value) {
@@ -148,6 +137,7 @@ class LanNetworkService implements NetworkService, SyncTransport {
       throw NetworkException(
         'events fetch failed: ${res.statusCode}',
         connection.pubkey,
+        statusCode: res.statusCode,
       );
     }
     final envelope = Envelope.fromBytes(res.bodyBytes);
@@ -179,6 +169,7 @@ class LanNetworkService implements NetworkService, SyncTransport {
       throw NetworkException(
         'events fetch failed: ${res.statusCode}',
         connection.pubkey,
+        statusCode: res.statusCode,
       );
     }
     return Envelope.fromBytes(res.bodyBytes);
@@ -192,6 +183,7 @@ class LanNetworkService implements NetworkService, SyncTransport {
       throw NetworkException(
         'media fetch failed: ${res.statusCode}',
         connection.pubkey,
+        statusCode: res.statusCode,
       );
     }
     return res.bodyBytes;
@@ -214,6 +206,7 @@ class LanNetworkService implements NetworkService, SyncTransport {
       throw NetworkException(
         'follow-request failed: ${res.statusCode}',
         connection.pubkey,
+        statusCode: res.statusCode,
       );
     }
   }
@@ -232,6 +225,7 @@ class LanNetworkService implements NetworkService, SyncTransport {
       throw NetworkException(
         'follow-accept failed: ${res.statusCode}',
         connection.pubkey,
+        statusCode: res.statusCode,
       );
     }
   }
@@ -256,6 +250,7 @@ class LanNetworkService implements NetworkService, SyncTransport {
       throw NetworkException(
         'pushEnvelope failed: ${res.statusCode}',
         connection.pubkey,
+        statusCode: res.statusCode,
       );
     }
   }
@@ -266,9 +261,16 @@ class LanNetworkService implements NetworkService, SyncTransport {
 }
 
 class NetworkException implements Exception {
-  const NetworkException(this.message, this.peerPubkey);
+  const NetworkException(this.message, this.peerPubkey, {this.statusCode});
   final String message;
   final String peerPubkey;
+
+  /// HTTP status when the peer answered with an error, null for
+  /// transport-level failures (no response). Callers use this to tell
+  /// "the peer rejected it" (4xx — retrying won't help) from "it never
+  /// arrived" (retry when connectivity returns).
+  final int? statusCode;
+
   @override
   String toString() => 'NetworkException($peerPubkey): $message';
 }

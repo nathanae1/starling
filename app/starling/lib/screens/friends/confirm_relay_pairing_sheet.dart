@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -60,6 +62,16 @@ class _ConfirmRelayPairingSheetState
             textAlign: TextAlign.center,
           ),
         ],
+        if (_pairing) ...[
+          const SizedBox(height: 12),
+          Text(
+            'This can take a minute while the relay sets up its Tor '
+            'address.',
+            style: starling.typography.small
+                .copyWith(color: starling.colors.stone),
+            textAlign: TextAlign.center,
+          ),
+        ],
         if (_error != null) ...[
           const SizedBox(height: 12),
           Text(
@@ -116,7 +128,22 @@ class _ConfirmRelayPairingSheetState
       if (!mounted) return;
       setState(() {
         _pairing = false;
-        _error = 'Pairing failed: ${e.message}';
+        // 409 = the relay already claimed this token, routinely because our
+        // earlier attempt timed out mid-launch; once the launch finishes,
+        // retrying the same claim succeeds idempotently.
+        _error = e.statusCode == 409
+            ? 'That pairing code was already claimed — if your earlier '
+                'attempt timed out, the relay may still be finishing. Try '
+                'again in a minute, or scan a fresh code from the relay’s '
+                'pairing page.'
+            : 'Pairing failed: ${e.message}';
+      });
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() {
+        _pairing = false;
+        _error = 'The relay didn’t respond in time — it may still be '
+            'setting up its address. Wait a minute, then try again.';
       });
     } catch (e) {
       if (!mounted) return;

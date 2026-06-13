@@ -64,6 +64,20 @@ pub fn mark_consumed(conn: &Connection, token: &[u8], at: i64) -> Result<usize> 
     Ok(n)
 }
 
+/// Consume every still-unconsumed token. Minting a new token invalidates
+/// all prior ones (exactly-one-active-token semantics), so a photographed
+/// QR stops being claimable as soon as the `/pair` page re-mints.
+pub fn consume_all_unconsumed(conn: &Connection, at: i64) -> Result<usize> {
+    let n = conn
+        .execute(
+            "UPDATE pending_pairings SET consumed_at = ?1
+             WHERE consumed_at IS NULL",
+            params![at],
+        )
+        .context("consume all unconsumed pairings")?;
+    Ok(n)
+}
+
 /// Delete tokens that expired before `now`.
 pub fn prune_expired(conn: &Connection, now: i64) -> Result<usize> {
     let n = conn

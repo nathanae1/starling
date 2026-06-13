@@ -140,6 +140,7 @@ async fn serve(cfg: Config) -> Result<()> {
         ctrl: supervisor.clone() as Arc<dyn RelayControl>,
         relay_version: VERSION.to_string(),
         pairing_ttl_secs: cfg.pairing_token_ttl_seconds,
+        auth_cache: Default::default(),
     };
 
     // /pair over Tor.
@@ -153,6 +154,7 @@ async fn serve(cfg: Config) -> Result<()> {
     }
 
     // Admin UI (localhost / LAN).
+    warn_if_admin_exposed_without_password(&cfg.bind_admin, &db);
     let admin_listener = TcpListener::bind(&cfg.bind_admin)
         .await
         .with_context(|| format!("bind admin UI on {}", cfg.bind_admin))?;
@@ -212,6 +214,34 @@ async fn cmd_pair(cfg: Config, label: Option<String>) -> Result<()> {
         admin_sock::Response::Error { message } => {
             anyhow::bail!("relay error: {message}")
         }
+    }
+}
+
+/// The admin UI has no auth until a password is set (`basic_auth_mw` passes
+/// everything through when no creds row exists) — fine on loopback, an open
+/// door on anything else. Warn loudly; the operator may genuinely want this
+/// on a trusted network (e.g. Tailscale).
+fn warn_if_admin_exposed_without_password(bind_admin: &str, db: &Db) {
+    let loopback = bind_admin.starts_with("localhost:")
+        || bind_admin
+            .parse::<std::net::SocketAddr>()
+            .map(|a| a.ip().is_loopback())
+            .unwrap_or(false);
+    if loopback {
+        return;
+    }
+    let has_password = db
+        .get()
+        .ok()
+        .and_then(|c| creds::get(&c).ok().flatten())
+        .is_some();
+    if !has_password {
+        log::warn!(
+            "admin UI is bound to {bind_admin} with NO PASSWORD set — anyone \
+             who can reach it can pair phones and unpair owners. Run \
+             `starling-relay set-password`, or bind the admin UI to \
+             127.0.0.1 in config/STARLING_RELAY_BIND_ADMIN."
+        );
     }
 }
 

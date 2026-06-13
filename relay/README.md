@@ -85,6 +85,22 @@ password first: `starling-relay set-password --config config.toml`.
 ## Deploy
 
 - **Docker:** `docker build -f relay/docker/Dockerfile -t starling-relay .`
+  The container runs as uid 65532 (`nonroot`); named volumes work out of the
+  box, but a bind-mounted data dir must be `chown -R 65532:65532` on the host.
+  The admin UI defaults to loopback *inside the container* (unreachable from
+  the host). To use it, opt in explicitly — set a password first, then bind
+  it and publish the port to the host's loopback only:
+
+  ```sh
+  docker run --rm -it -v relay-data:/var/lib/starling-relay starling-relay set-password
+  docker run -d -v relay-data:/var/lib/starling-relay \
+    -e STARLING_RELAY_BIND_ADMIN=0.0.0.0:8088 \
+    -p 127.0.0.1:8088:8088 starling-relay
+  ```
+
+  (`0.0.0.0` inside the container is required for Docker port-forwarding;
+  the `-p 127.0.0.1:` prefix keeps it off the LAN. The relay logs a warning
+  at boot if the admin UI is bound non-loopback with no password set.)
 - **systemd/Debian:** `relay/scripts/install-debian.sh`
 - **Proxmox LXC:** `relay/scripts/proxmox-install.sh <ctid> <binary>`
 - **CI/releases:** `.github/workflows/relay.yml` (tag `relay-v*`)

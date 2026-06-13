@@ -105,7 +105,49 @@ void main() {
       expect(follow!.lastSyncedAt, greaterThan(0));
     });
 
-    test('ingests a validly-signed connection card from the peer (Plan 15)',
+    /// Seal [card] from alice to bob the way RelayPairingService does:
+    /// XChaCha20-Poly1305 under the DH shared key with [createdAt] bound
+    /// into the derivation (requester = alice, responder = bob).
+    SealedDelivery sealCard(ConnectionCard card, int createdAt) {
+      final aliceEdPk = crockfordBase32Decode(alice.identity.pubkey);
+      final bobEdPk = crockfordBase32Decode(bob.identity.pubkey);
+      final shared = crypto.deriveSharedKey(
+        crypto.ed25519ToX25519SecretKey(alice.secretKey),
+        crypto.ed25519ToX25519PublicKey(bobEdPk),
+        aliceEdPk,
+        bobEdPk,
+        createdAt,
+      );
+      final nonce = crypto.randomBytes(24);
+      return SealedDelivery(
+        payload: crypto.encrypt(card.toBytes(), nonce, shared),
+        nonce: nonce,
+        createdAt: createdAt,
+      );
+    }
+
+    /// Seal a rotated feed key from alice to bob the way KeyRotationService
+    /// does: wrapped under the DH shared key with [createdAt] bound into
+    /// the derivation.
+    SealedDelivery sealRotation(Uint8List newKey, int createdAt) {
+      final aliceEdPk = crockfordBase32Decode(alice.identity.pubkey);
+      final bobEdPk = crockfordBase32Decode(bob.identity.pubkey);
+      final shared = crypto.deriveSharedKey(
+        crypto.ed25519ToX25519SecretKey(alice.secretKey),
+        crypto.ed25519ToX25519PublicKey(bobEdPk),
+        aliceEdPk,
+        bobEdPk,
+        createdAt,
+      );
+      final wrapped = alice.contentKey.encryptFeedKey(newKey, shared);
+      return SealedDelivery(
+        payload: Uint8List.fromList(wrapped.sublist(24)),
+        nonce: Uint8List.fromList(wrapped.sublist(0, 24)),
+        createdAt: createdAt,
+      );
+    }
+
+    test('ingests a sealed connection card from the peer (Plan 15)',
         () async {
       final card = ConnectionCard(
         pubkey: alice.identity.pubkey,
@@ -114,14 +156,9 @@ void main() {
           Endpoint(type: 'relay', address: 'relayhost.onion:80'),
         ],
       );
-      final cardCbor = card.toBytes();
       transport.queueCardFor(
         peerPubkey: alice.identity.pubkey,
-        delivery: ConnectionCardDelivery(
-          cardCbor: cardCbor,
-          sig: crypto.sign(alice.secretKey, cardCbor),
-          createdAt: 5000,
-        ),
+        delivery: sealCard(card, 5000),
       );
 
       await bobEngine.syncOnePeerByPubkey(alice.identity.pubkey);
@@ -135,27 +172,189 @@ void main() {
       expect(stored.endpoints.any((e) => e.type == 'relay'), isTrue);
     });
 
-    test('rejects a connection card with an invalid signature (Plan 15)',
+    test('rejects a connection card with tampered ciphertext (Plan 15)',
         () async {
       final card = ConnectionCard(
         pubkey: alice.identity.pubkey,
         endpoints: const [Endpoint(type: 'relay', address: 'evil.onion:80')],
       );
+      final sealed = sealCard(card, 5000);
+      final tampered = Uint8List.fromList(sealed.payload);
+      tampered[0] ^= 0xFF;
       transport.queueCardFor(
         peerPubkey: alice.identity.pubkey,
-        delivery: ConnectionCardDelivery(
-          cardCbor: card.toBytes(),
-          sig: Uint8List(64), // not a valid signature
-          createdAt: 5000,
+        delivery: SealedDelivery(
+          payload: tampered,
+          nonce: sealed.nonce,
+          createdAt: sealed.createdAt,
         ),
       );
 
       await bobEngine.syncOnePeerByPubkey(alice.identity.pubkey);
 
-      // The seeded follow's card was empty; a bad sig must leave it untouched.
+      // The seeded follow's card was empty; tampering must leave it so.
       final follow = await bob.storage.getFollow(alice.identity.pubkey);
       expect(follow!.connectionCard, isEmpty);
       expect(follow.lastReceivedCardAt, equals(0));
+    });
+
+    test(
+        'replayed card with an inflated created_at fails decrypt and does '
+        'not advance lastReceivedCardAt (S2)', () async {
+      final card = ConnectionCard(
+        pubkey: alice.identity.pubkey,
+        endpoints: const [
+          Endpoint(type: 'relay', address: 'relayhost.onion:80'),
+        ],
+      );
+      final sealed = sealCard(card, 5000);
+      transport.queueCardFor(
+        peerPubkey: alice.identity.pubkey,
+        delivery: sealed,
+      );
+      await bobEngine.syncOnePeerByPubkey(alice.identity.pubkey);
+      final applied = await bob.storage.getFollow(alice.identity.pubkey);
+      expect(applied!.lastReceivedCardAt, equals(5000));
+
+      // A MITM replays the same sealed bytes with a forged newer timestamp.
+      // The timestamp is bound into the key derivation, so decryption fails
+      // and the monotonic gate is never poisoned.
+      transport.queueCardFor(
+        peerPubkey: alice.identity.pubkey,
+        delivery: SealedDelivery(
+          payload: sealed.payload,
+          nonce: sealed.nonce,
+          createdAt: 999999,
+        ),
+      );
+      await bobEngine.syncOnePeerByPubkey(alice.identity.pubkey);
+
+      final follow = await bob.storage.getFollow(alice.identity.pubkey);
+      expect(follow!.lastReceivedCardAt, equals(5000));
+    });
+
+    test(
+        'relay-tier connection: outbound queue is NOT drained into the '
+        'relay (D9)', () async {
+      bobMonitor.clear();
+      bobMonitor.setReachable(
+        alice.identity.pubkey,
+        PeerTransport.relay,
+        'http://relayhost.onion:80',
+      );
+      await bob.storage
+          .enqueue(alice.identity.pubkey, Uint8List.fromList([1, 2, 3]));
+
+      final report = await bobEngine.syncNow();
+      expect(report.peers.single.status, equals(PeerSyncStatus.upToDate));
+      expect(report.peers.single.eventsPushed, equals(0));
+      expect(report.peers.single.eventsPushDropped, equals(0));
+      // Nothing was pushed at the relay (its POST /events would 401 a
+      // follower envelope), and the queue survives for a direct tier.
+      expect(transport.pushedEnvelopes, isEmpty);
+      expect(
+        await bob.storage.dequeue(alice.identity.pubkey),
+        hasLength(1),
+      );
+    });
+
+    test(
+        'cursor advances to max manifest created_at, never wall clock (D1)',
+        () async {
+      alice.clock.advance(60);
+      await alice.publishPost('post at author time');
+      final authoredAt = alice.clock.nowUnixSeconds();
+
+      // Bob's clock is far ahead — the old code stamped THIS on the
+      // cursor, sliding the window past anything still in flight.
+      bob.clock.set(2_900_000);
+
+      await bobEngine.syncNow();
+      final follow = await bob.storage.getFollow(alice.identity.pubkey);
+      expect(follow!.lastSyncedAt, equals(authoredAt));
+    });
+
+    test('empty manifest does not advance the cursor (D1)', () async {
+      final report = await bobEngine.syncNow();
+      expect(report.peers.single.status, equals(PeerSyncStatus.upToDate));
+      final follow = await bob.storage.getFollow(alice.identity.pubkey);
+      expect(follow!.lastSyncedAt, equals(0));
+    });
+
+    test('far-future created_at clamps to now + skew (D1)', () async {
+      // An author with a badly skewed clock must not jump the cursor past
+      // everything that follows.
+      alice.clock.set(2_500_000);
+      await alice.publishPost('from the future');
+
+      final bobNow = bob.clock.nowUnixSeconds();
+      await bobEngine.syncNow();
+      final follow = await bob.storage.getFollow(alice.identity.pubkey);
+      expect(follow!.lastSyncedAt, equals(bobNow + kMaxCursorSkewSecs));
+    });
+
+    test(
+        'late-arriving older event is missed by the windowed pass and '
+        'recovered by the periodic full diff (D1)', () async {
+      // Alice publishes B; bob's first sync is a full pass (cursor → B's
+      // created_at, full stamp set).
+      alice.clock.advance(60);
+      await alice.publishPost('B');
+      await bobEngine.syncNow();
+      expect(
+        await bob.storage.getEvents(pubkey: alice.identity.pubkey),
+        hasLength(1),
+      );
+
+      // A lands at alice's store with created_at BEFORE the cursor — the
+      // late-heal scenario (e.g. a failed relay push reconciled later).
+      alice.clock.set(2_000_030);
+      await alice.publishPost('A (late, older)');
+
+      // Windowed pass (full stamp is fresh): A is invisible.
+      bob.clock.advance(60);
+      await bobEngine.syncNow();
+      expect(
+        await bob.storage.getEvents(pubkey: alice.identity.pubkey),
+        hasLength(1),
+      );
+
+      // 24h later the full pass diffs all ids and recovers A.
+      bob.clock.advance(kFullManifestSyncIntervalSecs);
+      await bobEngine.syncNow();
+      final stored =
+          await bob.storage.getEvents(pubkey: alice.identity.pubkey);
+      expect(stored.map((e) => String.fromCharCodes(e.content)).toSet(),
+          equals({'B', 'A (late, older)'}));
+    });
+
+    test('windowed manifest reporting has_older triggers a full redo (D1)',
+        () async {
+      // First sync: full pass, sets the stamp.
+      alice.clock.advance(60);
+      await alice.publishPost('first');
+      await bobEngine.syncNow();
+      final stampAfterFirst =
+          (await bob.storage.getFollow(alice.identity.pubkey))!
+              .lastFullSyncAt;
+      expect(stampAfterFirst, greaterThan(0));
+
+      // Second sync is windowed (stamp fresh), but the peer reports the
+      // window overflowed its page — the engine must redo it as a full
+      // paged pass and re-stamp.
+      alice.clock.advance(60);
+      await alice.publishPost('second');
+      bob.clock.advance(120);
+      transport.forceHasOlderOnWindowedOnce = true;
+      await bobEngine.syncNow();
+
+      final follow = await bob.storage.getFollow(alice.identity.pubkey);
+      expect(follow!.lastFullSyncAt, equals(bob.clock.nowUnixSeconds()));
+      // The full redo still pulled the new event.
+      expect(
+        await bob.storage.getEvents(pubkey: alice.identity.pubkey),
+        hasLength(2),
+      );
     });
 
     test('re-running syncNow does not duplicate events', () async {
@@ -274,8 +473,8 @@ void main() {
       // response targeted at bob.
       transport.queueRotationFor(
         peerPubkey: alice.identity.pubkey,
-        delivery: RotatedFeedKeyDelivery(
-          encryptedFeedKey: ct,
+        delivery: SealedDelivery(
+          payload: ct,
           nonce: nonce,
           createdAt: rotationAt,
         ),
@@ -307,6 +506,44 @@ void main() {
           await bob.storage.getEvents(pubkey: alice.identity.pubkey);
       expect(stored.map((e) => String.fromCharCodes(e.content)).toSet(),
           equals({'pre-rotation', 'post-rotation'}));
+    });
+
+    test(
+        'replayed older rotation delivery does not regress follow.feedKey '
+        '(apply-side monotonic gate)', () async {
+      final keyA = crypto.randomBytes(32);
+      final keyB = crypto.randomBytes(32);
+      final sealedA = sealRotation(keyA, 5000);
+
+      transport.queueRotationFor(
+        peerPubkey: alice.identity.pubkey,
+        delivery: sealedA,
+      );
+      await bobEngine.syncOnePeerByPubkey(alice.identity.pubkey);
+      var follow = await bob.storage.getFollow(alice.identity.pubkey);
+      expect(follow!.feedKey, equals(keyA));
+      expect(follow.lastReceivedRotationAt, equals(5000));
+
+      transport.queueRotationFor(
+        peerPubkey: alice.identity.pubkey,
+        delivery: sealRotation(keyB, 6000),
+      );
+      await bobEngine.syncOnePeerByPubkey(alice.identity.pubkey);
+      follow = await bob.storage.getFollow(alice.identity.pubkey);
+      expect(follow!.feedKey, equals(keyB));
+      expect(follow.lastReceivedRotationAt, equals(6000));
+
+      // Replay the first delivery verbatim. Its sealed bytes are still
+      // valid (the derived key binds its own createdAt), so only the
+      // monotonic gate stands between it and regressing the feed key.
+      transport.queueRotationFor(
+        peerPubkey: alice.identity.pubkey,
+        delivery: sealedA,
+      );
+      await bobEngine.syncOnePeerByPubkey(alice.identity.pubkey);
+      follow = await bob.storage.getFollow(alice.identity.pubkey);
+      expect(follow!.feedKey, equals(keyB));
+      expect(follow.lastReceivedRotationAt, equals(6000));
     });
 
     test('syncOnePeerByPubkey runs the full per-peer sync for one follow',
@@ -364,8 +601,8 @@ void main() {
       final wrapped = alice.contentKey.encryptFeedKey(newKey, shared);
       transport.queueRotationFor(
         peerPubkey: alice.identity.pubkey,
-        delivery: RotatedFeedKeyDelivery(
-          encryptedFeedKey: Uint8List.fromList(wrapped.sublist(24)),
+        delivery: SealedDelivery(
+          payload: Uint8List.fromList(wrapped.sublist(24)),
           nonce: Uint8List.fromList(wrapped.sublist(0, 24)),
           createdAt: rotationAt,
         ),
@@ -416,8 +653,8 @@ void main() {
       final wrapped = alice.contentKey.encryptFeedKey(newKey, shared);
       transport.queueRotationFor(
         peerPubkey: alice.identity.pubkey,
-        delivery: RotatedFeedKeyDelivery(
-          encryptedFeedKey: Uint8List.fromList(wrapped.sublist(24)),
+        delivery: SealedDelivery(
+          payload: Uint8List.fromList(wrapped.sublist(24)),
           nonce: Uint8List.fromList(wrapped.sublist(0, 24)),
           createdAt: rotationAt,
         ),
@@ -570,19 +807,24 @@ class _RouteableTransport implements SyncTransport {
   String? tamperNextEnvelopeFor;
   String? injectExtraItemFor;
   EnvelopeItem? injectedItem;
-  final Map<String, RotatedFeedKeyDelivery> _queuedDeliveries = {};
-  final Map<String, ConnectionCardDelivery> _queuedCards = {};
+
+  /// When set, the next WINDOWED manifest call (one with `since`) answers
+  /// `has_older: true` with an empty page — simulating a window that
+  /// overflowed the peer's page limit (D1: must trigger a full redo).
+  bool forceHasOlderOnWindowedOnce = false;
+  final Map<String, SealedDelivery> _queuedDeliveries = {};
+  final Map<String, SealedDelivery> _queuedCards = {};
 
   void queueRotationFor({
     required String peerPubkey,
-    required RotatedFeedKeyDelivery delivery,
+    required SealedDelivery delivery,
   }) {
     _queuedDeliveries[peerPubkey] = delivery;
   }
 
   void queueCardFor({
     required String peerPubkey,
-    required ConnectionCardDelivery delivery,
+    required SealedDelivery delivery,
   }) {
     _queuedCards[peerPubkey] = delivery;
   }
@@ -592,18 +834,30 @@ class _RouteableTransport implements SyncTransport {
     PeerConnection peer, {
     int? since,
     int? until,
+    String? untilId,
     String? requesterPubkey,
     int? ackRotationAt,
     int? cardSeenAt,
+    Uint8List? ackSig,
   }) async {
     if (failNextManifestFor == peer.pubkey) {
       failNextManifestFor = null;
       throw Exception('simulated manifest failure');
     }
+    if (forceHasOlderOnWindowedOnce && since != null) {
+      forceHasOlderOnWindowedOnce = false;
+      return Manifest(
+        pubkey: peer.pubkey,
+        events: const [],
+        hasOlder: true,
+      );
+    }
     final source = _peers[peer.pubkey]!;
     final events = await source.storage.getEvents(
       pubkey: peer.pubkey,
       since: since,
+      until: until,
+      untilId: untilId,
     );
     final delivery = _queuedDeliveries.remove(peer.pubkey);
     final cardDelivery = _queuedCards.remove(peer.pubkey);

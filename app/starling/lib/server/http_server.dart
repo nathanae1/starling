@@ -170,6 +170,7 @@ Router _buildSocialRouter({
     '/manifest',
     manifestHandler(
       storage: storage,
+      crypto: crypto,
       identityLookup: identityLookup,
     ),
   );

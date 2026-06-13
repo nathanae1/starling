@@ -34,6 +34,22 @@ impl ManifestPage {
     }
 }
 
+/// `GET /media-manifest` CBOR body (relay-only, Owner-signed): the media
+/// hashes stored for the Owner, `hash ASC`, keyset-paged via `?after=`.
+#[derive(Debug, Clone, Serialize)]
+pub struct MediaManifestPage {
+    pub hashes: Vec<String>,
+    pub has_older: bool,
+}
+
+impl MediaManifestPage {
+    pub fn to_cbor(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        ciborium::into_writer(self, &mut buf).expect("serialize MediaManifestPage");
+        buf
+    }
+}
+
 /// `GET /status` JSON body.
 #[derive(Debug, Clone, Serialize)]
 pub struct StatusJson {

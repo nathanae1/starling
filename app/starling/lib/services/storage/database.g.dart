@@ -612,6 +612,18 @@ class $FollowEntriesTable extends FollowEntries
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _lastFullSyncAtMeta = const VerificationMeta(
+    'lastFullSyncAt',
+  );
+  @override
+  late final GeneratedColumn<int> lastFullSyncAt = GeneratedColumn<int>(
+    'last_full_sync_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     pubkey,
@@ -625,6 +637,7 @@ class $FollowEntriesTable extends FollowEntries
     lastReceivedRotationAt,
     lastReceivedCardAt,
     lastDecryptFailureAt,
+    lastFullSyncAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -731,6 +744,15 @@ class $FollowEntriesTable extends FollowEntries
         ),
       );
     }
+    if (data.containsKey('last_full_sync_at')) {
+      context.handle(
+        _lastFullSyncAtMeta,
+        lastFullSyncAt.isAcceptableOrUnknown(
+          data['last_full_sync_at']!,
+          _lastFullSyncAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -784,6 +806,10 @@ class $FollowEntriesTable extends FollowEntries
         DriftSqlType.int,
         data['${effectivePrefix}last_decrypt_failure_at'],
       ),
+      lastFullSyncAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_full_sync_at'],
+      )!,
     );
   }
 
@@ -805,6 +831,7 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
   final int lastReceivedRotationAt;
   final int lastReceivedCardAt;
   final int? lastDecryptFailureAt;
+  final int lastFullSyncAt;
   const FollowEntry({
     required this.pubkey,
     this.displayName,
@@ -817,6 +844,7 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
     required this.lastReceivedRotationAt,
     required this.lastReceivedCardAt,
     this.lastDecryptFailureAt,
+    required this.lastFullSyncAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -838,6 +866,7 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
     if (!nullToAbsent || lastDecryptFailureAt != null) {
       map['last_decrypt_failure_at'] = Variable<int>(lastDecryptFailureAt);
     }
+    map['last_full_sync_at'] = Variable<int>(lastFullSyncAt);
     return map;
   }
 
@@ -860,6 +889,7 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
       lastDecryptFailureAt: lastDecryptFailureAt == null && nullToAbsent
           ? const Value.absent()
           : Value(lastDecryptFailureAt),
+      lastFullSyncAt: Value(lastFullSyncAt),
     );
   }
 
@@ -884,6 +914,7 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
       lastDecryptFailureAt: serializer.fromJson<int?>(
         json['lastDecryptFailureAt'],
       ),
+      lastFullSyncAt: serializer.fromJson<int>(json['lastFullSyncAt']),
     );
   }
   @override
@@ -901,6 +932,7 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
       'lastReceivedRotationAt': serializer.toJson<int>(lastReceivedRotationAt),
       'lastReceivedCardAt': serializer.toJson<int>(lastReceivedCardAt),
       'lastDecryptFailureAt': serializer.toJson<int?>(lastDecryptFailureAt),
+      'lastFullSyncAt': serializer.toJson<int>(lastFullSyncAt),
     };
   }
 
@@ -916,6 +948,7 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
     int? lastReceivedRotationAt,
     int? lastReceivedCardAt,
     Value<int?> lastDecryptFailureAt = const Value.absent(),
+    int? lastFullSyncAt,
   }) => FollowEntry(
     pubkey: pubkey ?? this.pubkey,
     displayName: displayName.present ? displayName.value : this.displayName,
@@ -931,6 +964,7 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
     lastDecryptFailureAt: lastDecryptFailureAt.present
         ? lastDecryptFailureAt.value
         : this.lastDecryptFailureAt,
+    lastFullSyncAt: lastFullSyncAt ?? this.lastFullSyncAt,
   );
   FollowEntry copyWithCompanion(FollowEntriesCompanion data) {
     return FollowEntry(
@@ -961,6 +995,9 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
       lastDecryptFailureAt: data.lastDecryptFailureAt.present
           ? data.lastDecryptFailureAt.value
           : this.lastDecryptFailureAt,
+      lastFullSyncAt: data.lastFullSyncAt.present
+          ? data.lastFullSyncAt.value
+          : this.lastFullSyncAt,
     );
   }
 
@@ -977,7 +1014,8 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
           ..write('status: $status, ')
           ..write('lastReceivedRotationAt: $lastReceivedRotationAt, ')
           ..write('lastReceivedCardAt: $lastReceivedCardAt, ')
-          ..write('lastDecryptFailureAt: $lastDecryptFailureAt')
+          ..write('lastDecryptFailureAt: $lastDecryptFailureAt, ')
+          ..write('lastFullSyncAt: $lastFullSyncAt')
           ..write(')'))
         .toString();
   }
@@ -995,6 +1033,7 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
     lastReceivedRotationAt,
     lastReceivedCardAt,
     lastDecryptFailureAt,
+    lastFullSyncAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -1010,7 +1049,8 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
           other.status == this.status &&
           other.lastReceivedRotationAt == this.lastReceivedRotationAt &&
           other.lastReceivedCardAt == this.lastReceivedCardAt &&
-          other.lastDecryptFailureAt == this.lastDecryptFailureAt);
+          other.lastDecryptFailureAt == this.lastDecryptFailureAt &&
+          other.lastFullSyncAt == this.lastFullSyncAt);
 }
 
 class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
@@ -1025,6 +1065,7 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
   final Value<int> lastReceivedRotationAt;
   final Value<int> lastReceivedCardAt;
   final Value<int?> lastDecryptFailureAt;
+  final Value<int> lastFullSyncAt;
   final Value<int> rowid;
   const FollowEntriesCompanion({
     this.pubkey = const Value.absent(),
@@ -1038,6 +1079,7 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
     this.lastReceivedRotationAt = const Value.absent(),
     this.lastReceivedCardAt = const Value.absent(),
     this.lastDecryptFailureAt = const Value.absent(),
+    this.lastFullSyncAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   FollowEntriesCompanion.insert({
@@ -1052,6 +1094,7 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
     this.lastReceivedRotationAt = const Value.absent(),
     this.lastReceivedCardAt = const Value.absent(),
     this.lastDecryptFailureAt = const Value.absent(),
+    this.lastFullSyncAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : pubkey = Value(pubkey),
        connectionCard = Value(connectionCard),
@@ -1068,6 +1111,7 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
     Expression<int>? lastReceivedRotationAt,
     Expression<int>? lastReceivedCardAt,
     Expression<int>? lastDecryptFailureAt,
+    Expression<int>? lastFullSyncAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1085,6 +1129,7 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
         'last_received_card_at': lastReceivedCardAt,
       if (lastDecryptFailureAt != null)
         'last_decrypt_failure_at': lastDecryptFailureAt,
+      if (lastFullSyncAt != null) 'last_full_sync_at': lastFullSyncAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1101,6 +1146,7 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
     Value<int>? lastReceivedRotationAt,
     Value<int>? lastReceivedCardAt,
     Value<int?>? lastDecryptFailureAt,
+    Value<int>? lastFullSyncAt,
     Value<int>? rowid,
   }) {
     return FollowEntriesCompanion(
@@ -1116,6 +1162,7 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
           lastReceivedRotationAt ?? this.lastReceivedRotationAt,
       lastReceivedCardAt: lastReceivedCardAt ?? this.lastReceivedCardAt,
       lastDecryptFailureAt: lastDecryptFailureAt ?? this.lastDecryptFailureAt,
+      lastFullSyncAt: lastFullSyncAt ?? this.lastFullSyncAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1160,6 +1207,9 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
         lastDecryptFailureAt.value,
       );
     }
+    if (lastFullSyncAt.present) {
+      map['last_full_sync_at'] = Variable<int>(lastFullSyncAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1180,6 +1230,7 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
           ..write('lastReceivedRotationAt: $lastReceivedRotationAt, ')
           ..write('lastReceivedCardAt: $lastReceivedCardAt, ')
           ..write('lastDecryptFailureAt: $lastDecryptFailureAt, ')
+          ..write('lastFullSyncAt: $lastFullSyncAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -5522,21 +5573,22 @@ class $PendingCardDistributionEntriesTable
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
-  static const VerificationMeta _cardCborMeta = const VerificationMeta(
-    'cardCbor',
+  static const VerificationMeta _encryptedCardMeta = const VerificationMeta(
+    'encryptedCard',
   );
   @override
-  late final GeneratedColumn<Uint8List> cardCbor = GeneratedColumn<Uint8List>(
-    'card_cbor',
-    aliasedName,
-    false,
-    type: DriftSqlType.blob,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _sigMeta = const VerificationMeta('sig');
+  late final GeneratedColumn<Uint8List> encryptedCard =
+      GeneratedColumn<Uint8List>(
+        'encrypted_card',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _nonceMeta = const VerificationMeta('nonce');
   @override
-  late final GeneratedColumn<Uint8List> sig = GeneratedColumn<Uint8List>(
-    'sig',
+  late final GeneratedColumn<Uint8List> nonce = GeneratedColumn<Uint8List>(
+    'nonce',
     aliasedName,
     false,
     type: DriftSqlType.blob,
@@ -5568,8 +5620,8 @@ class $PendingCardDistributionEntriesTable
   @override
   List<GeneratedColumn> get $columns => [
     targetPubkey,
-    cardCbor,
-    sig,
+    encryptedCard,
+    nonce,
     createdAt,
     distributed,
   ];
@@ -5596,21 +5648,24 @@ class $PendingCardDistributionEntriesTable
     } else if (isInserting) {
       context.missing(_targetPubkeyMeta);
     }
-    if (data.containsKey('card_cbor')) {
+    if (data.containsKey('encrypted_card')) {
       context.handle(
-        _cardCborMeta,
-        cardCbor.isAcceptableOrUnknown(data['card_cbor']!, _cardCborMeta),
+        _encryptedCardMeta,
+        encryptedCard.isAcceptableOrUnknown(
+          data['encrypted_card']!,
+          _encryptedCardMeta,
+        ),
       );
     } else if (isInserting) {
-      context.missing(_cardCborMeta);
+      context.missing(_encryptedCardMeta);
     }
-    if (data.containsKey('sig')) {
+    if (data.containsKey('nonce')) {
       context.handle(
-        _sigMeta,
-        sig.isAcceptableOrUnknown(data['sig']!, _sigMeta),
+        _nonceMeta,
+        nonce.isAcceptableOrUnknown(data['nonce']!, _nonceMeta),
       );
     } else if (isInserting) {
-      context.missing(_sigMeta);
+      context.missing(_nonceMeta);
     }
     if (data.containsKey('created_at')) {
       context.handle(
@@ -5645,13 +5700,13 @@ class $PendingCardDistributionEntriesTable
         DriftSqlType.string,
         data['${effectivePrefix}target_pubkey'],
       )!,
-      cardCbor: attachedDatabase.typeMapping.read(
+      encryptedCard: attachedDatabase.typeMapping.read(
         DriftSqlType.blob,
-        data['${effectivePrefix}card_cbor'],
+        data['${effectivePrefix}encrypted_card'],
       )!,
-      sig: attachedDatabase.typeMapping.read(
+      nonce: attachedDatabase.typeMapping.read(
         DriftSqlType.blob,
-        data['${effectivePrefix}sig'],
+        data['${effectivePrefix}nonce'],
       )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -5673,14 +5728,14 @@ class $PendingCardDistributionEntriesTable
 class PendingCardDistributionEntry extends DataClass
     implements Insertable<PendingCardDistributionEntry> {
   final String targetPubkey;
-  final Uint8List cardCbor;
-  final Uint8List sig;
+  final Uint8List encryptedCard;
+  final Uint8List nonce;
   final int createdAt;
   final int distributed;
   const PendingCardDistributionEntry({
     required this.targetPubkey,
-    required this.cardCbor,
-    required this.sig,
+    required this.encryptedCard,
+    required this.nonce,
     required this.createdAt,
     required this.distributed,
   });
@@ -5688,8 +5743,8 @@ class PendingCardDistributionEntry extends DataClass
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['target_pubkey'] = Variable<String>(targetPubkey);
-    map['card_cbor'] = Variable<Uint8List>(cardCbor);
-    map['sig'] = Variable<Uint8List>(sig);
+    map['encrypted_card'] = Variable<Uint8List>(encryptedCard);
+    map['nonce'] = Variable<Uint8List>(nonce);
     map['created_at'] = Variable<int>(createdAt);
     map['distributed'] = Variable<int>(distributed);
     return map;
@@ -5698,8 +5753,8 @@ class PendingCardDistributionEntry extends DataClass
   PendingCardDistributionEntriesCompanion toCompanion(bool nullToAbsent) {
     return PendingCardDistributionEntriesCompanion(
       targetPubkey: Value(targetPubkey),
-      cardCbor: Value(cardCbor),
-      sig: Value(sig),
+      encryptedCard: Value(encryptedCard),
+      nonce: Value(nonce),
       createdAt: Value(createdAt),
       distributed: Value(distributed),
     );
@@ -5712,8 +5767,8 @@ class PendingCardDistributionEntry extends DataClass
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return PendingCardDistributionEntry(
       targetPubkey: serializer.fromJson<String>(json['targetPubkey']),
-      cardCbor: serializer.fromJson<Uint8List>(json['cardCbor']),
-      sig: serializer.fromJson<Uint8List>(json['sig']),
+      encryptedCard: serializer.fromJson<Uint8List>(json['encryptedCard']),
+      nonce: serializer.fromJson<Uint8List>(json['nonce']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
       distributed: serializer.fromJson<int>(json['distributed']),
     );
@@ -5723,8 +5778,8 @@ class PendingCardDistributionEntry extends DataClass
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'targetPubkey': serializer.toJson<String>(targetPubkey),
-      'cardCbor': serializer.toJson<Uint8List>(cardCbor),
-      'sig': serializer.toJson<Uint8List>(sig),
+      'encryptedCard': serializer.toJson<Uint8List>(encryptedCard),
+      'nonce': serializer.toJson<Uint8List>(nonce),
       'createdAt': serializer.toJson<int>(createdAt),
       'distributed': serializer.toJson<int>(distributed),
     };
@@ -5732,14 +5787,14 @@ class PendingCardDistributionEntry extends DataClass
 
   PendingCardDistributionEntry copyWith({
     String? targetPubkey,
-    Uint8List? cardCbor,
-    Uint8List? sig,
+    Uint8List? encryptedCard,
+    Uint8List? nonce,
     int? createdAt,
     int? distributed,
   }) => PendingCardDistributionEntry(
     targetPubkey: targetPubkey ?? this.targetPubkey,
-    cardCbor: cardCbor ?? this.cardCbor,
-    sig: sig ?? this.sig,
+    encryptedCard: encryptedCard ?? this.encryptedCard,
+    nonce: nonce ?? this.nonce,
     createdAt: createdAt ?? this.createdAt,
     distributed: distributed ?? this.distributed,
   );
@@ -5750,8 +5805,10 @@ class PendingCardDistributionEntry extends DataClass
       targetPubkey: data.targetPubkey.present
           ? data.targetPubkey.value
           : this.targetPubkey,
-      cardCbor: data.cardCbor.present ? data.cardCbor.value : this.cardCbor,
-      sig: data.sig.present ? data.sig.value : this.sig,
+      encryptedCard: data.encryptedCard.present
+          ? data.encryptedCard.value
+          : this.encryptedCard,
+      nonce: data.nonce.present ? data.nonce.value : this.nonce,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       distributed: data.distributed.present
           ? data.distributed.value
@@ -5763,8 +5820,8 @@ class PendingCardDistributionEntry extends DataClass
   String toString() {
     return (StringBuffer('PendingCardDistributionEntry(')
           ..write('targetPubkey: $targetPubkey, ')
-          ..write('cardCbor: $cardCbor, ')
-          ..write('sig: $sig, ')
+          ..write('encryptedCard: $encryptedCard, ')
+          ..write('nonce: $nonce, ')
           ..write('createdAt: $createdAt, ')
           ..write('distributed: $distributed')
           ..write(')'))
@@ -5774,8 +5831,8 @@ class PendingCardDistributionEntry extends DataClass
   @override
   int get hashCode => Object.hash(
     targetPubkey,
-    $driftBlobEquality.hash(cardCbor),
-    $driftBlobEquality.hash(sig),
+    $driftBlobEquality.hash(encryptedCard),
+    $driftBlobEquality.hash(nonce),
     createdAt,
     distributed,
   );
@@ -5784,8 +5841,8 @@ class PendingCardDistributionEntry extends DataClass
       identical(this, other) ||
       (other is PendingCardDistributionEntry &&
           other.targetPubkey == this.targetPubkey &&
-          $driftBlobEquality.equals(other.cardCbor, this.cardCbor) &&
-          $driftBlobEquality.equals(other.sig, this.sig) &&
+          $driftBlobEquality.equals(other.encryptedCard, this.encryptedCard) &&
+          $driftBlobEquality.equals(other.nonce, this.nonce) &&
           other.createdAt == this.createdAt &&
           other.distributed == this.distributed);
 }
@@ -5793,42 +5850,42 @@ class PendingCardDistributionEntry extends DataClass
 class PendingCardDistributionEntriesCompanion
     extends UpdateCompanion<PendingCardDistributionEntry> {
   final Value<String> targetPubkey;
-  final Value<Uint8List> cardCbor;
-  final Value<Uint8List> sig;
+  final Value<Uint8List> encryptedCard;
+  final Value<Uint8List> nonce;
   final Value<int> createdAt;
   final Value<int> distributed;
   final Value<int> rowid;
   const PendingCardDistributionEntriesCompanion({
     this.targetPubkey = const Value.absent(),
-    this.cardCbor = const Value.absent(),
-    this.sig = const Value.absent(),
+    this.encryptedCard = const Value.absent(),
+    this.nonce = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.distributed = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   PendingCardDistributionEntriesCompanion.insert({
     required String targetPubkey,
-    required Uint8List cardCbor,
-    required Uint8List sig,
+    required Uint8List encryptedCard,
+    required Uint8List nonce,
     required int createdAt,
     this.distributed = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : targetPubkey = Value(targetPubkey),
-       cardCbor = Value(cardCbor),
-       sig = Value(sig),
+       encryptedCard = Value(encryptedCard),
+       nonce = Value(nonce),
        createdAt = Value(createdAt);
   static Insertable<PendingCardDistributionEntry> custom({
     Expression<String>? targetPubkey,
-    Expression<Uint8List>? cardCbor,
-    Expression<Uint8List>? sig,
+    Expression<Uint8List>? encryptedCard,
+    Expression<Uint8List>? nonce,
     Expression<int>? createdAt,
     Expression<int>? distributed,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (targetPubkey != null) 'target_pubkey': targetPubkey,
-      if (cardCbor != null) 'card_cbor': cardCbor,
-      if (sig != null) 'sig': sig,
+      if (encryptedCard != null) 'encrypted_card': encryptedCard,
+      if (nonce != null) 'nonce': nonce,
       if (createdAt != null) 'created_at': createdAt,
       if (distributed != null) 'distributed': distributed,
       if (rowid != null) 'rowid': rowid,
@@ -5837,16 +5894,16 @@ class PendingCardDistributionEntriesCompanion
 
   PendingCardDistributionEntriesCompanion copyWith({
     Value<String>? targetPubkey,
-    Value<Uint8List>? cardCbor,
-    Value<Uint8List>? sig,
+    Value<Uint8List>? encryptedCard,
+    Value<Uint8List>? nonce,
     Value<int>? createdAt,
     Value<int>? distributed,
     Value<int>? rowid,
   }) {
     return PendingCardDistributionEntriesCompanion(
       targetPubkey: targetPubkey ?? this.targetPubkey,
-      cardCbor: cardCbor ?? this.cardCbor,
-      sig: sig ?? this.sig,
+      encryptedCard: encryptedCard ?? this.encryptedCard,
+      nonce: nonce ?? this.nonce,
       createdAt: createdAt ?? this.createdAt,
       distributed: distributed ?? this.distributed,
       rowid: rowid ?? this.rowid,
@@ -5859,11 +5916,11 @@ class PendingCardDistributionEntriesCompanion
     if (targetPubkey.present) {
       map['target_pubkey'] = Variable<String>(targetPubkey.value);
     }
-    if (cardCbor.present) {
-      map['card_cbor'] = Variable<Uint8List>(cardCbor.value);
+    if (encryptedCard.present) {
+      map['encrypted_card'] = Variable<Uint8List>(encryptedCard.value);
     }
-    if (sig.present) {
-      map['sig'] = Variable<Uint8List>(sig.value);
+    if (nonce.present) {
+      map['nonce'] = Variable<Uint8List>(nonce.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<int>(createdAt.value);
@@ -5881,8 +5938,8 @@ class PendingCardDistributionEntriesCompanion
   String toString() {
     return (StringBuffer('PendingCardDistributionEntriesCompanion(')
           ..write('targetPubkey: $targetPubkey, ')
-          ..write('cardCbor: $cardCbor, ')
-          ..write('sig: $sig, ')
+          ..write('encryptedCard: $encryptedCard, ')
+          ..write('nonce: $nonce, ')
           ..write('createdAt: $createdAt, ')
           ..write('distributed: $distributed, ')
           ..write('rowid: $rowid')
@@ -6220,6 +6277,7 @@ typedef $$FollowEntriesTableCreateCompanionBuilder =
       Value<int> lastReceivedRotationAt,
       Value<int> lastReceivedCardAt,
       Value<int?> lastDecryptFailureAt,
+      Value<int> lastFullSyncAt,
       Value<int> rowid,
     });
 typedef $$FollowEntriesTableUpdateCompanionBuilder =
@@ -6235,6 +6293,7 @@ typedef $$FollowEntriesTableUpdateCompanionBuilder =
       Value<int> lastReceivedRotationAt,
       Value<int> lastReceivedCardAt,
       Value<int?> lastDecryptFailureAt,
+      Value<int> lastFullSyncAt,
       Value<int> rowid,
     });
 
@@ -6299,6 +6358,11 @@ class $$FollowEntriesTableFilterComposer
 
   ColumnFilters<int> get lastDecryptFailureAt => $composableBuilder(
     column: $table.lastDecryptFailureAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastFullSyncAt => $composableBuilder(
+    column: $table.lastFullSyncAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -6366,6 +6430,11 @@ class $$FollowEntriesTableOrderingComposer
     column: $table.lastDecryptFailureAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get lastFullSyncAt => $composableBuilder(
+    column: $table.lastFullSyncAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$FollowEntriesTableAnnotationComposer
@@ -6425,6 +6494,11 @@ class $$FollowEntriesTableAnnotationComposer
     column: $table.lastDecryptFailureAt,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get lastFullSyncAt => $composableBuilder(
+    column: $table.lastFullSyncAt,
+    builder: (column) => column,
+  );
 }
 
 class $$FollowEntriesTableTableManager
@@ -6469,6 +6543,7 @@ class $$FollowEntriesTableTableManager
                 Value<int> lastReceivedRotationAt = const Value.absent(),
                 Value<int> lastReceivedCardAt = const Value.absent(),
                 Value<int?> lastDecryptFailureAt = const Value.absent(),
+                Value<int> lastFullSyncAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FollowEntriesCompanion(
                 pubkey: pubkey,
@@ -6482,6 +6557,7 @@ class $$FollowEntriesTableTableManager
                 lastReceivedRotationAt: lastReceivedRotationAt,
                 lastReceivedCardAt: lastReceivedCardAt,
                 lastDecryptFailureAt: lastDecryptFailureAt,
+                lastFullSyncAt: lastFullSyncAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -6497,6 +6573,7 @@ class $$FollowEntriesTableTableManager
                 Value<int> lastReceivedRotationAt = const Value.absent(),
                 Value<int> lastReceivedCardAt = const Value.absent(),
                 Value<int?> lastDecryptFailureAt = const Value.absent(),
+                Value<int> lastFullSyncAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FollowEntriesCompanion.insert(
                 pubkey: pubkey,
@@ -6510,6 +6587,7 @@ class $$FollowEntriesTableTableManager
                 lastReceivedRotationAt: lastReceivedRotationAt,
                 lastReceivedCardAt: lastReceivedCardAt,
                 lastDecryptFailureAt: lastDecryptFailureAt,
+                lastFullSyncAt: lastFullSyncAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -8923,8 +9001,8 @@ typedef $$PairedRelayEntriesTableProcessedTableManager =
 typedef $$PendingCardDistributionEntriesTableCreateCompanionBuilder =
     PendingCardDistributionEntriesCompanion Function({
       required String targetPubkey,
-      required Uint8List cardCbor,
-      required Uint8List sig,
+      required Uint8List encryptedCard,
+      required Uint8List nonce,
       required int createdAt,
       Value<int> distributed,
       Value<int> rowid,
@@ -8932,8 +9010,8 @@ typedef $$PendingCardDistributionEntriesTableCreateCompanionBuilder =
 typedef $$PendingCardDistributionEntriesTableUpdateCompanionBuilder =
     PendingCardDistributionEntriesCompanion Function({
       Value<String> targetPubkey,
-      Value<Uint8List> cardCbor,
-      Value<Uint8List> sig,
+      Value<Uint8List> encryptedCard,
+      Value<Uint8List> nonce,
       Value<int> createdAt,
       Value<int> distributed,
       Value<int> rowid,
@@ -8953,13 +9031,13 @@ class $$PendingCardDistributionEntriesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<Uint8List> get cardCbor => $composableBuilder(
-    column: $table.cardCbor,
+  ColumnFilters<Uint8List> get encryptedCard => $composableBuilder(
+    column: $table.encryptedCard,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<Uint8List> get sig => $composableBuilder(
-    column: $table.sig,
+  ColumnFilters<Uint8List> get nonce => $composableBuilder(
+    column: $table.nonce,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -8988,13 +9066,13 @@ class $$PendingCardDistributionEntriesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<Uint8List> get cardCbor => $composableBuilder(
-    column: $table.cardCbor,
+  ColumnOrderings<Uint8List> get encryptedCard => $composableBuilder(
+    column: $table.encryptedCard,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<Uint8List> get sig => $composableBuilder(
-    column: $table.sig,
+  ColumnOrderings<Uint8List> get nonce => $composableBuilder(
+    column: $table.nonce,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -9023,11 +9101,13 @@ class $$PendingCardDistributionEntriesTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<Uint8List> get cardCbor =>
-      $composableBuilder(column: $table.cardCbor, builder: (column) => column);
+  GeneratedColumn<Uint8List> get encryptedCard => $composableBuilder(
+    column: $table.encryptedCard,
+    builder: (column) => column,
+  );
 
-  GeneratedColumn<Uint8List> get sig =>
-      $composableBuilder(column: $table.sig, builder: (column) => column);
+  GeneratedColumn<Uint8List> get nonce =>
+      $composableBuilder(column: $table.nonce, builder: (column) => column);
 
   GeneratedColumn<int> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -9085,15 +9165,15 @@ class $$PendingCardDistributionEntriesTableTableManager
           updateCompanionCallback:
               ({
                 Value<String> targetPubkey = const Value.absent(),
-                Value<Uint8List> cardCbor = const Value.absent(),
-                Value<Uint8List> sig = const Value.absent(),
+                Value<Uint8List> encryptedCard = const Value.absent(),
+                Value<Uint8List> nonce = const Value.absent(),
                 Value<int> createdAt = const Value.absent(),
                 Value<int> distributed = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PendingCardDistributionEntriesCompanion(
                 targetPubkey: targetPubkey,
-                cardCbor: cardCbor,
-                sig: sig,
+                encryptedCard: encryptedCard,
+                nonce: nonce,
                 createdAt: createdAt,
                 distributed: distributed,
                 rowid: rowid,
@@ -9101,15 +9181,15 @@ class $$PendingCardDistributionEntriesTableTableManager
           createCompanionCallback:
               ({
                 required String targetPubkey,
-                required Uint8List cardCbor,
-                required Uint8List sig,
+                required Uint8List encryptedCard,
+                required Uint8List nonce,
                 required int createdAt,
                 Value<int> distributed = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PendingCardDistributionEntriesCompanion.insert(
                 targetPubkey: targetPubkey,
-                cardCbor: cardCbor,
-                sig: sig,
+                encryptedCard: encryptedCard,
+                nonce: nonce,
                 createdAt: createdAt,
                 distributed: distributed,
                 rowid: rowid,

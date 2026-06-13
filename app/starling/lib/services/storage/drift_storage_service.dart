@@ -62,6 +62,10 @@ class DriftStorageService implements StorageService {
       _db.followsDao.updateLastSynced(pubkey, timestamp);
 
   @override
+  Future<void> updateLastFullSynced(String pubkey, int timestamp) =>
+      _db.followsDao.updateLastFullSynced(pubkey, timestamp);
+
+  @override
   Future<void> setLastDecryptFailureAt(String pubkey, int? timestamp) =>
       _db.followsDao.setLastDecryptFailureAt(pubkey, timestamp);
 
@@ -76,12 +80,14 @@ class DriftStorageService implements StorageService {
     String? pubkey,
     int? since,
     int? until,
+    String? untilId,
     int? limit,
   }) async {
     final rows = await _db.eventsDao.getEvents(
       pubkey: pubkey,
       since: since,
       until: until,
+      untilId: untilId,
       limit: limit,
     );
     return rows.map(eventFromRow).toList();
@@ -338,15 +344,15 @@ class DriftStorageService implements StorageService {
   @override
   Future<void> queueCardDistribution({
     required String targetPubkey,
-    required Uint8List cardCbor,
-    required Uint8List sig,
+    required Uint8List encryptedCard,
+    required Uint8List nonce,
     required int createdAt,
   }) =>
       _db.pairedRelayDao.queueCardDistribution(
         PendingCardDistributionEntriesCompanion.insert(
           targetPubkey: targetPubkey,
-          cardCbor: cardCbor,
-          sig: sig,
+          encryptedCard: encryptedCard,
+          nonce: nonce,
           createdAt: createdAt,
         ),
       );

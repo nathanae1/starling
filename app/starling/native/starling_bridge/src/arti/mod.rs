@@ -30,7 +30,12 @@ use tokio::runtime::Runtime;
 // The Tor core now lives in the shared `starling-arti` crate (consumed by
 // both this FFI bridge and the headless relay). `ArtiNode` is the former
 // local `Inner`; aliased so the rest of this shim is unchanged.
-use starling_arti::{ArtiNode as Inner, InitMode, StatusSnapshot};
+use starling_arti::{ArtiNode as Inner, InitMode, OnionHandle};
+
+/// Nickname for the phone's single onion service. Kept constant so the
+/// device's `.onion` address persists across launches (Arti namespaces the
+/// descriptor signing key on disk by nickname).
+const PHONE_HS_NICKNAME: &str = "starling";
 
 thread_local! {
     /// Most recent error message produced by an FFI call on this thread.
@@ -90,6 +95,10 @@ pub struct ArtiStatus {
 pub struct ArtiHandle {
     runtime: Runtime,
     inner: Arc<RwLock<Inner>>,
+    /// The phone's single onion service. Held here at the FFI edge — the
+    /// shared `starling-arti` crate hands out [`OnionHandle`]s and the
+    /// caller owns their lifetime (the relay keeps one per paired Owner).
+    onion: Mutex<Option<OnionHandle>>,
 }
 
 // --- FFI surface ---
@@ -124,6 +133,10 @@ pub unsafe extern "C" fn arti_init(
         if let Some(addr) = HANDLE_SLOT.lock().take() {
             let prior = Box::from_raw(addr as *mut ArtiHandle);
             prior.runtime.block_on(async {
+                // Onion first: dropping the handle aborts its proxy task
+                // and unpublishes the descriptor (releasing the nickname's
+                // on-disk lock), then the node tears down its own tasks.
+                drop(prior.onion.lock().take());
                 let mut guard = prior.inner.write();
                 guard.shutdown().await;
             });
@@ -172,7 +185,11 @@ pub unsafe extern "C" fn arti_init(
                 return Err(ARTI_ERR_INIT);
             }
         };
-        Ok(ArtiHandle { runtime, inner })
+        Ok(ArtiHandle {
+            runtime,
+            inner,
+            onion: Mutex::new(None),
+        })
     }));
     match result {
         Ok(Ok(h)) => {
@@ -228,19 +245,50 @@ pub unsafe extern "C" fn arti_create_onion_service(
             return Err(ARTI_ERR_NULL);
         }
         let h = &*handle;
-        let inner = h.inner.clone();
-        let address = h
-            .runtime
-            .block_on(async move {
-                let mut guard = inner.write();
-                guard.create_onion_service(local_port).await
-            })
-            .map_err(|e| {
-                let msg = format!("arti_create_onion_service failed: {e:?}");
-                log::error!("{msg}");
-                set_last_error(msg);
-                ARTI_ERR_ONION
-            })?;
+        // Holding the slot lock across the launch serializes concurrent
+        // calls (the pre-extraction code did the same via `inner.write()`).
+        let mut slot = h.onion.lock();
+        let address = match slot.as_mut() {
+            // Idempotent when the port matches; when the local HTTP server
+            // rebound on a different port (lifecycle restart), retarget the
+            // live reverse proxy. The service keeps running and the .onion
+            // address is unchanged, so peers' stored cards stay valid.
+            Some(existing) => {
+                if existing.local_port() != local_port {
+                    existing.retarget(local_port).map_err(|e| {
+                        let msg =
+                            format!("arti_create_onion_service retarget failed: {e:?}");
+                        log::error!("{msg}");
+                        set_last_error(msg);
+                        ARTI_ERR_ONION
+                    })?;
+                    log::info!(
+                        "onion proxy retargeted to 127.0.0.1:{local_port}"
+                    );
+                }
+                existing.address().to_string()
+            }
+            None => {
+                let inner = h.inner.clone();
+                // `block_on` (not a plain call): launch_service spawns its
+                // proxy task and needs the runtime context.
+                let onion = h
+                    .runtime
+                    .block_on(async move {
+                        let guard = inner.read();
+                        guard.launch_service(PHONE_HS_NICKNAME, local_port)
+                    })
+                    .map_err(|e| {
+                        let msg = format!("arti_create_onion_service failed: {e:?}");
+                        log::error!("{msg}");
+                        set_last_error(msg);
+                        ARTI_ERR_ONION
+                    })?;
+                let address = onion.address().to_string();
+                *slot = Some(onion);
+                address
+            }
+        };
         CString::new(address).map_err(|_| {
             set_last_error("onion address contained NUL byte");
             ARTI_ERR_UTF8
@@ -317,19 +365,18 @@ pub unsafe extern "C" fn arti_status(
             return ARTI_ERR_NULL;
         }
         let h = &*handle;
-        let StatusSnapshot {
-            bootstrap_percent,
-            circuit_count,
-            is_ready,
-            socks_port,
-        } = h.inner.read().status();
+        let snapshot = h.inner.read().status();
+        // arti-client doesn't expose a live circuit count via stable API;
+        // approximate 3 once ready, 0 otherwise. Fabricated here at the
+        // FFI edge — the struct layout is pinned by
+        // `lib/services/tor/ffi_bindings.dart`.
         ptr::write(
             out,
             ArtiStatus {
-                bootstrap_percent,
-                circuit_count,
-                is_ready,
-                socks_port,
+                bootstrap_percent: snapshot.bootstrap_percent,
+                circuit_count: if snapshot.is_ready { 3 } else { 0 },
+                is_ready: snapshot.is_ready,
+                socks_port: snapshot.socks_port,
             },
         );
         ARTI_OK
@@ -359,8 +406,10 @@ pub unsafe extern "C" fn arti_shutdown(handle: *mut ArtiHandle) -> c_int {
         }
         let boxed = Box::from_raw(handle);
         // Drop the inner state on the runtime so any pending tasks wind
-        // down before the runtime itself is dropped.
+        // down before the runtime itself is dropped. Onion first — its
+        // drop unpublishes the descriptor.
         boxed.runtime.block_on(async {
+            drop(boxed.onion.lock().take());
             let mut guard = boxed.inner.write();
             guard.shutdown().await;
         });

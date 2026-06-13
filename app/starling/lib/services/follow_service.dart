@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:typed_data';
 
 import 'package:cbor/simple.dart';
@@ -6,6 +7,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/connection_card.dart';
 import '../sync/peer_reachability_monitor.dart';
+import '../sync/sealed_delivery.dart';
 import 'clock.dart';
 import 'crypto/crockford_base32.dart';
 import 'crypto/key_cache.dart';
@@ -37,6 +39,24 @@ enum AcceptDelivery { delivered, queued, failed }
 class IngestAcceptResult {
   const IngestAcceptResult({required this.follow});
   final Follow follow;
+}
+
+/// True iff [blob] is a queued follow-accept wrapper (`{ url, body }`), as
+/// written by [FollowService]'s retry queue — distinct from the encrypted
+/// comment/reaction events that share the same outbound-queue table (those
+/// are `EncryptedEvent` CBOR: `pubkey/created_at/epoch/msg_seq/nonce/
+/// payload`, no `url` key). Used by both the accept-retry pump and the sync
+/// drain so neither clobbers the other's entries for a shared pubkey.
+bool isFollowAcceptQueueEntry(Uint8List blob) {
+  try {
+    final decoded = cbor.decode(blob);
+    if (decoded is! Map) return false;
+    final url = decoded['url'];
+    final body = decoded['body'];
+    return url is String && (body is Uint8List || body is List<int>);
+  } catch (_) {
+    return false;
+  }
 }
 
 /// Hand-off transport for the follow handshake. Routes `.onion` URLs
@@ -149,6 +169,31 @@ class FollowService {
   final Future<List<Endpoint>> Function() _ownEndpointsLookup;
   final FeedKeyCache? _feedKeyCache;
   final KeyRotationService? _keyRotationService;
+
+  /// Backoff schedule for queued-accept redelivery. Index is the entry's
+  /// persisted `retryCount`, clamped to the last bucket. We never stop
+  /// retrying — a follower's phone is offline most of the time, so a
+  /// permanent give-up would silently strand the handshake.
+  static const List<Duration> _acceptBackoff = [
+    Duration(seconds: 30),
+    Duration(minutes: 1),
+    Duration(minutes: 2),
+    Duration(minutes: 5),
+    Duration(minutes: 10),
+    Duration(minutes: 15),
+  ];
+
+  /// Serializes retry passes so a reachability-triggered drain can't
+  /// interleave with the periodic pump — overlapping passes could double-
+  /// POST one accept and let the duplicate's 4xx flip an already-`accepted`
+  /// row back to `send-failed`. Mirrors `LifecycleManager._publishChain`.
+  Future<void> _retryChain = Future<void>.value();
+
+  /// Queue entry id -> unix seconds of its last delivery attempt. In-memory
+  /// and session-scoped: a fresh launch retries immediately (desirable),
+  /// while the persisted `retryCount` still drives the backoff exponent
+  /// across restarts.
+  final Map<int, int> _acceptLastAttemptSec = {};
 
   // --- Outbound: send a follow request ---
 
@@ -432,6 +477,11 @@ class FollowService {
     final wasAccepted = await _storage.isAcceptedFollower(pubkey);
     if (!wasAccepted) return;
     await _storage.removeAcceptedFollower(pubkey);
+    // S4: drop every queued sealed delivery (card AND feed-key rows) — a
+    // removed follower polling /manifest must not be handed our latest
+    // endpoints. Unconditional (unlike rotation below) so the rows die
+    // even when no rotator is wired; rotation also sweeps its own rows.
+    await clearPendingDeliveriesFor(_storage, pubkey);
     final rotation = _keyRotationService;
     if (rotation != null) {
       await rotation.rotate(removedPubkey: pubkey);
@@ -442,46 +492,150 @@ class FollowService {
 
   /// Drains queued accept-payloads. Each queued entry is CBOR
   /// `{ url, body }` where `body` is the encrypted /follow-accept payload.
-  /// On success: removes the queue entry and marks the inbound row
-  /// 'accepted'. On failure: increments retryCount and (past [maxRetries])
-  /// marks the inbound row 'send-failed' and removes the entry.
-  Future<void> retryQueuedAccepts({int maxRetries = 10}) async {
-    final pendingSend =
-        await _storage.getInboundRequestsByStatus('pending-send');
-    for (final inbound in pendingSend) {
+  ///
+  /// Retries indefinitely with per-entry exponential backoff
+  /// ([_acceptBackoff]) — an accept is never permanently stranded, since a
+  /// follower's phone is offline most of the time. At
+  /// [failedStatusThreshold] consecutive failures the inbound row flips to
+  /// 'send-failed' for honest UI ("accept undelivered, still retrying"), but
+  /// the queue entry is KEPT and keeps retrying; a later success flips the
+  /// row back to 'accepted'.
+  ///
+  /// [onlyPubkey] limits the pass to one requester (the reachability
+  /// trigger). [ignoreBackoff] forces an immediate attempt regardless of the
+  /// per-entry backoff window (also the reachability trigger). Passes are
+  /// serialized via [_retryChain].
+  Future<void> retryQueuedAccepts({
+    int failedStatusThreshold = 10,
+    String? onlyPubkey,
+    bool ignoreBackoff = false,
+  }) {
+    return _retryChain = _retryChain.then(
+      (_) => _retryQueuedAcceptsNow(
+        failedStatusThreshold: failedStatusThreshold,
+        onlyPubkey: onlyPubkey,
+        ignoreBackoff: ignoreBackoff,
+      ),
+    );
+  }
+
+  Future<void> _retryQueuedAcceptsNow({
+    required int failedStatusThreshold,
+    required String? onlyPubkey,
+    required bool ignoreBackoff,
+  }) async {
+    // 'send-failed' rows are still actively retried — that status is a UI
+    // signal, not a terminal state. A pubkey has exactly one inbound row, so
+    // the two queries never overlap.
+    final rows = [
+      ...await _storage.getInboundRequestsByStatus('pending-send'),
+      ...await _storage.getInboundRequestsByStatus('send-failed'),
+    ];
+    final seenIds = <int>{};
+    for (final inbound in rows) {
+      if (onlyPubkey != null && inbound.pubkey != onlyPubkey) continue;
       final entries = await _storage.dequeue(inbound.pubkey);
       for (final entry in entries) {
+        seenIds.add(entry.id);
+        // The outbound queue is shared with encrypted comment/reaction
+        // events keyed by the same pubkey (the sync engine drains those).
+        // Only touch accept wrappers; leave foreign blobs untouched.
+        if (!isFollowAcceptQueueEntry(entry.eventBlob)) continue;
+        if (!ignoreBackoff && _backoffNotElapsed(entry)) continue;
+
         final wrapped = _decodeMap(entry.eventBlob);
         final url = wrapped['url'] as String;
         final body = _asBytes(wrapped['body']);
 
-        var success = false;
+        _acceptLastAttemptSec[entry.id] = _clock.nowUnixSeconds();
+
+        final int status;
         try {
-          final status =
-              await _transport.postFollowAccept(_stripAcceptSuffix(url), body);
-          success = status == 202;
-        } catch (_) {
-          success = false;
+          status = await _transport.postFollowAccept(
+            _stripAcceptSuffix(url),
+            body,
+          );
+        } on HandshakeTransportException catch (e) {
+          // Our own Tor isn't ready — a local failure, not the peer's. Don't
+          // spend a retry on it; clear the attempt stamp so the first pass
+          // after Tor recovers fires immediately.
+          _acceptLastAttemptSec.remove(entry.id);
+          _log('retry skip ${inbound.pubkey} transport-not-ready: ${e.message}');
+          continue;
+        } catch (e) {
+          await _onAcceptFailure(inbound, entry, failedStatusThreshold, e);
+          continue;
         }
 
-        if (success) {
+        if (status == 202) {
           await _storage.removeFromQueue(entry.id);
-          await _storage.updateInboundRequestStatus(
-            inbound.pubkey,
-            'accepted',
-          );
-        } else {
-          await _storage.incrementRetry(entry.id);
-          if (entry.retryCount + 1 >= maxRetries) {
-            await _storage.updateInboundRequestStatus(
-              inbound.pubkey,
-              'send-failed',
-            );
-            await _storage.removeFromQueue(entry.id);
-          }
+          _acceptLastAttemptSec.remove(entry.id);
+          await _storage.updateInboundRequestStatus(inbound.pubkey, 'accepted');
+          _log('retry delivered ${inbound.pubkey}');
+          // Drop any duplicate accept entries for this pubkey so a stale one
+          // can't 4xx later and flip the row back to 'send-failed'.
+          await _removeAcceptEntriesFor(inbound.pubkey);
+          break;
         }
+        await _onAcceptFailure(
+          inbound,
+          entry,
+          failedStatusThreshold,
+          'status $status',
+        );
       }
     }
+    // Hygiene: forget attempt stamps for entries no longer queued. Only safe
+    // on a full pass — a targeted pass didn't visit every entry.
+    if (onlyPubkey == null) {
+      _acceptLastAttemptSec.removeWhere((id, _) => !seenIds.contains(id));
+    }
+  }
+
+  /// True when [entry]'s backoff window hasn't elapsed since its last
+  /// attempt this session. Never-attempted entries (fresh launch, fresh
+  /// queue) return false → attempt immediately.
+  bool _backoffNotElapsed(QueuedEvent entry) {
+    final last = _acceptLastAttemptSec[entry.id];
+    if (last == null) return false;
+    final idx = entry.retryCount < _acceptBackoff.length
+        ? entry.retryCount
+        : _acceptBackoff.length - 1;
+    return _clock.nowUnixSeconds() - last < _acceptBackoff[idx].inSeconds;
+  }
+
+  Future<void> _onAcceptFailure(
+    FollowRequest inbound,
+    QueuedEvent entry,
+    int failedStatusThreshold,
+    Object reason,
+  ) async {
+    await _storage.incrementRetry(entry.id);
+    _log('retry failed ${inbound.pubkey} '
+        'attempt=${entry.retryCount + 1} reason=$reason');
+    // Flip to 'send-failed' once, only from 'pending-send' — re-writing the
+    // same status would re-emit `watchInboundFollowers` needlessly, and we
+    // must not stomp an 'accepted' row a concurrent path may have set.
+    if (entry.retryCount + 1 >= failedStatusThreshold &&
+        inbound.status == 'pending-send') {
+      await _storage.updateInboundRequestStatus(inbound.pubkey, 'send-failed');
+    }
+  }
+
+  Future<void> _removeAcceptEntriesFor(String pubkey) async {
+    final entries = await _storage.dequeue(pubkey);
+    for (final entry in entries) {
+      if (isFollowAcceptQueueEntry(entry.eventBlob)) {
+        await _storage.removeFromQueue(entry.id);
+        _acceptLastAttemptSec.remove(entry.id);
+      }
+    }
+  }
+
+  void _log(String msg) {
+    developer.log(msg, name: 'starling.follow');
+    // ignore: avoid_print
+    print('[starling.follow] $msg');
   }
 
   String _stripAcceptSuffix(String url) {

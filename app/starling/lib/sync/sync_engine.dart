@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../models/models.dart';
@@ -14,8 +15,10 @@ import '../services/types.dart';
 import '../utils/feature_flags.dart';
 import 'concurrency.dart';
 import 'libp2p_upgrader.dart';
+import 'manifest_ack.dart';
 import 'manifest_exchange.dart';
 import 'outbound_drain.dart';
+import 'sealed_delivery.dart';
 import 'peer_connection_factory.dart';
 import 'peer_reachability_monitor.dart';
 
@@ -27,9 +30,11 @@ abstract class SyncTransport {
     PeerConnection peer, {
     int? since,
     int? until,
+    String? untilId,
     String? requesterPubkey,
     int? ackRotationAt,
     int? cardSeenAt,
+    Uint8List? ackSig,
   });
 
   Future<Envelope> fetchEnvelope(PeerConnection peer, {int? since});
@@ -40,6 +45,16 @@ abstract class SyncTransport {
   /// On success the receiver returns 202; transport-level failures throw.
   Future<void> pushEnvelope(PeerConnection peer, Envelope envelope);
 }
+
+/// How often each follow gets a FULL (un-windowed, paged) manifest diff
+/// (D1). The windowed cursor can't see events that arrived at a store out
+/// of author-time order; the daily full pass converges them.
+const int kFullManifestSyncIntervalSecs = 86400;
+
+/// Tolerated forward clock skew when advancing the sync cursor to a peer
+/// event's `created_at` — one absurdly future-dated event must not jump
+/// the cursor past everything that follows it.
+const int kMaxCursorSkewSecs = 300;
 
 /// One-call orchestration for "pull what's new from every reachable
 /// follow." Mirrors the spec in `app/plans/09-lan-sync.md`:
@@ -164,15 +179,57 @@ class SyncEngine {
     final identity = await _storage.getIdentity();
     final exchange =
         ManifestExchange(transport: _transport, storage: _storage);
-    final ManifestDiff diff;
+
+    // S3a: prove we control `requester_pubkey` before the peer honors our
+    // delivery acks. Skipped when there's nothing to ack.
+    Uint8List? ackSig;
+    if (identity != null &&
+        (follow.lastReceivedRotationAt > 0 || follow.lastReceivedCardAt > 0)) {
+      final secretKey = await _ownSecretKeyLookup();
+      if (secretKey != null) {
+        ackSig = signManifestAck(
+          _crypto,
+          requesterSecretKey: secretKey,
+          ownerPubkey: crockfordBase32Decode(follow.pubkey),
+          ackRotationAt: follow.lastReceivedRotationAt,
+          cardSeenAt: follow.lastReceivedCardAt,
+        );
+      }
+    }
+
+    // D1: the windowed diff is the cheap steady-state; a full paged diff
+    // runs on the first sync, on a stale full-pass stamp, or when the
+    // windowed manifest overflowed its page (has_older).
+    var ranFull = follow.lastFullSyncAt == 0 ||
+        _clock.nowUnixSeconds() - follow.lastFullSyncAt >=
+            kFullManifestSyncIntervalSecs;
+
+    ManifestDiff diff;
     try {
-      diff = await exchange.fetchAndDiff(
-        connection,
-        follow,
-        requesterPubkey: identity?.pubkey,
-        ackRotationAt: follow.lastReceivedRotationAt,
-        cardSeenAt: follow.lastReceivedCardAt,
-      );
+      diff = ranFull
+          ? await exchange.fetchAndDiffFull(
+              connection,
+              follow,
+              requesterPubkey: identity?.pubkey,
+              ackRotationAt: follow.lastReceivedRotationAt,
+              cardSeenAt: follow.lastReceivedCardAt,
+              ackSig: ackSig,
+            )
+          : await exchange.fetchAndDiff(
+              connection,
+              follow,
+              requesterPubkey: identity?.pubkey,
+              ackRotationAt: follow.lastReceivedRotationAt,
+              cardSeenAt: follow.lastReceivedCardAt,
+              ackSig: ackSig,
+            );
+      if (!ranFull && diff.hasOlder) {
+        // The window itself overflowed a manifest page — the diff is
+        // incomplete. Redo as a full paged pass (acks were already
+        // honored above, so omit them here).
+        ranFull = true;
+        diff = await exchange.fetchAndDiffFull(connection, follow);
+      }
     } catch (e) {
       developer.log(
         'manifest fetch failed for ${follow.pubkey}: $e',
@@ -216,9 +273,10 @@ class SyncEngine {
     // Plan 15: ingest an updated Connection card (e.g. a newly-paired relay
     // endpoint) so the reachability monitor starts probing the new tier.
     final cardDelivery = diff.newConnectionCard;
-    if (cardDelivery != null) {
+    if (cardDelivery != null && identity != null) {
       try {
         currentFollow = await _applyConnectionCard(
+          identity: identity,
           follow: currentFollow,
           delivery: cardDelivery,
         );
@@ -232,18 +290,18 @@ class SyncEngine {
     }
 
     if (diff.missingIds.isEmpty) {
-      // Nothing to fetch — but we still advance last_synced_at so the next
-      // window is anchored at "now." That requires we at least heard back
-      // from the peer, which we did. Drain the outbound queue so queued
-      // comments/likes don't sit waiting just because no inbound work
-      // was due.
-      await _storage.updateLastSynced(follow.pubkey, _clock.nowUnixSeconds());
-      final drain = await drainOutboundQueueForPeer(
-        storage: _storage,
-        transport: _transport,
-        follow: currentFollow,
-        peer: connection,
-      );
+      // Nothing to fetch. Advance the cursor only to author-time we
+      // actually observed (never wall-clock — D1), stamp a completed full
+      // pass, and drain the outbound queue so queued comments/likes don't
+      // sit waiting just because no inbound work was due.
+      await _advanceCursor(follow, diff);
+      if (ranFull) {
+        await _storage.updateLastFullSynced(
+          follow.pubkey,
+          _clock.nowUnixSeconds(),
+        );
+      }
+      final drain = await _drainOutbound(currentFollow, connection);
       return PeerSyncReport(
         pubkey: follow.pubkey,
         status: PeerSyncStatus.upToDate,
@@ -303,19 +361,20 @@ class SyncEngine {
       }
     }
 
-    await _storage.updateLastSynced(follow.pubkey, _clock.nowUnixSeconds());
+    await _advanceCursor(follow, diff);
+    if (ranFull) {
+      await _storage.updateLastFullSynced(
+        follow.pubkey,
+        _clock.nowUnixSeconds(),
+      );
+    }
     developer.log(
       'sync complete for ${follow.pubkey}: inserted=$inserted skipped=$skipped '
       'unknownPreserved=$unknownPreserved',
       name: 'sync_engine',
     );
 
-    final drain = await drainOutboundQueueForPeer(
-      storage: _storage,
-      transport: _transport,
-      follow: currentFollow,
-      peer: connection,
-    );
+    final drain = await _drainOutbound(currentFollow, connection);
 
     return PeerSyncReport(
       pubkey: follow.pubkey,
@@ -328,6 +387,41 @@ class SyncEngine {
     );
   }
 
+  /// D1: advance `lastSyncedAt` to the max author `created_at` observed in
+  /// the manifest — never wall-clock. An empty window doesn't advance; the
+  /// next window simply re-covers the same (cheap, id-deduped) range. A
+  /// far-future `created_at` from a skewed clock is clamped so it can't
+  /// jump the cursor past everything that follows it; `since` is inclusive
+  /// so the boundary event harmlessly re-lists next pass.
+  Future<void> _advanceCursor(Follow follow, ManifestDiff diff) async {
+    final maxAt = diff.maxCreatedAt;
+    if (maxAt == null) return;
+    final clamped =
+        math.min(maxAt, _clock.nowUnixSeconds() + kMaxCursorSkewSecs);
+    if (clamped > follow.lastSyncedAt) {
+      await _storage.updateLastSynced(follow.pubkey, clamped);
+    }
+  }
+
+  /// Drain the outbound queue toward [follow] — unless the connection is a
+  /// relay. The relay's POST /events requires the OWNER's signature, so a
+  /// follower envelope just 401s (D9); queued comments/likes target the
+  /// owner's phone and wait for a direct tier (lan/tor/libp2p).
+  Future<OutboundDrainResult> _drainOutbound(
+    Follow follow,
+    PeerConnection connection,
+  ) async {
+    if (connection.transport == PeerTransport.relay) {
+      return const OutboundDrainResult(pushed: 0, dropped: 0, retried: 0);
+    }
+    return drainOutboundQueueForPeer(
+      storage: _storage,
+      transport: _transport,
+      follow: follow,
+      peer: connection,
+    );
+  }
+
   /// Decrypts an inline rotation payload and persists the new feed key
   /// for [follow] (Plan 13). Returns the updated [Follow] (with the new
   /// `feedKey` and `lastReceivedRotationAt`). Throws on DH/decrypt failure
@@ -335,30 +429,25 @@ class SyncEngine {
   Future<Follow> _applyRotatedFeedKey({
     required Identity identity,
     required Follow follow,
-    required RotatedFeedKeyDelivery delivery,
+    required SealedDelivery delivery,
   }) async {
+    // Ignore a rotation no newer than one we've already applied: a replayed
+    // *older* delivery still decrypts (its key binds its own createdAt), and
+    // without this gate it would regress `follow.feedKey`. Safe to gate on
+    // the wire `created_at` for the same reason as the card path below — an
+    // inflated timestamp changes the derived key and fails decryption.
+    if (delivery.createdAt < follow.lastReceivedRotationAt) return follow;
+
     final secretKey = await _ownSecretKeyLookup();
     if (secretKey == null) {
       throw StateError('no secret key available to apply rotated feed key');
     }
-    final myEdPk = crockfordBase32Decode(identity.pubkey);
-    final theirEdPk = crockfordBase32Decode(follow.pubkey);
-    final myXSk = _crypto.ed25519ToX25519SecretKey(secretKey);
-    final theirXPk = _crypto.ed25519ToX25519PublicKey(theirEdPk);
-    // Mirror the rotator's call: requester=rotator (follow.pubkey),
-    // responder=us. The shared key derivation incorporates the timestamp
-    // (createdAt of the rotation) so both sides agree.
-    final sharedKey = _crypto.deriveSharedKey(
-      myXSk,
-      theirXPk,
-      theirEdPk,
-      myEdPk,
-      delivery.createdAt,
-    );
-    final newKey = _crypto.decrypt(
-      delivery.encryptedFeedKey,
-      delivery.nonce,
-      sharedKey,
+    final newKey = unsealDeliveryPayload(
+      _crypto,
+      senderEdPk: crockfordBase32Decode(follow.pubkey),
+      recipientEdPk: crockfordBase32Decode(identity.pubkey),
+      recipientSecretKey: secretKey,
+      delivery: delivery,
     );
     // Archive the soon-to-be-old chain root so cached content authored
     // before this rotation stays decryptable. validFrom = the previously
@@ -401,26 +490,34 @@ class SyncEngine {
     return updated;
   }
 
-  /// Verifies and persists an updated Connection card from [delivery]
+  /// Decrypts and persists an updated Connection card from [delivery]
   /// (Plan 15). Returns the updated [Follow] (new `connectionCard` +
   /// `lastReceivedCardAt`), stored in the same `jsonEncode(card.toMap())`
-  /// shape `PeerReachabilityMonitor` parses. Throws on signature/format
+  /// shape `PeerReachabilityMonitor` parses. Throws on decrypt/format
   /// mismatch — the caller logs and falls through.
   Future<Follow> _applyConnectionCard({
+    required Identity identity,
     required Follow follow,
-    required ConnectionCardDelivery delivery,
+    required SealedDelivery delivery,
   }) async {
-    // Ignore a card no newer than one we've already applied — the peer only
-    // ever advances its card, so an older `created_at` is stale/replayed.
+    // Ignore a card no newer than one we've already applied. Safe to gate
+    // on the wire `created_at`: it's bound into the shared-key derivation,
+    // so a replayed delivery with an inflated timestamp fails decryption
+    // instead of pinning `lastReceivedCardAt`.
     if (delivery.createdAt < follow.lastReceivedCardAt) return follow;
 
-    final authorPubkey = crockfordBase32Decode(follow.pubkey);
-    final sigOk =
-        _crypto.verify(authorPubkey, delivery.cardCbor, delivery.sig);
-    if (!sigOk) {
-      throw StateError('connection card signature invalid');
+    final secretKey = await _ownSecretKeyLookup();
+    if (secretKey == null) {
+      throw StateError('no secret key available to apply connection card');
     }
-    final card = ConnectionCard.fromBytes(delivery.cardCbor);
+    final cardCbor = unsealDeliveryPayload(
+      _crypto,
+      senderEdPk: crockfordBase32Decode(follow.pubkey),
+      recipientEdPk: crockfordBase32Decode(identity.pubkey),
+      recipientSecretKey: secretKey,
+      delivery: delivery,
+    );
+    final card = ConnectionCard.fromBytes(cardCbor);
     if (card.pubkey != follow.pubkey) {
       throw StateError(
         'connection card pubkey ${card.pubkey} != follow ${follow.pubkey}',

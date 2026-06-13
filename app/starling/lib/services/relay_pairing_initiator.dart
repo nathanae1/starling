@@ -23,7 +23,10 @@ class RelayPairingInitiator {
   RelayPairingInitiator({
     required CryptoService crypto,
     required http.Client httpClient,
-    Duration timeout = const Duration(seconds: 30),
+    // The relay's onion launch alone takes ~30s before Tor RTT, so the
+    // timeout must comfortably exceed it or every pair "fails" while the
+    // relay actually succeeds.
+    Duration timeout = const Duration(seconds: 90),
   })  : _crypto = crypto,
         _http = httpClient,
         _timeout = timeout;

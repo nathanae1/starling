@@ -20,11 +20,13 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
+        // Storage-cap defaults single-source from the serving crate.
+        let caps = starling_relay_http::Caps::default();
         Config {
             data_dir: PathBuf::from("/var/lib/starling-relay"),
             bind_admin: "127.0.0.1:8088".to_string(),
-            disk_cap_bytes: 5 * 1024 * 1024 * 1024,
-            per_owner_default_cap_bytes: 1024 * 1024 * 1024,
+            disk_cap_bytes: caps.disk_cap,
+            per_owner_default_cap_bytes: caps.per_owner_default,
             log_level: "info".to_string(),
             pairing_token_ttl_seconds: 600,
             local_port_range: [17000, 17999],
@@ -72,6 +74,11 @@ impl Config {
                 self.pairing_token_ttl_seconds = n;
             }
         }
+        if let Ok(v) = std::env::var("STARLING_RELAY_LOCAL_PORT_RANGE") {
+            if let Some(range) = parse_port_range(&v) {
+                self.local_port_range = range;
+            }
+        }
     }
 
     pub fn db_path(&self) -> PathBuf {
@@ -85,5 +92,35 @@ impl Config {
     }
     pub fn admin_sock(&self) -> PathBuf {
         self.data_dir.join("admin.sock")
+    }
+}
+
+/// Parse `"17000-17999"` into `[start, end]`. `None` on anything malformed
+/// or inverted (the env override is then ignored, like the other fields).
+fn parse_port_range(s: &str) -> Option<[u16; 2]> {
+    let (start, end) = s.trim().split_once('-')?;
+    let start: u16 = start.trim().parse().ok()?;
+    let end: u16 = end.trim().parse().ok()?;
+    (start <= end).then_some([start, end])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_port_range;
+
+    #[test]
+    fn parses_valid_range() {
+        assert_eq!(parse_port_range("17000-17999"), Some([17000, 17999]));
+        assert_eq!(parse_port_range(" 1- 2 "), Some([1, 2]));
+        assert_eq!(parse_port_range("8080-8080"), Some([8080, 8080]));
+    }
+
+    #[test]
+    fn rejects_malformed_or_inverted() {
+        assert_eq!(parse_port_range("17000"), None);
+        assert_eq!(parse_port_range("17999-17000"), None);
+        assert_eq!(parse_port_range("a-b"), None);
+        assert_eq!(parse_port_range("17000-99999"), None);
+        assert_eq!(parse_port_range(""), None);
     }
 }

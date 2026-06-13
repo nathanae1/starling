@@ -11,14 +11,15 @@ use starling_arti::{ArtiNode, OnionHandle};
 use starling_relay_admin::RelayControl;
 use starling_relay_http::{owner_router, Caps, OwnerCtx};
 use starling_relay_storage::{owners, Db, PairedOwner};
+use starling_wire::now_secs;
 use starling_wire::pairing::relay_id;
 use tokio::net::TcpListener;
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::Mutex;
 
-/// A running Owner: its onion (drop = unpublish) and its axum serving task.
+/// A running Owner: its onion (drop = unpublish) and its axum serving task
+/// (aborted on stop — in-flight requests die with the onion).
 struct OwnerTask {
     _onion: OnionHandle,
-    shutdown: Option<oneshot::Sender<()>>,
     join: tokio::task::JoinHandle<()>,
 }
 
@@ -30,8 +31,10 @@ pub struct Supervisor {
     admin_onion: String,
     port_range: (u16, u16),
     owners: Mutex<HashMap<[u8; 32], OwnerTask>>,
-    /// Serializes port allocation + insert so two concurrent pairings can't
-    /// pick the same loopback port.
+    /// Serializes the whole pair/unpair flow (paired check, port
+    /// allocation, launch, insert) so concurrent pairings can't double-
+    /// launch one pubkey or pick the same loopback port. Lock order is
+    /// always `pair_lock` → `owners`, never the reverse.
     pair_lock: Mutex<()>,
 }
 
@@ -100,25 +103,13 @@ impl Supervisor {
         let listener = TcpListener::bind(("127.0.0.1", port))
             .await
             .with_context(|| format!("bind owner router on 127.0.0.1:{port}"))?;
-        let (tx, rx) = oneshot::channel::<()>();
         let join = tokio::spawn(async move {
-            let server = axum::serve(listener, owner_router(ctx))
-                .with_graceful_shutdown(async {
-                    rx.await.ok();
-                });
-            if let Err(e) = server.await {
+            if let Err(e) = axum::serve(listener, owner_router(ctx)).await {
                 log::error!("owner router on :{port} exited: {e}");
             }
         });
 
-        self.owners.lock().await.insert(
-            pubkey,
-            OwnerTask {
-                _onion: onion,
-                shutdown: Some(tx),
-                join,
-            },
-        );
+        self.owners.lock().await.insert(pubkey, OwnerTask { _onion: onion, join });
         Ok(address)
     }
 }
@@ -134,16 +125,44 @@ impl RelayControl for Supervisor {
         owner_pubkey: [u8; 32],
         label: Option<String>,
     ) -> Result<(String, String)> {
-        // Already paired? Return the existing onion (idempotent re-pair).
+        // The lock comes FIRST: with the already-paired check outside it,
+        // two concurrent pairs for one pubkey both proceeded — the second
+        // launch overwrote the first's owners-map entry (dropping the live
+        // onion), then its insert hit the PK conflict and tore down the
+        // replacement, leaving a paired_owners row nothing was serving.
+        // Holding it across the ~30s launch (serializing pairings) is
+        // intentional.
+        let _guard = self.pair_lock.lock().await;
+
+        // Already paired? Return the existing onion (idempotent re-pair) —
+        // but only after confirming a task is actually serving it. After a
+        // failed restore_all, the row exists with nothing live; the same
+        // keystore nickname relaunches the same onion address.
         {
             let conn = self.db.get()?;
             if let Some(existing) = owners::get(&conn, &owner_pubkey)? {
+                drop(conn);
+                let live = self.owners.lock().await.contains_key(&owner_pubkey);
+                if !live {
+                    let relaunched = self
+                        .launch_owner(owner_pubkey, existing.local_port)
+                        .await
+                        .context("relaunch dead owner task on re-pair")?;
+                    if relaunched != existing.relay_onion_address {
+                        // Same nickname → same HS keypair → same address;
+                        // anything else means the keystore was wiped.
+                        log::warn!(
+                            "re-pair of {} relaunched at {} but DB row says {}",
+                            hex::encode(&owner_pubkey[..4]),
+                            relaunched,
+                            existing.relay_onion_address
+                        );
+                    }
+                }
                 let rid = relay_id(&owner_pubkey, &existing.relay_onion_address);
                 return Ok((existing.relay_onion_address, rid));
             }
         }
-
-        let _guard = self.pair_lock.lock().await;
 
         // Allocate the lowest free loopback port.
         let port = {
@@ -187,9 +206,27 @@ impl RelayControl for Supervisor {
     }
 
     async fn unpair_owner(&self, owner_pubkey: [u8; 32]) -> Result<()> {
+        // Serialize against a concurrent (re-)pair of the same pubkey.
+        let _guard = self.pair_lock.lock().await;
         self.stop_owner(owner_pubkey).await;
         let conn = self.db.get()?;
         owners::delete(&conn, &owner_pubkey)?;
+        drop(conn);
+        // The DB delete cascades events + media rows; the blob files live
+        // under the Owner's namespace dir (S1) and must go too — the admin
+        // UI promises "delete all stored data".
+        let owner_dir = self.media_dir.join(hex::encode(owner_pubkey));
+        let removed = tokio::task::spawn_blocking(move || std::fs::remove_dir_all(&owner_dir))
+            .await
+            .map_err(anyhow::Error::from)?;
+        if let Err(e) = removed {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                log::warn!(
+                    "unpair {}: could not remove media dir: {e}",
+                    hex::encode(&owner_pubkey[..4])
+                );
+            }
+        }
         // NOTE (v1): the onion is unpublished (handle dropped) but its HS
         // keypair remains on disk under arti's keystore. Erasing it via
         // tor-keymgr is a follow-up (Plan 15 M5 spike); the orphaned key is
@@ -202,22 +239,18 @@ impl RelayControl for Supervisor {
 impl Supervisor {
     /// Stop + remove an Owner's serving task and unpublish its onion.
     async fn stop_owner(&self, pubkey: [u8; 32]) {
-        if let Some(mut task) = self.owners.lock().await.remove(&pubkey) {
-            if let Some(tx) = task.shutdown.take() {
-                let _ = tx.send(());
-            }
+        if let Some(task) = self.owners.lock().await.remove(&pubkey) {
             task.join.abort();
             // `_onion` drops here → Arti unpublishes the descriptor.
         }
     }
 
-    /// Graceful shutdown of all Owner tasks (SIGTERM path).
+    /// Stop all Owner tasks (SIGTERM path). Aborts outright — the onions
+    /// unpublish with the process, so draining in-flight requests buys
+    /// nothing.
     pub async fn shutdown_all(&self) {
         let mut owners = self.owners.lock().await;
-        for (_pk, mut task) in owners.drain() {
-            if let Some(tx) = task.shutdown.take() {
-                let _ = tx.send(());
-            }
+        for (_pk, task) in owners.drain() {
             task.join.abort();
         }
     }
@@ -227,11 +260,4 @@ fn to_pubkey(bytes: &[u8]) -> Result<[u8; 32]> {
     bytes
         .try_into()
         .map_err(|_| anyhow!("stored pubkey is not 32 bytes"))
-}
-
-fn now_secs() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
 }

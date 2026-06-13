@@ -11,6 +11,11 @@ part 'post_provider.g.dart';
 
 @riverpod
 PostService postService(Ref ref) {
+  // Resolved at build time: the publish callback below fires unawaited,
+  // often after this autoDispose provider is torn down (the compose flow
+  // pops right after publish), so it must not touch `ref`. The coordinator
+  // provider is keepAlive, so the captured future stays valid.
+  final relayPush = ref.watch(relayPushCoordinatorProvider.future);
   return DefaultPostService(
     contentKey: ref.watch(contentKeyServiceProvider),
     crypto: ref.watch(cryptoServiceProvider),
@@ -23,8 +28,12 @@ PostService postService(Ref ref) {
     // (if any). Best-effort — the coordinator no-ops when no relay is
     // paired or Tor isn't ready.
     onPublished: (signed, bytes) async {
-      final coord = await ref.read(relayPushCoordinatorProvider.future);
-      await coord?.pushPublished(signed, bytes);
+      try {
+        final coord = await relayPush;
+        await coord?.pushPublished(signed, bytes);
+      } catch (_) {
+        // Best-effort; the next reconcile pass heals a missed mirror.
+      }
     },
     publishLock: ref.watch(publishLockProvider),
   );

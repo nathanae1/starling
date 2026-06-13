@@ -26,6 +26,11 @@ abstract class TorService {
   /// it waits for circuits to be ready.
   Future<void> bootstrap({Duration? timeout}) async {}
 
+  /// Publish (or update) the device's single onion service, forwarding
+  /// virtual port 80 to `127.0.0.1:[localPort]`. Idempotent on the same
+  /// port. Calling again with a different port retargets the live reverse
+  /// proxy in place — the `.onion` address never changes, so peers'
+  /// stored connection cards stay valid across local server rebinds.
   Future<String> createOnionService(int localPort);
 
   Future<PeerConnection> connectToOnion(String address, int port);

@@ -11,16 +11,17 @@ use super::internal;
 use crate::OwnerCtx;
 
 pub async fn handler(State(ctx): State<OwnerCtx>) -> Response {
-    let conn = match ctx.db.get() {
+    let pubkey = ctx.owner_pubkey;
+    let counts = ctx
+        .db
+        .run(move |conn| {
+            let event_count = events::count(conn, &pubkey)?;
+            let media_storage_used = media::total_bytes(conn, &pubkey)?;
+            Ok((event_count, media_storage_used))
+        })
+        .await;
+    let (event_count, media_storage_used) = match counts {
         Ok(c) => c,
-        Err(e) => return internal(e),
-    };
-    let event_count = match events::count(&conn, &ctx.owner_pubkey) {
-        Ok(n) => n,
-        Err(e) => return internal(e),
-    };
-    let media_storage_used = match media::total_bytes(&conn, &ctx.owner_pubkey) {
-        Ok(n) => n,
         Err(e) => return internal(e),
     };
     let status = StatusJson {

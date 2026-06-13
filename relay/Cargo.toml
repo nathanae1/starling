@@ -26,9 +26,8 @@ arti-client = { version = "0.34", default-features = false, features = ["tokio",
 tor-hsservice = { version = "0.34" }
 tor-hsrproxy = { version = "0.34" }
 tor-rtcompat = { version = "0.34", features = ["tokio", "rustls"] }
-tor-keymgr = { version = "0.34" }
 tor-socksproto = { version = "0.34" }
-fs-mistrust = "0.10"
+tor-config = { version = "0.34" }
 safelog = "0.5"
 
 # tor-dirmgr → rusqlite → libsqlite3-sys. `bundled` keeps SQLite static and
@@ -50,6 +49,7 @@ ed25519-dalek = "2"
 blake2 = "0.10"
 hex = "0.4"
 base64 = "0.22"
+subtle = "2"
 
 # --- storage ---
 # rusqlite/libsqlite3-sys MUST match what arti's tor-dirmgr resolves

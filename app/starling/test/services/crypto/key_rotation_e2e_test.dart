@@ -193,7 +193,7 @@ class _Scene {
         delivery.createdAt,
       );
       final newKey = syncer.crypto.decrypt(
-        delivery.encryptedFeedKey,
+        delivery.payload,
         delivery.nonce,
         shared,
       );
@@ -312,7 +312,6 @@ class _Peer {
     );
     peer.keyRotation = KeyRotationService(
       crypto: crypto,
-      contentKey: contentKey,
       storage: storage,
       clock: peer.clock,
       feedKeyCache: cache,
@@ -324,7 +323,12 @@ class _Peer {
 
   ConnectionCard connectionCard() => ConnectionCard(
         pubkey: identity.pubkey,
-        endpoints: [Endpoint(type: 'direct', address: _hostFromUrl(baseUrl))],
+        endpoints: [
+          // sendFollowRequest refuses to send a card whose own endpoints
+          // lack an onion entry; the fake transport still dials via baseUrl.
+          Endpoint(type: 'onion', address: '$label.onion:80'),
+          Endpoint(type: 'direct', address: _hostFromUrl(baseUrl)),
+        ],
       );
 
   void attachFollowTransport(
@@ -430,9 +434,11 @@ class _DirectSyncTransport implements SyncTransport {
     PeerConnection peer, {
     int? since,
     int? until,
+    String? untilId,
     String? requesterPubkey,
     int? ackRotationAt,
     int? cardSeenAt,
+    Uint8List? ackSig,
   }) async {
     if (requesterPubkey != null && ackRotationAt != null && ackRotationAt > 0) {
       await _source.storage
@@ -442,13 +448,13 @@ class _DirectSyncTransport implements SyncTransport {
       pubkey: _source.identity.pubkey,
       since: since,
     );
-    RotatedFeedKeyDelivery? delivery;
+    SealedDelivery? delivery;
     if (requesterPubkey != null) {
       final pending =
           await _source.storage.latestPendingDistributionFor(requesterPubkey);
       if (pending != null) {
-        delivery = RotatedFeedKeyDelivery(
-          encryptedFeedKey: pending.encryptedFeedKey,
+        delivery = SealedDelivery(
+          payload: pending.encryptedFeedKey,
           nonce: pending.nonce,
           createdAt: pending.createdAt,
         );

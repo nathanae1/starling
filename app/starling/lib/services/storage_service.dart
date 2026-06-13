@@ -29,6 +29,10 @@ abstract class StorageService {
 
   Future<void> updateLastSynced(String pubkey, int timestamp);
 
+  /// Stamp the completion of a FULL (un-windowed, paged) manifest diff
+  /// for [pubkey] (D1).
+  Future<void> updateLastFullSynced(String pubkey, int timestamp);
+
   /// Stamps the most recent decrypt-failure time on the follow row.
   /// Pass `null` to clear. Drives the "Key fresh / stale" status tile.
   Future<void> setLastDecryptFailureAt(String pubkey, int? timestamp);
@@ -40,10 +44,14 @@ abstract class StorageService {
 
   // --- Events ---
 
+  /// Ordered `(createdAt DESC, id DESC)`. `(until, untilId)` together form
+  /// a strict keyset cursor for lossless paging (same-second events are
+  /// never skipped); bare `until` stays inclusive.
   Future<List<Event>> getEvents({
     String? pubkey,
     int? since,
     int? until,
+    String? untilId,
     int? limit,
   });
 
@@ -196,12 +204,12 @@ abstract class StorageService {
   /// Forget the paired Relay (unpair).
   Future<void> clearPairedRelay();
 
-  /// Queue a signed Connection card update for [targetPubkey], delivered on
+  /// Queue a sealed Connection card update for [targetPubkey], delivered on
   /// that follower's next `/manifest` response.
   Future<void> queueCardDistribution({
     required String targetPubkey,
-    required Uint8List cardCbor,
-    required Uint8List sig,
+    required Uint8List encryptedCard,
+    required Uint8List nonce,
     required int createdAt,
   });
 

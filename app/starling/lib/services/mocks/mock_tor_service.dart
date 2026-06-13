@@ -6,6 +6,12 @@ class MockTorService implements TorService {
   bool _isReady = false;
   String? _onionAddress;
 
+  /// Test hook: while > 0, each [createOnionService] call throws and
+  /// decrements this, simulating transient onion-publish failures. Used to
+  /// exercise the publish-retry path (OnionPublisher) and as a debug-mode
+  /// failure injector.
+  int failCreateOnionCount = 0;
+
   @override
   Future<void> init(
     String dataDir, {
@@ -22,6 +28,10 @@ class MockTorService implements TorService {
 
   @override
   Future<String> createOnionService(int localPort) async {
+    if (failCreateOnionCount > 0) {
+      failCreateOnionCount--;
+      throw StateError('injected onion publish failure (port=$localPort)');
+    }
     _onionAddress = 'mockabcdef1234567890abcdef1234567890abcdef12345678.onion';
     return _onionAddress!;
   }

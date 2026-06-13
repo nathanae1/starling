@@ -75,8 +75,10 @@ void main() {
       createdAt: 0,
     ));
     final container = await _container(storage: storage);
-    addTearDown(container.dispose);
+    // LIFO: dispose the container (cancelling its stream subscriptions)
+    // before storage closes the controllers they listen to.
     addTearDown(storage.dispose);
+    addTearDown(container.dispose);
 
     await tester.pumpWidget(_harness(container));
     await tester.pumpAndSettle();
@@ -101,8 +103,10 @@ void main() {
       requestTimestamp: 990,
     ));
     final container = await _container(storage: storage);
-    addTearDown(container.dispose);
+    // LIFO: dispose the container (cancelling its stream subscriptions)
+    // before storage closes the controllers they listen to.
     addTearDown(storage.dispose);
+    addTearDown(container.dispose);
 
     await tester.pumpWidget(_harness(container));
     await tester.pumpAndSettle();
@@ -121,8 +125,10 @@ void main() {
       createdAt: 0,
     ));
     final container = await _container(storage: storage, seedOnion: true);
-    addTearDown(container.dispose);
+    // LIFO: dispose the container (cancelling its stream subscriptions)
+    // before storage closes the controllers they listen to.
     addTearDown(storage.dispose);
+    addTearDown(container.dispose);
 
     await tester.pumpWidget(_harness(container));
     await tester.pumpAndSettle();
@@ -143,8 +149,10 @@ void main() {
       createdAt: 0,
     ));
     final container = await _container(storage: storage, seedOnion: true);
-    addTearDown(container.dispose);
+    // LIFO: dispose the container (cancelling its stream subscriptions)
+    // before storage closes the controllers they listen to.
     addTearDown(storage.dispose);
+    addTearDown(container.dispose);
 
     await tester.pumpWidget(_harness(container));
     await tester.pumpAndSettle();
@@ -174,8 +182,10 @@ void main() {
       lastSyncedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000 - 5,
     ));
     final container = await _container(storage: storage);
-    addTearDown(container.dispose);
+    // LIFO: dispose the container (cancelling its stream subscriptions)
+    // before storage closes the controllers they listen to.
     addTearDown(storage.dispose);
+    addTearDown(container.dispose);
 
     await tester.pumpWidget(_harness(container));
     await tester.pumpAndSettle();

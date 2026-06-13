@@ -2,13 +2,17 @@ import 'dart:developer' as developer;
 
 import '../models/envelope.dart';
 import '../models/protocol_version.dart';
+import '../services/follow_service.dart' show isFollowAcceptQueueEntry;
+import '../services/lan_network_service.dart' show NetworkException;
 import '../services/storage_service.dart';
 import '../services/types.dart';
 import 'sync_engine.dart';
 
-/// Per-peer drop threshold. After 3 failed deliveries, remove the entry —
-/// the peer has likely unfollowed or is permanently unreachable. Match
-/// Plan 10's retry policy.
+/// Per-peer drop threshold for deliveries the peer actively REJECTED
+/// (HTTP 4xx). After 3 rejections, remove the entry — the peer has likely
+/// unfollowed. Transport-level failures (no response: socket errors,
+/// timeouts) and 5xx do NOT count toward this; queued comments/likes wait
+/// for connectivity instead of being burned by three Tor flaps (D9).
 const int kOutboundMaxRetries = 3;
 
 /// Drain queued events targeting [follow], pushing them in a single
@@ -25,7 +29,12 @@ Future<OutboundDrainResult> drainOutboundQueueForPeer({
   required Follow follow,
   required PeerConnection peer,
 }) async {
-  final queued = await storage.dequeue(follow.pubkey);
+  // The outbound queue is shared with follow-accept wrappers keyed by the
+  // same pubkey (the follow retry pump owns those). Never ship them as
+  // 'event' payloads — leave them queued untouched for the retry pump.
+  final queued = (await storage.dequeue(follow.pubkey))
+      .where((q) => !isFollowAcceptQueueEntry(q.eventBlob))
+      .toList(growable: false);
   if (queued.isEmpty) {
     return const OutboundDrainResult(pushed: 0, dropped: 0, retried: 0);
   }
@@ -52,6 +61,18 @@ Future<OutboundDrainResult> drainOutboundQueueForPeer({
       'pushEvents failed for ${follow.pubkey}: $e',
       name: 'outbound_drain',
     );
+    final status = e is NetworkException ? e.statusCode : null;
+    final rejected = status != null && status >= 400 && status < 500;
+    if (!rejected) {
+      // Transport-level failure or server error: the envelope may simply
+      // not have arrived. Leave retry counts alone — these entries retry
+      // on every future pass until a delivery is actually answered.
+      return OutboundDrainResult(
+        pushed: 0,
+        dropped: 0,
+        retried: queued.length,
+      );
+    }
     var dropped = 0;
     var retried = 0;
     for (final entry in queued) {
@@ -59,7 +80,7 @@ Future<OutboundDrainResult> drainOutboundQueueForPeer({
         await storage.removeFromQueue(entry.id);
         dropped++;
         developer.log(
-          'dropped after $kOutboundMaxRetries retries: '
+          'dropped after $kOutboundMaxRetries rejections: '
           'queue id=${entry.id} target=${entry.targetPubkey}',
           name: 'outbound_drain',
         );

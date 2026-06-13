@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:cbor/simple.dart';
 
 import '../models/models.dart';
+import '../sync/manifest_codec.dart';
 import '../sync/sync_engine.dart' show SyncTransport;
 import 'lan_network_service.dart' show NetworkException;
 import 'libp2p/libp2p_service.dart';
@@ -139,19 +140,29 @@ class Libp2pNetworkService implements NetworkService, SyncTransport {
     PeerConnection connection, {
     int? since,
     int? until,
+    String? untilId,
     String? requesterPubkey,
     int? ackRotationAt,
     int? cardSeenAt,
+    Uint8List? ackSig,
   }) async {
     final req = <String, dynamic>{};
     if (since != null) req['since'] = since;
     if (until != null) req['until'] = until;
-    if (requesterPubkey != null) req['requester_pubkey'] = requesterPubkey;
-    if (ackRotationAt != null && ackRotationAt > 0) {
-      req['ack_rotation_at'] = ackRotationAt;
-    }
-    if (cardSeenAt != null && cardSeenAt > 0) {
-      req['card_seen_at'] = cardSeenAt;
+    // Paging cursor, not identity — sent on every transport (incl. relay).
+    if (until != null && untilId != null) req['until_id'] = untilId;
+    // S7: mirror LanNetworkService — no identity params over a relay
+    // connection. libp2p can't currently carry one, but keep the guards
+    // aligned so they can't drift apart.
+    if (connection.transport != PeerTransport.relay) {
+      if (requesterPubkey != null) req['requester_pubkey'] = requesterPubkey;
+      if (ackRotationAt != null && ackRotationAt > 0) {
+        req['ack_rotation_at'] = ackRotationAt;
+      }
+      if (cardSeenAt != null && cardSeenAt > 0) {
+        req['card_seen_at'] = cardSeenAt;
+      }
+      if (ackSig != null) req['ack_sig'] = ackSig;
     }
     final body = await _exchange(connection, _pManifest, _encode(req));
     final decoded = cbor.decode(body);
@@ -161,40 +172,9 @@ class Libp2pNetworkService implements NetworkService, SyncTransport {
         connection.pubkey,
       );
     }
-    final events = (decoded['events'] as List<dynamic>? ?? const [])
-        .map((e) => e as Map<dynamic, dynamic>)
-        .map((e) => ManifestEntry(
-              id: e['id'] as String,
-              createdAt: e['created_at'] as int,
-            ))
-        .toList();
-    RotatedFeedKeyDelivery? newFeedKey;
-    final rawNewKey = decoded['new_feed_key'];
-    if (rawNewKey is Map) {
-      newFeedKey = RotatedFeedKeyDelivery(
-        encryptedFeedKey: _toBytes(
-          rawNewKey['encrypted_feed_key'],
-          connection.pubkey,
-        ),
-        nonce: _toBytes(rawNewKey['nonce'], connection.pubkey),
-        createdAt: rawNewKey['created_at'] as int,
-      );
-    }
-    ConnectionCardDelivery? newConnectionCard;
-    final rawNewCard = decoded['new_connection_card'];
-    if (rawNewCard is Map) {
-      newConnectionCard = ConnectionCardDelivery(
-        cardCbor: _toBytes(rawNewCard['card_cbor'], connection.pubkey),
-        sig: _toBytes(rawNewCard['sig'], connection.pubkey),
-        createdAt: rawNewCard['created_at'] as int,
-      );
-    }
-    return Manifest(
-      pubkey: decoded['pubkey'] as String,
-      events: events,
-      hasOlder: (decoded['has_older'] as bool?) ?? false,
-      newFeedKey: newFeedKey,
-      newConnectionCard: newConnectionCard,
+    return parseManifestResponse(
+      decoded,
+      toBytes: (value) => _toBytes(value, connection.pubkey),
     );
   }
 

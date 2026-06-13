@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
@@ -56,6 +57,15 @@ class KeychainManager {
   }
 
   Future<bool> contains(String key) => _storage.containsKey(key: key);
+
+  /// The local identity's Ed25519 secret key, or null if none is stored.
+  /// The canonical decode of [identitySecretKeyName] — every secret-key
+  /// lookup (providers, boot, background sync) goes through here.
+  Future<Uint8List?> loadIdentitySecretKey() async {
+    final encoded = await read(identitySecretKeyName);
+    if (encoded == null) return null;
+    return Uint8List.fromList(base64Decode(encoded));
+  }
 
   void _log(String op, String key, {required bool present, int? len}) {
     if (!kDebugMode) return;

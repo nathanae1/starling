@@ -76,7 +76,12 @@ async fn handle_conn(
     reader.read_line(&mut line).await?;
     let resp = match serde_json::from_str::<Request>(line.trim()) {
         Ok(Request::Pair { label }) => {
-            match mint_pairing_token(&db, &admin_onion, &relay_version, label, ttl_secs, "cli") {
+            let minted = db
+                .run(move |conn| {
+                    mint_pairing_token(conn, &admin_onion, &relay_version, label, ttl_secs, "cli")
+                })
+                .await;
+            match minted {
                 Ok(m) => Response::Ok {
                     pair_url: m.pair_url,
                     expires_at: m.expires_at,

@@ -3,9 +3,9 @@
 //! One [`ArtiNode`] owns a tokio+rustls runtime handle and a
 //! [`TorClient`]. It can launch N independent onion services
 //! ([`ArtiNode::launch_service`]), each reverse-proxying inbound traffic to
-//! a loopback port. The phone FFI bridge uses exactly one
-//! ([`ArtiNode::create_onion_service`]); the headless relay launches one
-//! per paired Owner plus an admin onion.
+//! a loopback port. Callers own the returned [`OnionHandle`]s: the phone
+//! FFI bridge holds its single one at the FFI edge; the headless relay
+//! holds one per paired Owner plus an admin onion.
 //!
 //! This crate was extracted from the phone bridge's `arti/inner.rs` so the
 //! two share a single Tor implementation. Mobile-specific concerns
@@ -16,7 +16,7 @@
 //! - the in-process SOCKS5 listener lives behind the default `socks`
 //!   feature (the phone needs it; the relay sets `default-features = false`).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use arti_client::config::CfgPath;
@@ -29,15 +29,9 @@ pub use service::OnionHandle;
 #[cfg(feature = "socks")]
 mod socks;
 
-/// Default nickname for the phone's single onion service. Kept constant so
-/// the device's `.onion` address persists across launches (Arti namespaces
-/// the descriptor signing key on disk by nickname).
-pub const PHONE_HS_NICKNAME: &str = "starling";
-
 #[derive(Clone, Copy, Default)]
 pub struct StatusSnapshot {
     pub bootstrap_percent: u32,
-    pub circuit_count: u32,
     pub is_ready: bool,
     pub socks_port: u16,
 }
@@ -57,10 +51,6 @@ pub struct ArtiNode {
     client: TorClient<TokioRustlsRuntime>,
     #[allow(dead_code)]
     data_dir: PathBuf,
-    /// Convenience slot for the phone's single onion service. The relay
-    /// holds its [`OnionHandle`]s externally (keyed by nickname) and leaves
-    /// this `None`.
-    onion: Option<OnionHandle>,
     #[cfg(feature = "socks")]
     socks_port: u16,
     #[cfg(feature = "socks")]
@@ -73,21 +63,22 @@ impl ArtiNode {
     /// `trust_permissions = true` disables Arti's `fs-mistrust` unix
     /// permission check — required on mobile (the OS sandbox is the real
     /// boundary and inherited file modes trip the check). On a server pass
-    /// `false` so strict ownership/permission enforcement applies; the
-    /// caller is then responsible for `data_dir` (and every ancestor) being
-    /// `0700`-owned by the relay user.
+    /// `false` so strict ownership/permission enforcement applies.
+    /// `data_dir` and the dirs under it are created `0700` here; the caller
+    /// is responsible for the *ancestors* not being group/other-writable
+    /// and for the whole tree being owned by the relay user.
     pub async fn start(
         data_dir: PathBuf,
         mode: InitMode,
         trust_permissions: bool,
     ) -> Result<Self> {
-        std::fs::create_dir_all(&data_dir)
+        ensure_private_dir(&data_dir)
             .with_context(|| format!("create data dir {}", data_dir.display()))?;
 
         let cache_dir = data_dir.join("cache");
         let state_dir = data_dir.join("state");
-        std::fs::create_dir_all(&cache_dir).ok();
-        std::fs::create_dir_all(&state_dir).ok();
+        ensure_private_dir(&cache_dir).context("create cache dir")?;
+        ensure_private_dir(&state_dir).context("create state dir")?;
 
         let mut cfg = TorClientConfig::builder();
         cfg.storage()
@@ -126,7 +117,6 @@ impl ArtiNode {
             runtime,
             client,
             data_dir,
-            onion: None,
             #[cfg(feature = "socks")]
             socks_port,
             #[cfg(feature = "socks")]
@@ -141,20 +131,6 @@ impl ArtiNode {
     /// nicknames namespace independent keypairs on disk).
     pub fn launch_service(&self, nickname: &str, local_port: u16) -> Result<OnionHandle> {
         service::launch(&self.client, &self.runtime, nickname, local_port)
-    }
-
-    /// Phone convenience: launch (or reattach to) the single
-    /// [`PHONE_HS_NICKNAME`] onion forwarding to `127.0.0.1:local_port`,
-    /// storing the handle internally so [`shutdown`](Self::shutdown) tears
-    /// it down. Returns `<addr>.onion`. Idempotent.
-    pub fn create_onion_service(&mut self, local_port: u16) -> Result<String> {
-        if let Some(existing) = &self.onion {
-            return Ok(existing.address().to_string());
-        }
-        let handle = self.launch_service(PHONE_HS_NICKNAME, local_port)?;
-        let address = handle.address().to_string();
-        self.onion = Some(handle);
-        Ok(address)
     }
 
     #[cfg(feature = "socks")]
@@ -175,14 +151,9 @@ impl ArtiNode {
     pub fn status(&self) -> StatusSnapshot {
         let bs = self.client.bootstrap_status();
         let percent = (bs.as_frac() * 100.0).round().clamp(0.0, 100.0) as u32;
-        let is_ready = bs.ready_for_traffic();
-        // arti-client doesn't expose a live circuit count via stable API;
-        // approximate 3 once ready, 0 otherwise.
-        let circuit_count = if is_ready { 3 } else { 0 };
         StatusSnapshot {
             bootstrap_percent: percent,
-            circuit_count,
-            is_ready,
+            is_ready: bs.ready_for_traffic(),
             #[cfg(feature = "socks")]
             socks_port: self.socks_port,
             #[cfg(not(feature = "socks"))]
@@ -190,19 +161,63 @@ impl ArtiNode {
         }
     }
 
-    /// Borrow the underlying client (the relay needs it to reach the
-    /// keystore for unpair-time key removal).
-    pub fn client(&self) -> &TorClient<TokioRustlsRuntime> {
-        &self.client
-    }
-
+    /// Tear down node-owned background tasks (currently just the SOCKS
+    /// listener). Onion services are owned by their callers — drop the
+    /// [`OnionHandle`]s first.
     pub async fn shutdown(&mut self) {
-        // Dropping the handle aborts its proxy task and unpublishes the
-        // descriptor.
-        self.onion.take();
         #[cfg(feature = "socks")]
         if let Some(task) = self.socks_task.take() {
             task.abort();
         }
+    }
+}
+
+/// Create `path` (and missing parents) with mode `0700`, then re-assert
+/// `0700` on `path` itself. Arti's `fs-mistrust` (strict when
+/// `trust_permissions = false`) rejects group/other-accessible state and
+/// cache dirs, and a plain `create_dir_all` under the usual umask 022
+/// yields `0755`. The trailing chmod heals dirs a pre-fix build left
+/// behind — `DirBuilder::mode` does not apply to dirs that already exist.
+fn ensure_private_dir(path: &Path) -> Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(path)?;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?;
+    }
+    #[cfg(not(unix))]
+    std::fs::create_dir_all(path)?;
+    Ok(())
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    fn mode_of(path: &Path) -> u32 {
+        std::fs::metadata(path).unwrap().permissions().mode() & 0o777
+    }
+
+    #[test]
+    fn ensure_private_dir_creates_0700() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("parent").join("child");
+        ensure_private_dir(&dir).unwrap();
+        assert_eq!(mode_of(&dir), 0o700);
+        assert_eq!(mode_of(&dir.parent().unwrap()), 0o700);
+    }
+
+    #[test]
+    fn ensure_private_dir_heals_existing_0755() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("state");
+        std::fs::create_dir(&dir).unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        ensure_private_dir(&dir).unwrap();
+        assert_eq!(mode_of(&dir), 0o700);
     }
 }

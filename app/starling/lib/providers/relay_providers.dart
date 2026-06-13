@@ -1,6 +1,3 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:http/http.dart' as http;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -94,7 +91,7 @@ Future<RelayPushCoordinator?> relayPushCoordinator(Ref ref) async {
     storage: storage,
     relayClient: client,
     identityLookup: storage.getIdentity,
-    ownSecretKeyLookup: _loadSecretKey,
+    ownSecretKeyLookup: () => KeychainManager().loadIdentitySecretKey(),
     mediaBytesLookup: (hash) =>
         readMediaBytes(storage: storage, appSupportDir: dir, hash: hash),
   );
@@ -115,16 +112,9 @@ Future<RelayPairingService?> relayPairingService(Ref ref) async {
     storage: storage,
     clock: ref.watch(clockProvider),
     identityLookup: storage.getIdentity,
-    ownSecretKeyLookup: _loadSecretKey,
+    ownSecretKeyLookup: () => KeychainManager().loadIdentitySecretKey(),
     ownEndpointsLookup: () => ref.read(ownEndpointsProvider),
     reloadPairedRelay: () =>
         ref.read(pairedRelayControllerProvider.notifier).reload(),
   );
-}
-
-Future<Uint8List?> _loadSecretKey() async {
-  final keychain = KeychainManager();
-  final encoded = await keychain.read(KeychainManager.identitySecretKeyName);
-  if (encoded == null) return null;
-  return Uint8List.fromList(base64Decode(encoded));
 }

@@ -53,16 +53,32 @@ void main() {
         status: 'accepted',
       ));
 
-  test('pair() persists the relay and queues a verifiable card to each '
+  /// Decrypt a queued card the way the follower's sync engine does:
+  /// reverse the requester/responder derivation with the delivery's
+  /// `createdAt` bound in.
+  Uint8List unseal(KeyPair owner, KeyPair follower, PendingCardDistribution card) {
+    final shared = crypto.deriveSharedKey(
+      crypto.ed25519ToX25519SecretKey(follower.secretKey),
+      crypto.ed25519ToX25519PublicKey(owner.publicKey),
+      owner.publicKey,
+      follower.publicKey,
+      card.createdAt,
+    );
+    return crypto.decrypt(card.encryptedCard, card.nonce, shared);
+  }
+
+  test('pair() persists the relay and queues a sealed card to each '
       'follower with the relay endpoint', () async {
     final storage = MockStorageService();
     final kp = await crypto.generateKeyPair();
+    final followerA = await crypto.generateKeyPair();
+    final followerB = await crypto.generateKeyPair();
     final ownerPubkey = crockfordBase32Encode(kp.publicKey);
     await storage.saveIdentity(
       Identity(pubkey: ownerPubkey, feedKey: Uint8List(32), createdAt: 0),
     );
-    await seedFollower(storage, 'follower-a');
-    await seedFollower(storage, 'follower-b');
+    await seedFollower(storage, crockfordBase32Encode(followerA.publicKey));
+    await seedFollower(storage, crockfordBase32Encode(followerB.publicKey));
 
     final initiator = RelayPairingInitiator(
       crypto: crypto,
@@ -104,13 +120,16 @@ void main() {
     final paired = await storage.getPairedRelay();
     expect(paired?.relayOnion, 'relayhost.onion');
 
-    for (final f in ['follower-a', 'follower-b']) {
+    for (final follower in [followerA, followerB]) {
+      final f = crockfordBase32Encode(follower.publicKey);
       final card = await storage.latestPendingCardFor(f);
       expect(card, isNotNull, reason: 'card queued for $f');
-      expect(crypto.verify(kp.publicKey, card!.cardCbor, card.sig), isTrue);
-      final decoded = ConnectionCard.fromBytes(card.cardCbor);
+      final decoded = ConnectionCard.fromBytes(unseal(kp, follower, card!));
       expect(decoded.pubkey, ownerPubkey);
       expect(decoded.endpoints.any((e) => e.type == 'relay'), isTrue);
+      // Sealed per recipient: the other follower's key must NOT open it.
+      final other = identical(follower, followerA) ? followerB : followerA;
+      expect(() => unseal(kp, other, card), throwsA(anything));
     }
   });
 
@@ -118,6 +137,8 @@ void main() {
       () async {
     final storage = MockStorageService();
     final kp = await crypto.generateKeyPair();
+    final followerA = await crypto.generateKeyPair();
+    final followerAPubkey = crockfordBase32Encode(followerA.publicKey);
     final ownerPubkey = crockfordBase32Encode(kp.publicKey);
     await storage.saveIdentity(
       Identity(pubkey: ownerPubkey, feedKey: Uint8List(32), createdAt: 0),
@@ -127,7 +148,7 @@ void main() {
       relayOnion: 'relayhost.onion',
       pairedAt: 1,
     );
-    await seedFollower(storage, 'follower-a');
+    await seedFollower(storage, followerAPubkey);
 
     final service = RelayPairingService(
       initiator: RelayPairingInitiator(
@@ -148,9 +169,47 @@ void main() {
     await service.unpair();
 
     expect(await storage.getPairedRelay(), isNull);
-    final card = await storage.latestPendingCardFor('follower-a');
+    final card = await storage.latestPendingCardFor(followerAPubkey);
     expect(card, isNotNull);
-    final decoded = ConnectionCard.fromBytes(card!.cardCbor);
+    final decoded = ConnectionCard.fromBytes(unseal(kp, followerA, card!));
     expect(decoded.endpoints.any((e) => e.type == 'relay'), isFalse);
+  });
+
+  test('unpair() throws before mutating anything when identity is '
+      'unavailable — no half-unpair', () async {
+    final storage = MockStorageService();
+    final kp = await crypto.generateKeyPair();
+    final followerA = await crypto.generateKeyPair();
+    final followerAPubkey = crockfordBase32Encode(followerA.publicKey);
+    await storage.setPairedRelay(
+      relayId: 'rid-1',
+      relayOnion: 'relayhost.onion',
+      pairedAt: 1,
+    );
+    await seedFollower(storage, followerAPubkey);
+
+    final service = RelayPairingService(
+      initiator: RelayPairingInitiator(
+        crypto: crypto,
+        httpClient: MockClient((_) async => http.Response('', 200)),
+      ),
+      pushCoordinator: buildCoordinator(storage, kp),
+      crypto: crypto,
+      storage: storage,
+      clock: MockClock(),
+      // No identity saved in storage → lookup yields null.
+      identityLookup: storage.getIdentity,
+      ownSecretKeyLookup: () async => kp.secretKey,
+      ownEndpointsLookup: () =>
+          const [Endpoint(type: 'onion', address: 'phone.onion:80')],
+      reloadPairedRelay: () async {},
+    );
+
+    await expectLater(service.unpair(), throwsStateError);
+
+    // The relay row survives: a cleared row with no redistributed card
+    // would strand followers on the dead relay.
+    expect((await storage.getPairedRelay())?.relayOnion, 'relayhost.onion');
+    expect(await storage.latestPendingCardFor(followerAPubkey), isNull);
   });
 }

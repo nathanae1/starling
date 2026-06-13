@@ -46,7 +46,7 @@ void main() {
   test('rejects non-starling scheme', () {
     final result = parseInvite('https://example.com/?card=xyz');
     expect(result, isA<InvalidInvite>());
-    expect((result as InvalidInvite).reason, contains('starling://connect'));
+    expect((result as InvalidInvite).reason, contains('not a starling invite'));
   });
 
   test('rejects URL without card param', () {

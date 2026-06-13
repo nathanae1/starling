@@ -18,16 +18,10 @@ pub(crate) fn cbor_ok(body: Vec<u8>) -> Response {
         .into_response()
 }
 
-/// Map any storage error to a `500`.
-pub(crate) fn internal(err: anyhow::Error) -> Response {
-    log::error!("relay http internal error: {err:?}");
+/// Map any internal error to a `500`. `pub` — the admin crate shares it.
+pub fn internal(err: anyhow::Error) -> Response {
+    log::error!("internal error: {err:?}");
     (StatusCode::INTERNAL_SERVER_ERROR, "internal error").into_response()
 }
 
-/// Current unix time in seconds.
-pub(crate) fn now_secs() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+pub(crate) use starling_wire::now_secs;

@@ -12,10 +12,17 @@ class EventsDao extends DatabaseAccessor<AppDatabase>
     with _$EventsDaoMixin {
   EventsDao(super.db);
 
+  /// Ordered `(created_at DESC, id DESC)`. With [untilId], `(until,
+  /// untilId)` is a strict keyset cursor (rows ordered after it) so
+  /// same-second events truncated by [limit] are picked up by the next
+  /// page; bare [until] keeps the inclusive `created_at <= until` bound.
+  /// Mirrors the relay's `manifest_page` semantics (TEXT ids compare
+  /// bytewise on both).
   Future<List<EventEntry>> getEvents({
     String? pubkey,
     int? since,
     int? until,
+    String? untilId,
     int? limit,
   }) {
     final q = select(eventEntries);
@@ -29,12 +36,22 @@ class EventsDao extends DatabaseAccessor<AppDatabase>
           condition = condition & e.createdAt.isBiggerOrEqualValue(since);
         }
         if (until != null) {
-          condition = condition & e.createdAt.isSmallerOrEqualValue(until);
+          if (untilId != null) {
+            condition = condition &
+                (e.createdAt.isSmallerThanValue(until) |
+                    (e.createdAt.equals(until) &
+                        e.id.isSmallerThanValue(untilId)));
+          } else {
+            condition = condition & e.createdAt.isSmallerOrEqualValue(until);
+          }
         }
         return condition;
       });
     }
-    q.orderBy([(e) => OrderingTerm.desc(e.createdAt)]);
+    q.orderBy([
+      (e) => OrderingTerm.desc(e.createdAt),
+      (e) => OrderingTerm.desc(e.id),
+    ]);
     if (limit != null) {
       q.limit(limit);
     }

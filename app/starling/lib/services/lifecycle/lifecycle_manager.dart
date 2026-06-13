@@ -21,6 +21,7 @@ import '../background/foreground_service_controller.dart';
 import '../background/ios_background_handler.dart';
 import '../background/workmanager_dispatcher.dart';
 import '../follow_retry_pump.dart';
+import 'onion_publisher.dart';
 import '../signaling/ws_signaling_service.dart';
 import '../types.dart';
 import '../sync_pump.dart';
@@ -71,9 +72,17 @@ class LifecycleManager {
   /// re-binds listeners.
   Future<void>? _libp2pListenFuture;
 
-  /// Most-recent published onion address. Used to skip a redundant
-  /// `createOnionService` when the HTTP port hasn't changed.
-  String? _onionAddress;
+  /// Onion-service publish lifecycle. Tracks the published address/port,
+  /// re-targets in place when the HTTP server rebinds on a new ephemeral
+  /// port, and retries with backoff on failure (so a transient Tor error
+  /// no longer leaves the device dark over Tor for the session). Provider
+  /// writes go through the `onAddress` callback below so a late retry timer
+  /// never touches `ref` after teardown.
+  late final OnionPublisher _onionPublisher = OnionPublisher(
+    ensureTorInit: _ensureTorInit,
+    tor: () => ref.read(torServiceProvider),
+    onAddress: (addr) => ref.read(onionAddressProvider.notifier).set(addr),
+  );
 
   /// Call from `initState`. Wires the pumps and the port-change listener that
   /// publishes a Tor onion service whenever the HTTP server binds.
@@ -99,8 +108,11 @@ class LifecycleManager {
     );
     unawaited(monitor.start());
 
-    _retryPump = FollowRetryPump(followService: ref.read(followServiceProvider))
-      ..start();
+    _retryPump = FollowRetryPump(
+      followService: ref.read(followServiceProvider),
+      reachability: monitor,
+      clock: ref.read(clockProvider),
+    )..start();
     _syncPump = SyncPump(
       runSync: () =>
           ref.read(syncControllerProvider.notifier).syncNow().then((_) {}),
@@ -168,7 +180,7 @@ class LifecycleManager {
       (_, next) {
         final port = next.value;
         if (port != null) {
-          unawaited(_publishOnion(port));
+          _onionPublisher.requestPublish(port);
         }
       },
       fireImmediately: true,
@@ -187,6 +199,8 @@ class LifecycleManager {
     _shutdownTimer?.cancel();
     _shutdownTimer = null;
     _pausedAt = null;
+    // Cancel any pending publish-retry timer so it can't fire after dispose.
+    _onionPublisher.reset();
   }
 
   /// Handle a foreground transition. If we were only briefly hidden
@@ -256,7 +270,7 @@ class LifecycleManager {
     // Already torn down — don't arm a phantom timer. A later resume that
     // sees a fresh timer + _pausedAt incorrectly takes the "services kept
     // live" branch and skips re-init, leaving Tor offline indefinitely.
-    if (_torInitFuture == null && _onionAddress == null) {
+    if (_torInitFuture == null && _onionPublisher.onionAddress == null) {
       _log('lifecycle=paused (services already down)');
       return;
     }
@@ -293,7 +307,11 @@ class LifecycleManager {
     final tor = ref.read(torServiceProvider);
     final libp2p = ref.read(libp2pServiceProvider);
     unawaited(notifier.stop());
-    _onionAddress = null;
+    // Cancel any pending publish-retry and clear the publisher's address
+    // state; keep the provider write here (out of the publisher) so a late
+    // timer never touches `ref` after teardown. The null gates the UI's
+    // "Tor starting…" state and sendFollowRequest's noEndpoints check.
+    _onionPublisher.reset();
     ref.read(onionAddressProvider.notifier).set(null);
     _torInitFuture = null;
     _libp2pListenFuture = null;
@@ -479,25 +497,6 @@ class LifecycleManager {
         rethrow;
       }
     }();
-  }
-
-  Future<void> _publishOnion(int port) async {
-    if (_onionAddress != null) {
-      _log('publishOnion skipped (already have $_onionAddress)');
-      return;
-    }
-    try {
-      _log('publishOnion begin port=$port');
-      await _ensureTorInit();
-      final tor = ref.read(torServiceProvider);
-      _log('publishOnion calling createOnionService isReady=${tor.isReady}');
-      final addr = await tor.createOnionService(port);
-      _onionAddress = addr;
-      ref.read(onionAddressProvider.notifier).set(addr);
-      _log('onion=$addr port=$port');
-    } catch (e, st) {
-      _log('createOnionService failed: $e\n$st');
-    }
   }
 
   void _log(String msg) {

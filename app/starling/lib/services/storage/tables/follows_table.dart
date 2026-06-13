@@ -29,6 +29,12 @@ class FollowEntries extends Table {
   // a stale-key signal, cleared when a fresh rotation lands. Drives the
   // "Key fresh / stale" tile in connection settings.
   IntColumn get lastDecryptFailureAt => integer().nullable()();
+  // When the last FULL manifest diff (paged, no since-window) completed
+  // for this peer (D1). The windowed cursor can't see events that arrived
+  // at a store out of author-time order; a periodic full id-diff catches
+  // them. 0 means "never" — the first sync runs full.
+  IntColumn get lastFullSyncAt =>
+      integer().withDefault(const Constant(0))();
 
   @override
   Set<Column> get primaryKey => {pubkey};

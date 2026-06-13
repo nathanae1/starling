@@ -14,8 +14,11 @@ serde.workspace = true
 ciborium.workspace = true
 serde_json.workspace = true
 base64.workspace = true
+hex.workspace = true
 anyhow.workspace = true
 tokio = { workspace = true }
+# ReaderStream for streaming media blobs (already in the tree via arti).
+tokio-util = { version = "0.7", features = ["io"] }
 log.workspace = true
 starling-wire.workspace = true
 starling-relay-storage.workspace = true

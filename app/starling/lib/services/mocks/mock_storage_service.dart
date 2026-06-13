@@ -46,10 +46,14 @@ class MockStorageService implements StorageService {
   /// Releases broadcast controllers. Call from tearDown when the test
   /// instance is no longer needed.
   Future<void> dispose() async {
-    await _followsController.close();
-    await _inboundController.close();
-    await _inboundFollowersController.close();
-    await _outboundController.close();
+    // Never await these: a broadcast close() only completes once the done
+    // event reaches every listener, and listeners subscribed inside a
+    // testWidgets FakeAsync zone stop being pumped after the test body —
+    // awaiting would deadlock teardown until the 10-minute test timeout.
+    unawaited(_followsController.close());
+    unawaited(_inboundController.close());
+    unawaited(_inboundFollowersController.close());
+    unawaited(_outboundController.close());
   }
 
   // --- Identity ---
@@ -99,6 +103,15 @@ class MockStorageService implements StorageService {
   }
 
   @override
+  Future<void> updateLastFullSynced(String pubkey, int timestamp) async {
+    final follow = _follows[pubkey];
+    if (follow != null) {
+      _follows[pubkey] = follow.copyWith(lastFullSyncAt: timestamp);
+      _emitFollows();
+    }
+  }
+
+  @override
   Future<void> setLastDecryptFailureAt(
     String pubkey,
     int? timestamp,
@@ -129,6 +142,7 @@ class MockStorageService implements StorageService {
     String? pubkey,
     int? since,
     int? until,
+    String? untilId,
     int? limit,
   }) async {
     var results = _events.values.toList();
@@ -139,9 +153,19 @@ class MockStorageService implements StorageService {
       results = results.where((e) => e.createdAt >= since).toList();
     }
     if (until != null) {
-      results = results.where((e) => e.createdAt <= until).toList();
+      results = untilId != null
+          // Strict keyset cursor — see StorageService.getEvents.
+          ? results
+              .where((e) =>
+                  e.createdAt < until ||
+                  (e.createdAt == until && e.id.compareTo(untilId) < 0))
+              .toList()
+          : results.where((e) => e.createdAt <= until).toList();
     }
-    results.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    results.sort((a, b) {
+      final byTime = b.createdAt.compareTo(a.createdAt);
+      return byTime != 0 ? byTime : b.id.compareTo(a.id);
+    });
     if (limit != null) {
       results = results.take(limit).toList();
     }
@@ -516,8 +540,8 @@ class MockStorageService implements StorageService {
   @override
   Future<void> queueCardDistribution({
     required String targetPubkey,
-    required Uint8List cardCbor,
-    required Uint8List sig,
+    required Uint8List encryptedCard,
+    required Uint8List nonce,
     required int createdAt,
   }) async {
     _pendingCards
@@ -526,8 +550,8 @@ class MockStorageService implements StorageService {
       )
       ..add(PendingCardDistribution(
         targetPubkey: targetPubkey,
-        cardCbor: cardCbor,
-        sig: sig,
+        encryptedCard: encryptedCard,
+        nonce: nonce,
         createdAt: createdAt,
       ));
     _deliveredCards.remove(_distKey(targetPubkey, createdAt));

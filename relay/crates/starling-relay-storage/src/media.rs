@@ -44,6 +44,28 @@ pub fn get(conn: &Connection, pubkey: &[u8], hash: &str) -> Result<Option<Served
     .context("get served_media")
 }
 
+/// One page of an Owner's stored media hashes, `hash ASC`, keyset-paged
+/// (`hash > after`). Hashes are unique per Owner, so the hash itself is the
+/// cursor.
+pub fn hashes_page(
+    conn: &Connection,
+    pubkey: &[u8],
+    after: Option<&str>,
+    limit: i64,
+) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT hash FROM served_media
+         WHERE pubkey = ?1 AND (?2 IS NULL OR hash > ?2)
+         ORDER BY hash ASC
+         LIMIT ?3",
+    )?;
+    let rows = stmt
+        .query_map(params![pubkey, after, limit], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .context("query media hashes page")?;
+    Ok(rows)
+}
+
 /// Total bytes stored for an Owner (for cap enforcement).
 pub fn total_bytes(conn: &Connection, pubkey: &[u8]) -> Result<i64> {
     conn.query_row(

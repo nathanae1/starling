@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -103,6 +101,7 @@ Future<Libp2pStreamServer> libp2pStreamServer(Ref ref) async {
     libp2p: libp2p,
     storage: storage,
     contentKey: contentKey,
+    crypto: ref.watch(cryptoServiceProvider),
     clock: clock,
     appSupportDir: appSupportDir,
     identityLookup: storage.getIdentity,
@@ -165,7 +164,7 @@ Libp2pUpgrader libp2pUpgrader(Ref ref) {
           await ref.read(storageServiceProvider).getIdentity();
       return identity?.pubkey;
     },
-    localSecretKeyLookup: _loadSecretKey,
+    localSecretKeyLookup: () => KeychainManager().loadIdentitySecretKey(),
   );
 }
 
@@ -184,7 +183,7 @@ SignalingDispatcher signalingDispatcher(Ref ref) {
           await ref.read(storageServiceProvider).getIdentity();
       return identity?.pubkey;
     },
-    localSecretKeyLookup: _loadSecretKey,
+    localSecretKeyLookup: () => KeychainManager().loadIdentitySecretKey(),
   );
 }
 
@@ -201,16 +200,9 @@ SyncEngine syncEngine(Ref ref) {
     peerFactory: ref.watch(peerConnectionFactoryProvider),
     reachabilityMonitor: ref.watch(peerReachabilityMonitorProvider),
     clock: ref.watch(clockProvider),
-    ownSecretKeyLookup: _loadSecretKey,
+    ownSecretKeyLookup: () => KeychainManager().loadIdentitySecretKey(),
     libp2pUpgrader: ref.watch(libp2pUpgraderProvider),
   );
-}
-
-Future<Uint8List?> _loadSecretKey() async {
-  final keychain = KeychainManager();
-  final encoded = await keychain.read(KeychainManager.identitySecretKeyName);
-  if (encoded == null) return null;
-  return Uint8List.fromList(base64Decode(encoded));
 }
 
 enum SyncRunPhase { idle, syncing }

@@ -117,6 +117,41 @@ class RelayPushService {
     }
   }
 
+  /// One page of the media hashes the Relay holds for this Owner
+  /// (`hash ASC`, keyset-paged via [after]). Owner-signed over the empty
+  /// body — it's a GET. Used by the reconcile pass to diff media presence
+  /// (D8) in one round trip instead of N HEADs over Tor.
+  Future<RelayMediaManifestPage> fetchMediaManifest({
+    required String relayBaseUrl,
+    required Uint8List ownerPubkeyBytes,
+    required Uint8List ownerSecretKey,
+    String? after,
+  }) async {
+    final headers = _signHeaders(
+      body: Uint8List(0),
+      ownerPubkeyBytes: ownerPubkeyBytes,
+      ownerSecretKey: ownerSecretKey,
+    );
+    final uri = Uri.parse('$relayBaseUrl/media-manifest')
+        .replace(queryParameters: after == null ? null : {'after': after});
+    final res = await _http.get(uri, headers: headers).timeout(_timeout);
+    if (res.statusCode != 200) {
+      throw RelayPushException(
+        'fetchMediaManifest failed: ${res.statusCode} ${res.body}',
+      );
+    }
+    final decoded = cbor.decode(res.bodyBytes);
+    if (decoded is! Map) {
+      throw RelayPushException('media-manifest body not a CBOR map');
+    }
+    return RelayMediaManifestPage(
+      hashes: (decoded['hashes'] as List<dynamic>? ?? const [])
+          .whereType<String>()
+          .toList(),
+      hasOlder: (decoded['has_older'] as bool?) ?? false,
+    );
+  }
+
   Map<String, String> _signHeaders({
     required Uint8List body,
     required Uint8List ownerPubkeyBytes,
@@ -167,6 +202,12 @@ class RelayPushReceipt {
   const RelayPushReceipt({required this.accepted, required this.rejected});
   final int accepted;
   final int rejected;
+}
+
+class RelayMediaManifestPage {
+  const RelayMediaManifestPage({required this.hashes, required this.hasOlder});
+  final List<String> hashes;
+  final bool hasOlder;
 }
 
 class RelayPushException implements Exception {

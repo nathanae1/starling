@@ -43,6 +43,23 @@ class PeerConnection {
 
 enum PeerTransport { lan, libp2pDirect, relay, tor }
 
+extension PeerTransportDialing on PeerTransport {
+  /// Relay endpoints are .onion hosts — reachable only via Tor SOCKS, the
+  /// same dialer as [PeerTransport.tor]. Single source of truth for every
+  /// site that picks an HTTP client by transport (TransportRouter,
+  /// PeerReachabilityMonitor); keep them on this predicate so they can't
+  /// drift.
+  bool get dialsViaTor =>
+      this == PeerTransport.tor || this == PeerTransport.relay;
+}
+
+/// Base URL for an endpoint address off a Connection card (a host or
+/// `host:port`, typically a `.onion`). Appends the `:80` default the
+/// on-device servers and relays listen on when the address carries no
+/// port. Shared by the reachability prober and the relay push coordinator.
+String httpBaseUrlForAddress(String addr) =>
+    addr.contains(':') ? 'http://$addr' : 'http://$addr:80';
+
 class Manifest {
   const Manifest({
     required this.pubkey,
@@ -55,15 +72,15 @@ class Manifest {
   final List<ManifestEntry> events;
   final bool hasOlder;
   // Plan 13: when present, the requester is being told about a feed-key
-  // rotation by the remote peer. Decrypt with the X25519 DH shared key
-  // derived against the peer's pubkey, then persist as `follow.feedKey`
-  // and ack via `ack_rotation_at` on the next /manifest call.
-  final RotatedFeedKeyDelivery? newFeedKey;
+  // rotation by the remote peer. The payload is the new feed key; persist
+  // as `follow.feedKey` and ack via `ack_rotation_at` on the next
+  // /manifest call.
+  final SealedDelivery? newFeedKey;
   // Plan 15: when present, the peer has added/rotated a relay endpoint and
-  // is handing us its freshly-signed Connection card. Verify the Ed25519
-  // signature against the peer's pubkey, persist as `follow.connectionCard`,
+  // is handing us its updated Connection card (`ConnectionCard.toBytes()`),
+  // sealed exactly like `newFeedKey`. Persist as `follow.connectionCard`
   // and ack via `card_seen_at` on the next /manifest call.
-  final ConnectionCardDelivery? newConnectionCard;
+  final SealedDelivery? newConnectionCard;
 }
 
 class ManifestEntry {
@@ -72,31 +89,21 @@ class ManifestEntry {
   final int createdAt;
 }
 
-/// Wire-level payload of an inline feed-key rotation in a manifest
-/// response (Plan 13). Decrypted and applied by the syncing follower.
-class RotatedFeedKeyDelivery {
-  const RotatedFeedKeyDelivery({
-    required this.encryptedFeedKey,
+/// One sealed per-follower payload as it rides in a manifest response and
+/// in a pending-distribution row (Plans 13 + 15): XChaCha20-Poly1305
+/// ciphertext + 24-byte nonce, with [createdAt] bound into the X25519 DH
+/// shared-key derivation — a replayed delivery with a tampered
+/// `created_at` fails AEAD decryption, and the AEAD authenticates the
+/// author (only the two DH parties can compute the key). Sealing,
+/// unsealing, and the per-kind channels live in `sync/sealed_delivery.dart`.
+class SealedDelivery {
+  const SealedDelivery({
+    required this.payload,
     required this.nonce,
     required this.createdAt,
   });
-  final Uint8List encryptedFeedKey;
+  final Uint8List payload;
   final Uint8List nonce;
-  final int createdAt;
-}
-
-/// Wire-level payload of an inline Connection card update in a manifest
-/// response (Plan 15). [cardCbor] is the CBOR `ConnectionCard.toBytes()`;
-/// [sig] is the author's Ed25519 detached signature over those bytes.
-/// The syncing follower verifies, persists, and acks via `card_seen_at`.
-class ConnectionCardDelivery {
-  const ConnectionCardDelivery({
-    required this.cardCbor,
-    required this.sig,
-    required this.createdAt,
-  });
-  final Uint8List cardCbor;
-  final Uint8List sig;
   final int createdAt;
 }
 
@@ -173,20 +180,21 @@ class PendingKeyDistribution {
   final int createdAt;
 }
 
-/// A signed Connection card waiting to be delivered to a follower (Plan
-/// 15). [cardCbor] is `ConnectionCard.toBytes()` and [sig] the owner's
-/// Ed25519 signature over it. Delivered via the `/manifest` response and
-/// acked with `card_seen_at`.
+/// A sealed Connection card waiting to be delivered to a follower (Plan
+/// 15). [encryptedCard] is `ConnectionCard.toBytes()` encrypted with the
+/// X25519 DH shared key derived against [targetPubkey] (with [createdAt]
+/// bound into the derivation, like [PendingKeyDistribution]). Delivered
+/// via the `/manifest` response and acked with `card_seen_at`.
 class PendingCardDistribution {
   const PendingCardDistribution({
     required this.targetPubkey,
-    required this.cardCbor,
-    required this.sig,
+    required this.encryptedCard,
+    required this.nonce,
     required this.createdAt,
   });
   final String targetPubkey;
-  final Uint8List cardCbor;
-  final Uint8List sig;
+  final Uint8List encryptedCard;
+  final Uint8List nonce;
   final int createdAt;
 }
 
@@ -215,6 +223,7 @@ class Follow {
     required this.feedKey,
     this.feedKeyEpoch = 0,
     this.lastSyncedAt = 0,
+    this.lastFullSyncAt = 0,
     this.lastReceivedRotationAt = 0,
     this.lastReceivedCardAt = 0,
     this.lastDecryptFailureAt,
@@ -227,6 +236,11 @@ class Follow {
   final Uint8List feedKey;
   final int feedKeyEpoch;
   final int lastSyncedAt;
+  // D1: when the last FULL (un-windowed, paged) manifest diff completed
+  // for this peer. The windowed cursor can't see events that arrived at a
+  // store out of author-time order; the periodic full pass catches them.
+  // 0 means "never" — the first sync runs full.
+  final int lastFullSyncAt;
   // Plan 13: `created_at` of the most recent rotated feed key we've
   // accepted from this peer. Sent back as `ack_rotation_at` on the next
   // /manifest call so the peer can mark the distribution as delivered.
@@ -247,6 +261,7 @@ class Follow {
     Uint8List? feedKey,
     int? feedKeyEpoch,
     int? lastSyncedAt,
+    int? lastFullSyncAt,
     int? lastReceivedRotationAt,
     int? lastReceivedCardAt,
     int? lastDecryptFailureAt,
@@ -261,6 +276,7 @@ class Follow {
         feedKey: feedKey ?? this.feedKey,
         feedKeyEpoch: feedKeyEpoch ?? this.feedKeyEpoch,
         lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
+        lastFullSyncAt: lastFullSyncAt ?? this.lastFullSyncAt,
         lastReceivedRotationAt:
             lastReceivedRotationAt ?? this.lastReceivedRotationAt,
         lastReceivedCardAt: lastReceivedCardAt ?? this.lastReceivedCardAt,

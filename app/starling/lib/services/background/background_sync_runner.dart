@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:developer' as developer;
-import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart' show WidgetsFlutterBinding;
 import 'package:http/http.dart' as http;
@@ -80,7 +78,7 @@ class BackgroundSyncRunner {
         return BackgroundSyncOutcome.noIdentity;
       }
 
-      final secretKey = await _loadSecretKey(keychain);
+      final secretKey = await keychain.loadIdentitySecretKey();
       if (secretKey == null) {
         _log('background sync: identity present but no secret key, skipping');
         return BackgroundSyncOutcome.noIdentity;
@@ -205,12 +203,6 @@ class BackgroundSyncRunner {
     }
     final db = AppDatabase.encrypted(dbKey);
     return DriftStorageService(db, const SystemClock());
-  }
-
-  static Future<Uint8List?> _loadSecretKey(KeychainManager keychain) async {
-    final encoded = await keychain.read(KeychainManager.identitySecretKeyName);
-    if (encoded == null) return null;
-    return Uint8List.fromList(base64Decode(encoded));
   }
 
   static void _log(String msg) {

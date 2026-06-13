@@ -344,7 +344,7 @@ class _FollowerOnlyRowState extends ConsumerState<_FollowerOnlyRow> {
     final statusText = switch (widget.request.status) {
       'accepted' => ourOnionReady ? 'Follows you' : 'Follows you — Tor starting…',
       'pending-send' => 'Follows you — accept queued',
-      'send-failed' => 'Follows you — accept undelivered',
+      'send-failed' => 'Follows you — accept undelivered, still retrying',
       _ => 'Follows you',
     };
     return Container(

@@ -71,6 +71,7 @@ Follow followFromRow(FollowEntry row) => Follow(
       feedKey: row.feedKey,
       feedKeyEpoch: row.feedKeyEpoch,
       lastSyncedAt: row.lastSyncedAt,
+      lastFullSyncAt: row.lastFullSyncAt,
       lastReceivedRotationAt: row.lastReceivedRotationAt,
       lastReceivedCardAt: row.lastReceivedCardAt,
       lastDecryptFailureAt: row.lastDecryptFailureAt,
@@ -86,6 +87,7 @@ FollowEntriesCompanion followToCompanion(Follow follow) =>
       feedKey: follow.feedKey,
       feedKeyEpoch: Value(follow.feedKeyEpoch),
       lastSyncedAt: Value(follow.lastSyncedAt),
+      lastFullSyncAt: Value(follow.lastFullSyncAt),
       lastReceivedRotationAt: Value(follow.lastReceivedRotationAt),
       lastReceivedCardAt: Value(follow.lastReceivedCardAt),
       lastDecryptFailureAt: Value(follow.lastDecryptFailureAt),
@@ -106,8 +108,8 @@ PendingCardDistribution pendingCardDistributionFromRow(
 ) =>
     PendingCardDistribution(
       targetPubkey: row.targetPubkey,
-      cardCbor: row.cardCbor,
-      sig: row.sig,
+      encryptedCard: row.encryptedCard,
+      nonce: row.nonce,
       createdAt: row.createdAt,
     );
 

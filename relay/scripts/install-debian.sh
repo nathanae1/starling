@@ -40,7 +40,10 @@ fi
 echo "==> installing systemd unit"
 install -m 0644 "$(dirname "$0")/../systemd/starling-relay.service" "$UNIT"
 systemctl daemon-reload
-systemctl enable --now starling-relay
+systemctl enable starling-relay
+# restart (not `enable --now`): starts a stopped unit on fresh install AND
+# swaps a running one onto the just-installed binary on upgrade.
+systemctl restart starling-relay
 
 echo
 echo "Relay installed and started. Tor bootstrap takes ~30s."

@@ -3,8 +3,11 @@ import 'dart:typed_data';
 import 'package:cbor/simple.dart';
 import 'package:shelf/shelf.dart';
 
+import '../../services/crypto_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/types.dart';
+import '../../sync/manifest_ack.dart' show hexDecodeAckSig;
+import '../../sync/sealed_delivery.dart';
 
 /// `GET /manifest?since={ts}&until={ts}&requester_pubkey={pk}&ack_rotation_at={ts}`
 ///
@@ -13,27 +16,35 @@ import '../../services/types.dart';
 /// - `events`: list of `{id, created_at}` for the requested window
 ///   (newest-first by the underlying DAO's order)
 /// - `has_older`: more events exist beyond the returned window
-/// - `new_feed_key` *(optional, Plan 13)*: when `requester_pubkey` is set
-///   and there's an undelivered key rotation pending for that follower,
-///   the latest wrapped payload is included as `{encrypted_feed_key,
-///   nonce, created_at}`. The follower decrypts it with the X25519 DH
-///   shared key derived against this device's pubkey, persists it as
-///   their `follow.feedKey`, and acks via `ack_rotation_at` on the next
-///   request.
+/// - `new_feed_key` *(optional, Plan 13)*: when `requester_pubkey` is an
+///   accepted follower with an undelivered key rotation pending, the
+///   latest wrapped payload is included as `{encrypted_feed_key, nonce,
+///   created_at}`. The follower decrypts it with the X25519 DH shared key
+///   derived against this device's pubkey, persists it as their
+///   `follow.feedKey`, and acks via `ack_rotation_at` on the next request.
+/// - `new_connection_card` *(optional, Plan 15)*: same flow for an updated
+///   Connection card, sealed like `new_feed_key` (`{encrypted_card, nonce,
+///   created_at}`) and acked via `card_seen_at`.
 ///
-/// `has_older` paging works as before: clients set `until = oldest.createdAt
-/// - 1` on the next call.
+/// `has_older` paging: clients set `until = oldest.createdAt, until_id =
+/// oldest.id` on the next call — the pair is a strict keyset cursor, so
+/// same-second events truncated by the page limit are never skipped. Bare
+/// `until` keeps the old inclusive semantics.
 ///
 /// `requester_pubkey` is unauthenticated on LAN by design (Plan 09 makes
 /// no auth claim for `/manifest`). A LAN attacker can request someone
 /// else's pending payload but can't decrypt it without the follower's
 /// secret key — the X25519 DH shared key derivation is what gates access.
+/// Delivery acks are different: they *write* (mark distributions
+/// delivered), so they require the `ack_sig` possession proof (S3a, see
+/// `sync/manifest_ack.dart`) and are ignored without a valid one.
 ///
 /// Plan 11a: the request-parsing/response-building split lets the libp2p
 /// inbound stream handler (`Libp2pStreamServer`) reuse
 /// [buildManifestResponseBytes] with CBOR-derived inputs.
 Handler manifestHandler({
   required StorageService storage,
+  required CryptoService crypto,
   required Future<Identity?> Function() identityLookup,
   int pageLimit = 1000,
 }) {
@@ -51,6 +62,7 @@ Handler manifestHandler({
     if (params.containsKey('until') && until == null) {
       return Response(400, body: 'invalid until');
     }
+    final untilId = params['until_id'];
     final requesterPubkey = params['requester_pubkey'];
     final ackRotationAt = _parseInt(params['ack_rotation_at']);
     if (params.containsKey('ack_rotation_at') && ackRotationAt == null) {
@@ -60,15 +72,25 @@ Handler manifestHandler({
     if (params.containsKey('card_seen_at') && cardSeenAt == null) {
       return Response(400, body: 'invalid card_seen_at');
     }
+    Uint8List? ackSig;
+    if (params.containsKey('ack_sig')) {
+      ackSig = hexDecodeAckSig(params['ack_sig']!);
+      if (ackSig == null) {
+        return Response(400, body: 'invalid ack_sig');
+      }
+    }
 
     final body = await buildManifestResponseBytes(
       storage: storage,
+      crypto: crypto,
       identity: identity,
       since: since,
       until: until,
+      untilId: untilId,
       requesterPubkey: requesterPubkey,
       ackRotationAt: ackRotationAt,
       cardSeenAt: cardSeenAt,
+      ackSig: ackSig,
       pageLimit: pageLimit,
     );
     return Response.ok(
@@ -82,25 +104,28 @@ Handler manifestHandler({
 /// CBOR wire format stays byte-identical to the HTTP path.
 Future<Uint8List> buildManifestResponseBytes({
   required StorageService storage,
+  required CryptoService crypto,
   required Identity identity,
   int? since,
   int? until,
+  String? untilId,
   String? requesterPubkey,
   int? ackRotationAt,
   int? cardSeenAt,
+  Uint8List? ackSig,
   int pageLimit = 1000,
 }) async {
   // Apply acks first so freshly-acked rows aren't re-attached below.
-  if (requesterPubkey != null && ackRotationAt != null) {
-    await storage.markDistributionsDelivered(
-      requesterPubkey,
-      ackRotationAt,
-    );
-  }
-  if (requesterPubkey != null && cardSeenAt != null) {
-    await storage.markCardDistributionsDelivered(
-      requesterPubkey,
-      cardSeenAt,
+  // Requires the S3a possession proof — see applyDeliveryAcks.
+  if (requesterPubkey != null) {
+    await applyDeliveryAcks(
+      crypto: crypto,
+      storage: storage,
+      identity: identity,
+      requesterPubkey: requesterPubkey,
+      ackRotationAt: ackRotationAt,
+      cardSeenAt: cardSeenAt,
+      ackSig: ackSig,
     );
   }
 
@@ -108,6 +133,7 @@ Future<Uint8List> buildManifestResponseBytes({
     pubkey: identity.pubkey,
     since: since,
     until: until,
+    untilId: untilId,
     limit: pageLimit + 1,
   );
   final hasOlder = fetched.length > pageLimit;
@@ -124,24 +150,10 @@ Future<Uint8List> buildManifestResponseBytes({
     'has_older': hasOlder,
   };
 
+  // S4: pending payloads are only attached for *current* accepted
+  // followers — the gate lives inside attachPendingDeliveries.
   if (requesterPubkey != null) {
-    final pending =
-        await storage.latestPendingDistributionFor(requesterPubkey);
-    if (pending != null) {
-      response['new_feed_key'] = <String, dynamic>{
-        'encrypted_feed_key': pending.encryptedFeedKey,
-        'nonce': pending.nonce,
-        'created_at': pending.createdAt,
-      };
-    }
-    final pendingCard = await storage.latestPendingCardFor(requesterPubkey);
-    if (pendingCard != null) {
-      response['new_connection_card'] = <String, dynamic>{
-        'card_cbor': pendingCard.cardCbor,
-        'sig': pendingCard.sig,
-        'created_at': pendingCard.createdAt,
-      };
-    }
+    await attachPendingDeliveries(storage, requesterPubkey, response);
   }
 
   return Uint8List.fromList(cbor.encode(response));

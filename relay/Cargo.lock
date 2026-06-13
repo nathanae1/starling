@@ -176,7 +176,7 @@ dependencies = [
  "derive_builder_fork_arti",
  "derive_more",
  "educe",
- "fs-mistrust 0.11.0",
+ "fs-mistrust",
  "futures",
  "hostname-validator",
  "humantime",
@@ -1436,20 +1436,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
-]
-
-[[package]]
-name = "fs-mistrust"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "198b8f9ab4cff63b5c91e9e64edd4e6b43cd7fe7a52519a03c6c32ea0acfa557"
-dependencies = [
- "derive_builder_fork_arti",
- "dirs",
- "libc",
- "pwd-grp",
- "thiserror 2.0.18",
- "walkdir",
 ]
 
 [[package]]
@@ -3582,15 +3568,14 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "arti-client",
- "fs-mistrust 0.10.0",
  "libsqlite3-sys",
  "log",
  "safelog",
  "tempfile",
  "tokio",
+ "tor-config",
  "tor-hsrproxy",
  "tor-hsservice",
- "tor-keymgr",
  "tor-rtcompat",
  "tor-socksproto",
 ]
@@ -3630,14 +3615,20 @@ dependencies = [
  "base64",
  "bytes",
  "ciborium",
+ "ed25519-dalek",
+ "hex",
+ "http-body-util",
  "log",
  "qrcode",
  "rand 0.8.6",
  "serde",
  "serde_json",
+ "starling-relay-http",
  "starling-relay-storage",
  "starling-wire",
+ "subtle",
  "tokio",
+ "tower",
 ]
 
 [[package]]
@@ -3650,6 +3641,7 @@ dependencies = [
  "bytes",
  "ciborium",
  "ed25519-dalek",
+ "hex",
  "http-body-util",
  "log",
  "serde",
@@ -3658,6 +3650,7 @@ dependencies = [
  "starling-wire",
  "tempfile",
  "tokio",
+ "tokio-util",
  "tower",
 ]
 
@@ -3670,6 +3663,7 @@ dependencies = [
  "r2d2_sqlite",
  "rusqlite",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -4272,7 +4266,7 @@ dependencies = [
  "educe",
  "either",
  "figment",
- "fs-mistrust 0.11.0",
+ "fs-mistrust",
  "futures",
  "itertools 0.14.0",
  "notify",
@@ -4359,7 +4353,7 @@ dependencies = [
  "digest",
  "educe",
  "event-listener",
- "fs-mistrust 0.11.0",
+ "fs-mistrust",
  "fslock",
  "futures",
  "hex",
@@ -4590,7 +4584,7 @@ dependencies = [
  "derive_more",
  "digest",
  "educe",
- "fs-mistrust 0.11.0",
+ "fs-mistrust",
  "futures",
  "growable-bloom-filter",
  "hex",
@@ -4668,7 +4662,7 @@ dependencies = [
  "derive_more",
  "downcast-rs",
  "dyn-clone",
- "fs-mistrust 0.11.0",
+ "fs-mistrust",
  "glob-match",
  "humantime",
  "inventory",
@@ -4895,7 +4889,7 @@ dependencies = [
  "derive-deftly",
  "derive_more",
  "filetime",
- "fs-mistrust 0.11.0",
+ "fs-mistrust",
  "fslock",
  "fslock-guard",
  "futures",

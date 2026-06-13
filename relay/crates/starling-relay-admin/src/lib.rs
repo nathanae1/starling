@@ -21,8 +21,9 @@ use axum::Router;
 use base64::Engine;
 use bytes::Bytes;
 use rand::RngCore;
-use starling_relay_storage::{events, media, owners, pairings, Db, PendingPairing};
-use starling_wire::crockford_base32_encode;
+use starling_relay_http::{internal, rate_limit_mw, RateLimiter};
+use starling_relay_storage::{events, media, owners, pairings, Connection, Db, PendingPairing};
+use starling_wire::{crockford_base32_encode, now_secs};
 use starling_wire::pairing::{
     compute_pair_claim, PairResponse, PairingClaimWire, RelayQrCard,
 };
@@ -52,14 +53,15 @@ pub struct AdminState {
     pub ctrl: Arc<dyn RelayControl>,
     pub relay_version: String,
     pub pairing_ttl_secs: i64,
+    /// Fast path for [`basic_auth_mw`]: BLAKE2b-256 of the last password
+    /// that passed argon2 verification, keyed to the PHC string it verified
+    /// against (`set-password` rotates the PHC string, invalidating the
+    /// entry). Without this the `/pair` page's 3-second `/api/owners` poll
+    /// re-runs argon2id (~19 MiB, t=2) on every request.
+    pub auth_cache: AuthCache,
 }
 
-fn now_secs() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+pub type AuthCache = Arc<std::sync::Mutex<Option<(String, [u8; 32])>>>;
 
 // ---------------------------------------------------------------------------
 // Pairing-token minting (shared by the web UI and the CLI).
@@ -74,8 +76,11 @@ pub struct MintedToken {
 }
 
 /// Insert a fresh single-use pending pairing token and build its QR URL.
+/// Minting invalidates every prior unconsumed token: exactly one token is
+/// claimable at a time, so a photographed QR dies as soon as the `/pair`
+/// page re-mints (≤120 s auto-refresh).
 pub fn mint_pairing_token(
-    db: &Db,
+    conn: &Connection,
     admin_onion: &str,
     relay_version: &str,
     label: Option<String>,
@@ -87,10 +92,10 @@ pub fn mint_pairing_token(
     let now = now_secs();
     let expires_at = now + ttl_secs;
 
-    let conn = db.get()?;
-    pairings::prune_expired(&conn, now).ok();
+    pairings::prune_expired(conn, now).ok();
+    pairings::consume_all_unconsumed(conn, now)?;
     pairings::insert(
-        &conn,
+        conn,
         &PendingPairing {
             token: token.clone(),
             created_at: now,
@@ -136,6 +141,13 @@ pub fn admin_ui_router(state: AdminState) -> Router {
             state.clone(),
             basic_auth_mw,
         ))
+        // Outermost (added last): rate-limit before the argon2 in
+        // basic_auth_mw burns CPU. The /pair page polls /api/owners every
+        // 3s (20/min), well inside the budget.
+        .layer(axum::middleware::from_fn_with_state(
+            RateLimiter::per_minute(120, 30),
+            rate_limit_mw,
+        ))
         .with_state(state)
 }
 
@@ -162,6 +174,23 @@ fn verify_password(password: &str, stored_hash: &str) -> bool {
         .is_ok()
 }
 
+/// CSRF guard for state-changing admin routes. Requires the custom
+/// `X-Starling-Csrf` header — cross-origin pages can't set custom headers
+/// without a CORS preflight, and this server never answers preflights — and
+/// rejects browser-flagged cross-site requests outright.
+fn csrf_ok(headers: &axum::http::HeaderMap) -> bool {
+    headers.contains_key("x-starling-csrf") && !cross_site(headers)
+}
+
+/// True when the browser labeled the request cross-site (`Sec-Fetch-Site`).
+/// Absent header (curl, old browsers, same-origin fetch) passes.
+fn cross_site(headers: &axum::http::HeaderMap) -> bool {
+    headers
+        .get("sec-fetch-site")
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.eq_ignore_ascii_case("cross-site"))
+}
+
 async fn basic_auth_mw(
     State(st): State<AdminState>,
     req: axum::extract::Request,
@@ -170,9 +199,10 @@ async fn basic_auth_mw(
     // No credentials configured → open (localhost-only default).
     let stored = st
         .db
-        .get()
+        .run(|conn| starling_relay_storage::creds::get(conn))
+        .await
         .ok()
-        .and_then(|c| starling_relay_storage::creds::get(&c).ok().flatten());
+        .flatten();
     let Some(creds) = stored else {
         return next.run(req).await;
     };
@@ -186,9 +216,15 @@ async fn basic_auth_mw(
         .and_then(|raw| String::from_utf8(raw).ok())
         .and_then(|pair| pair.split_once(':').map(|(_, p)| p.to_string()));
 
-    match supplied {
-        Some(password) if verify_password(&password, &creds.password_hash) => next.run(req).await,
-        _ => (
+    let verified = match supplied {
+        Some(password) => verify_with_cache(&st, &password, &creds.password_hash).await,
+        None => false,
+    };
+
+    if verified {
+        next.run(req).await
+    } else {
+        (
             StatusCode::UNAUTHORIZED,
             [(
                 axum::http::header::WWW_AUTHENTICATE,
@@ -196,14 +232,47 @@ async fn basic_auth_mw(
             )],
             "authentication required",
         )
-            .into_response(),
+            .into_response()
     }
 }
 
+/// Check `password` against `stored_hash`, consulting the verified-password
+/// cache first. A hit requires the cache entry to be keyed to the *current*
+/// PHC string AND a constant-time digest match; only then is argon2 skipped.
+/// A miss falls back to argon2 (off the runtime workers — argon2id is
+/// ~19 MiB / tens of ms by design) and populates the cache on success.
+async fn verify_with_cache(st: &AdminState, password: &str, stored_hash: &str) -> bool {
+    use subtle::ConstantTimeEq;
+    let digest = starling_wire::blake2b256(password.as_bytes());
+    {
+        let cache = st.auth_cache.lock().expect("auth cache lock");
+        if let Some((phc, cached)) = &*cache {
+            if phc == stored_hash && bool::from(digest.ct_eq(cached)) {
+                return true;
+            }
+        }
+    }
+    let password = password.to_string();
+    let hash = stored_hash.to_string();
+    let ok = tokio::task::spawn_blocking(move || verify_password(&password, &hash))
+        .await
+        .unwrap_or(false);
+    if ok {
+        *st.auth_cache.lock().expect("auth cache lock") = Some((stored_hash.to_string(), digest));
+    }
+    ok
+}
+
 /// The onion-facing `/pair` endpoint (served on the admin `.onion`).
+/// Tightly limited: pairing is a human-paced flow (scan QR, one claim,
+/// maybe one timeout retry), and each attempt costs a sig verify.
 pub fn pair_router(state: AdminState) -> Router {
     Router::new()
         .route("/pair", post(pair_post))
+        .layer(axum::middleware::from_fn_with_state(
+            RateLimiter::per_minute(10, 5),
+            rate_limit_mw,
+        ))
         .with_state(state)
 }
 
@@ -220,12 +289,11 @@ struct OwnerView {
     pubkey_hex: String,
 }
 
-fn load_owner_views(db: &Db) -> anyhow::Result<Vec<OwnerView>> {
-    let conn = db.get()?;
+fn load_owner_views(conn: &Connection) -> anyhow::Result<Vec<OwnerView>> {
     let mut views = Vec::new();
-    for o in owners::list(&conn)? {
-        let event_count = events::count(&conn, &o.pubkey).unwrap_or(0);
-        let media_used = media::total_bytes(&conn, &o.pubkey).unwrap_or(0);
+    for o in owners::list(conn)? {
+        let event_count = events::count(conn, &o.pubkey).unwrap_or(0);
+        let media_used = media::total_bytes(conn, &o.pubkey).unwrap_or(0);
         let pk32 = crockford_base32_encode(&o.pubkey);
         let short = pk32.chars().rev().take(8).collect::<String>();
         let short: String = short.chars().rev().collect();
@@ -235,14 +303,10 @@ fn load_owner_views(db: &Db) -> anyhow::Result<Vec<OwnerView>> {
             onion: o.relay_onion_address,
             event_count,
             media_used,
-            pubkey_hex: hex_encode(&o.pubkey),
+            pubkey_hex: hex::encode(&o.pubkey),
         });
     }
     Ok(views)
-}
-
-fn hex_encode(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 #[derive(Template)]
@@ -266,7 +330,7 @@ table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:.4rem .6
 </tr>{% endfor %}</tbody></table>{% endif %}
 <script>
 async function unpair(pk){if(!confirm('Unpair and delete all stored data for this owner?'))return;
-await fetch('/api/unpair/'+pk,{method:'POST'});location.reload();}
+await fetch('/api/unpair/'+pk,{method:'POST',headers:{'X-Starling-Csrf':'1'}});location.reload();}
 </script>
 </body></html>"#,
     ext = "html"
@@ -311,7 +375,7 @@ struct PairTemplate {
 // ---------------------------------------------------------------------------
 
 async fn index(State(st): State<AdminState>) -> Response {
-    let owners = match load_owner_views(&st.db) {
+    let owners = match st.db.run(|conn| load_owner_views(conn)).await {
         Ok(o) => o,
         Err(e) => return internal(e),
     };
@@ -325,25 +389,31 @@ async fn index(State(st): State<AdminState>) -> Response {
     }
 }
 
-async fn pair_page(State(st): State<AdminState>) -> Response {
-    let minted = match mint_pairing_token(
-        &st.db,
-        &st.ctrl.admin_onion(),
-        &st.relay_version,
-        None,
-        st.pairing_ttl_secs,
-        "web",
-    ) {
+async fn pair_page(
+    State(st): State<AdminState>,
+    headers: axum::http::HeaderMap,
+) -> Response {
+    // Minting invalidates the live token (see mint_pairing_token), so a
+    // drive-by cross-site GET could otherwise kill the QR mid-pairing.
+    if cross_site(&headers) {
+        return (StatusCode::FORBIDDEN, "cross-site request rejected").into_response();
+    }
+    let admin_onion = st.ctrl.admin_onion();
+    let relay_version = st.relay_version.clone();
+    let ttl = st.pairing_ttl_secs;
+    let minted = st
+        .db
+        .run(move |conn| {
+            let minted =
+                mint_pairing_token(conn, &admin_onion, &relay_version, None, ttl, "web")?;
+            let owner_count = owners::list(conn).map(|v| v.len()).unwrap_or(0);
+            Ok((minted, owner_count))
+        })
+        .await;
+    let (minted, owner_count) = match minted {
         Ok(m) => m,
         Err(e) => return internal(e),
     };
-    let owner_count = st
-        .db
-        .get()
-        .ok()
-        .and_then(|c| owners::list(&c).ok())
-        .map(|v| v.len())
-        .unwrap_or(0);
 
     let qr_svg = match qrcode::QrCode::new(minted.pair_url.as_bytes()) {
         Ok(code) => code
@@ -367,9 +437,8 @@ async fn pair_page(State(st): State<AdminState>) -> Response {
 async fn health(State(st): State<AdminState>) -> Response {
     let owner_count = st
         .db
-        .get()
-        .ok()
-        .and_then(|c| owners::list(&c).ok())
+        .run(|conn| owners::list(conn))
+        .await
         .map(|v| v.len())
         .unwrap_or(0);
     Json(serde_json::json!({
@@ -381,33 +450,38 @@ async fn health(State(st): State<AdminState>) -> Response {
 }
 
 async fn api_owners(State(st): State<AdminState>) -> Response {
-    let conn = match st.db.get() {
-        Ok(c) => c,
-        Err(e) => return internal(e),
-    };
-    let list = match owners::list(&conn) {
-        Ok(l) => l,
-        Err(e) => return internal(e),
-    };
-    let json: Vec<_> = list
-        .into_iter()
-        .map(|o| {
-            let count = events::count(&conn, &o.pubkey).unwrap_or(0);
-            serde_json::json!({
-                "pubkey": crockford_base32_encode(&o.pubkey),
-                "label": o.label,
-                "onion": o.relay_onion_address,
-                "event_count": count,
-            })
+    let json = st
+        .db
+        .run(|conn| {
+            let json: Vec<_> = owners::list(conn)?
+                .into_iter()
+                .map(|o| {
+                    let count = events::count(conn, &o.pubkey).unwrap_or(0);
+                    serde_json::json!({
+                        "pubkey": crockford_base32_encode(&o.pubkey),
+                        "label": o.label,
+                        "onion": o.relay_onion_address,
+                        "event_count": count,
+                    })
+                })
+                .collect();
+            Ok(json)
         })
-        .collect();
-    Json(json).into_response()
+        .await;
+    match json {
+        Ok(json) => Json(json).into_response(),
+        Err(e) => internal(e),
+    }
 }
 
 async fn api_unpair(
     State(st): State<AdminState>,
     axum::extract::Path(pubkey_hex): axum::extract::Path<String>,
+    headers: axum::http::HeaderMap,
 ) -> Response {
+    if !csrf_ok(&headers) {
+        return (StatusCode::FORBIDDEN, "csrf check failed").into_response();
+    }
     let Some(pk) = decode_hex32(&pubkey_hex) else {
         return (StatusCode::BAD_REQUEST, "bad pubkey").into_response();
     };
@@ -432,37 +506,49 @@ async fn pair_post(State(st): State<AdminState>, body: Bytes) -> Response {
         Err(_) => return (StatusCode::BAD_REQUEST, "owner_pubkey not 32 bytes").into_response(),
     };
 
-    let conn = match st.db.get() {
-        Ok(c) => c,
-        Err(e) => return internal(e),
-    };
-    let pending = match pairings::get(&conn, &claim.pairing_token) {
-        Ok(Some(p)) => p,
-        Ok(None) => return (StatusCode::UNAUTHORIZED, "unknown token").into_response(),
-        Err(e) => return internal(e),
-    };
-    let now = now_secs();
-    if pending.consumed_at.is_some() {
-        return (StatusCode::CONFLICT, "token already used").into_response();
-    }
-    if pending.expires_at < now {
-        return (StatusCode::GONE, "token expired").into_response();
-    }
-
-    // Verify the signed claim — bound to the admin onion the QR advertised.
+    // Verify the signed claim first — bound to the admin onion the QR
+    // advertised. Everything below trusts the claim's pubkey.
     let digest = compute_pair_claim(&pubkey, &st.ctrl.admin_onion(), &claim.pairing_token);
     if !starling_wire::verify_ed25519(&pubkey, &digest, &claim.sig) {
         return (StatusCode::UNAUTHORIZED, "invalid signature").into_response();
     }
 
-    // Drop the pooled connection before the (possibly slow) onion launch.
-    drop(conn);
-
-    match st.ctrl.pair_owner(pubkey, pending.label.clone()).await {
-        Ok((relay_onion, relay_id)) => {
-            if let Ok(conn) = st.db.get() {
-                pairings::mark_consumed(&conn, &claim.pairing_token, now).ok();
+    let token = claim.pairing_token;
+    let outcome = st
+        .db
+        .run(move |conn| {
+            // Already-paired Owner retrying (e.g. the phone timed out
+            // waiting for the first launch): skip the token entirely — the
+            // sig proves key possession and `pair_owner` is idempotent,
+            // returning the live onion.
+            if owners::get(conn, &pubkey)?.is_some() {
+                return Ok(TokenOutcome::Proceed(None));
             }
+
+            let Some(pending) = pairings::get(conn, &token)? else {
+                return Ok(TokenOutcome::Reject(StatusCode::UNAUTHORIZED, "unknown token"));
+            };
+            let now = now_secs();
+            if pending.expires_at < now {
+                return Ok(TokenOutcome::Reject(StatusCode::GONE, "token expired"));
+            }
+            // Atomic single-use claim, BEFORE the slow onion launch: exactly
+            // one concurrent request wins the UPDATE. A launch failure below
+            // burns the token — the `/pair` page auto-refreshes a fresh one.
+            match pairings::mark_consumed(conn, &token, now)? {
+                1 => Ok(TokenOutcome::Proceed(pending.label)),
+                _ => Ok(TokenOutcome::Reject(StatusCode::CONFLICT, "token already used")),
+            }
+        })
+        .await;
+    let label = match outcome {
+        Ok(TokenOutcome::Proceed(label)) => label,
+        Ok(TokenOutcome::Reject(code, msg)) => return (code, msg).into_response(),
+        Err(e) => return internal(e),
+    };
+
+    match st.ctrl.pair_owner(pubkey, label).await {
+        Ok((relay_onion, relay_id)) => {
             let resp = PairResponse {
                 relay_onion,
                 relay_id,
@@ -483,18 +569,11 @@ async fn pair_post(State(st): State<AdminState>, body: Bytes) -> Response {
     }
 }
 
-fn decode_hex32(s: &str) -> Option<[u8; 32]> {
-    if s.len() != 64 {
-        return None;
-    }
-    let mut out = [0u8; 32];
-    for i in 0..32 {
-        out[i] = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).ok()?;
-    }
-    Some(out)
+enum TokenOutcome {
+    Proceed(Option<String>),
+    Reject(StatusCode, &'static str),
 }
 
-fn internal(err: anyhow::Error) -> Response {
-    log::error!("admin internal error: {err:?}");
-    (StatusCode::INTERNAL_SERVER_ERROR, "internal error").into_response()
+fn decode_hex32(s: &str) -> Option<[u8; 32]> {
+    hex::decode(s).ok()?.try_into().ok()
 }

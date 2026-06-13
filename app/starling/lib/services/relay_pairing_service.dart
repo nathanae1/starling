@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import '../models/models.dart';
+import '../sync/sealed_delivery.dart';
 import 'clock.dart';
 import 'crypto_service.dart';
 import 'relay_pairing_initiator.dart';
@@ -10,12 +11,13 @@ import 'storage_service.dart';
 import 'types.dart';
 
 /// Orchestrates the phone side of relay pairing (Plan 15): completes the
-/// `/pair` handshake, persists the relay, re-signs and fans the updated
-/// Connection card to existing followers, and kicks the one-shot backfill.
+/// `/pair` handshake, persists the relay, seals the updated Connection
+/// card to each existing follower, and kicks the one-shot backfill.
 /// Also handles unpair (forget the relay + redistribute a relay-less card).
 ///
 /// Card distribution reuses the Plan 13 key-rotation delivery path: one
-/// `pending_card_distribution` row per follower, picked up on their next
+/// `pending_card_distribution` row per follower (sealed with the same DH
+/// construction as a wrapped feed key), picked up on their next
 /// `/manifest` response and acked via `card_seen_at`.
 class RelayPairingService {
   RelayPairingService({
@@ -77,14 +79,19 @@ class RelayPairingService {
 
   /// Forget the paired relay and redistribute a relay-less card so
   /// followers stop probing an endpoint that will no longer serve them.
+  /// Throws [StateError] before mutating anything if the identity isn't
+  /// available — a half-unpair (row cleared, card never redistributed)
+  /// would leave followers probing the dead relay forever.
   Future<void> unpair() async {
-    await _storage.clearPairedRelay();
-    await _reloadPairedRelay();
     final identity = await _identityLookup();
     final secretKey = await _ownSecretKeyLookup();
-    if (identity != null && secretKey != null) {
-      await _distributeCard(identity, secretKey);
+    if (identity == null || secretKey == null) {
+      throw StateError('identity not ready for relay unpair');
     }
+    await _storage.clearPairedRelay();
+    // Make the card relay-less BEFORE we seal it for followers.
+    await _reloadPairedRelay();
+    await _distributeCard(identity, secretKey);
   }
 
   Future<void> _distributeCard(Identity identity, Uint8List secretKey) async {
@@ -92,17 +99,19 @@ class RelayPairingService {
       pubkey: identity.pubkey,
       endpoints: _ownEndpointsLookup(),
     );
-    final cardCbor = card.toBytes();
-    final sig = _crypto.sign(secretKey, cardCbor);
-    final now = _clock.nowUnixSeconds();
-    final followers = await _storage.getAcceptedFollowerPubkeys();
-    for (final pubkey in followers) {
-      await _storage.queueCardDistribution(
-        targetPubkey: pubkey,
-        cardCbor: cardCbor,
-        sig: sig,
-        createdAt: now,
-      );
-    }
+    // Sealing (see `sync/sealed_delivery.dart`) binds `now` into the DH
+    // derivation and authenticates us as the author. Note this does NOT
+    // keep the card from a removed-but-not-yet-cleared follower (they
+    // still hold valid keys); FollowService.removeFollower clears their
+    // pending rows for that.
+    await sealAndQueueForAcceptedFollowers(
+      crypto: _crypto,
+      storage: _storage,
+      channel: connectionCardChannel,
+      identity: identity,
+      secretKey: secretKey,
+      plaintext: card.toBytes(),
+      createdAt: _clock.nowUnixSeconds(),
+    );
   }
 }

@@ -241,8 +241,7 @@ class PeerReachabilityMonitor {
       );
       return null;
     }
-    final addr = onion.address;
-    final url = addr.contains(':') ? 'http://$addr' : 'http://$addr:80';
+    final url = httpBaseUrlForAddress(onion.address);
     _log('probeCard pubkey=${card.pubkey} dialing url=$url');
     final result = await _oneShotProbe(card.pubkey, url, PeerTransport.tor);
     _log(
@@ -408,8 +407,7 @@ class PeerReachabilityMonitor {
       ok = await _executeProbe(
         pubkey,
         url,
-        useTor: transport == PeerTransport.tor ||
-            transport == PeerTransport.relay,
+        useTor: transport.dialsViaTor,
       );
     } catch (_) {
       ok = false;
@@ -458,8 +456,7 @@ class PeerReachabilityMonitor {
         orElse: () => const Endpoint(type: '', address: ''),
       );
       if (onion.type.isEmpty) return null;
-      final addr = onion.address;
-      return addr.contains(':') ? 'http://$addr' : 'http://$addr:80';
+      return httpBaseUrlForAddress(onion.address);
     }
     if (transport == PeerTransport.relay) {
       // Relay endpoints are onion addresses too — they ride the same Tor
@@ -474,8 +471,7 @@ class PeerReachabilityMonitor {
         orElse: () => const Endpoint(type: '', address: ''),
       );
       if (relay.type.isEmpty) return null;
-      final addr = relay.address;
-      return addr.contains(':') ? 'http://$addr' : 'http://$addr:80';
+      return httpBaseUrlForAddress(relay.address);
     }
     return null;
   }
@@ -582,7 +578,7 @@ class PeerReachabilityMonitor {
     final ok = await _executeProbe(
       pubkey,
       baseUrl,
-      useTor: transport == PeerTransport.tor,
+      useTor: transport.dialsViaTor,
     );
     return ok
         ? PeerConnection(pubkey: pubkey, baseUrl: baseUrl, transport: transport)

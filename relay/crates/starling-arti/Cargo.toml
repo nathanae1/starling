@@ -19,9 +19,8 @@ arti-client.workspace = true
 tor-hsservice.workspace = true
 tor-hsrproxy.workspace = true
 tor-rtcompat.workspace = true
-tor-keymgr.workspace = true
+tor-config.workspace = true
 tor-socksproto = { workspace = true, optional = true }
-fs-mistrust.workspace = true
 safelog.workspace = true
 libsqlite3-sys.workspace = true
 tokio.workspace = true

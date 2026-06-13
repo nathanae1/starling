@@ -24,4 +24,5 @@ log_level = "info"
 pairing_token_ttl_seconds = 600
 
 # Loopback port range Arti reverse-proxies each Owner's onion to.
+# Env form is a hyphenated pair: STARLING_RELAY_LOCAL_PORT_RANGE=17000-17999.
 local_port_range = [17000, 17999]

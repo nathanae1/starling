@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:math';
@@ -67,7 +66,7 @@ Future<void> main() async {
     );
   }
   if (identity != null) {
-    final secretKey = await _loadSecretKey(keychain);
+    final secretKey = await keychain.loadIdentitySecretKey();
     if (secretKey == null) {
       _keysLog(
         'WARNING boot secret_key=null but identity row present — '
@@ -186,12 +185,6 @@ Future<DriftStorageService> _initStorageService(KeychainManager keychain) async 
 
   final db = AppDatabase.encrypted(dbKey);
   return DriftStorageService(db, const SystemClock());
-}
-
-Future<Uint8List?> _loadSecretKey(KeychainManager keychain) async {
-  final encoded = await keychain.read(KeychainManager.identitySecretKeyName);
-  if (encoded == null) return null;
-  return Uint8List.fromList(base64Decode(encoded));
 }
 
 /// First 8 hex chars of [bytes] for safe-to-log fingerprints. Same shape as

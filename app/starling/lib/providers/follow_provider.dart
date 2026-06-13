@@ -1,6 +1,3 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:http/http.dart' as http;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -45,12 +42,11 @@ List<Endpoint> ownEndpoints(Ref ref) {
 KeyRotationService keyRotationService(Ref ref) {
   return KeyRotationService(
     crypto: ref.watch(cryptoServiceProvider),
-    contentKey: ref.watch(contentKeyServiceProvider),
     storage: ref.watch(storageServiceProvider),
     clock: ref.watch(clockProvider),
     feedKeyCache: ref.watch(feedKeyCacheProvider),
     publishLock: ref.watch(publishLockProvider),
-    ownSecretKeyLookup: _loadSecretKey,
+    ownSecretKeyLookup: () => KeychainManager().loadIdentitySecretKey(),
   );
 }
 
@@ -93,7 +89,7 @@ FollowService followService(Ref ref) {
     transport: HandshakeTransport(httpClient, torClient: torClientLookup),
     reachabilityMonitor: ref.watch(peerReachabilityMonitorProvider),
     identityLookup: storage.getIdentity,
-    ownSecretKeyLookup: _loadSecretKey,
+    ownSecretKeyLookup: () => KeychainManager().loadIdentitySecretKey(),
     ownEndpointsLookup: () async {
       // Reads the latest endpoints lazily so we don't hold a stale capture.
       return ref.read(ownEndpointsProvider);
@@ -101,13 +97,6 @@ FollowService followService(Ref ref) {
     feedKeyCache: ref.watch(feedKeyCacheProvider),
     keyRotationService: ref.watch(keyRotationServiceProvider),
   );
-}
-
-Future<Uint8List?> _loadSecretKey() async {
-  final keychain = KeychainManager();
-  final encoded = await keychain.read(KeychainManager.identitySecretKeyName);
-  if (encoded == null) return null;
-  return Uint8List.fromList(base64Decode(encoded));
 }
 
 /// Convenience: assemble the connection card we share via QR. Returns
