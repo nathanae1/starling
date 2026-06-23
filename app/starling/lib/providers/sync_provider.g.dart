@@ -556,7 +556,7 @@ final class Libp2pUpgraderProvider
   }
 }
 
-String _$libp2pUpgraderHash() => r'6797fae3dc2f95e3decee015c0d25f17bb84d9cc';
+String _$libp2pUpgraderHash() => r'9c6c1a68589a304fd07f3314d6a58d5777a4b8a9';
 
 /// Plan 11a #17a — single owner of `SignalingService.onInboundConnection`.
 /// Routes inbound libp2pConnect messages to [Libp2pUpgrader]; other
@@ -618,7 +618,7 @@ final class SignalingDispatcherProvider
 }
 
 String _$signalingDispatcherHash() =>
-    r'd8930c17e819e3bf9041917a16497545bb16fd71';
+    r'75ba52ab326c62a2f06db77aa3c3b777cb315c9d';
 
 /// Routes each peer's HTTP calls to either [lanNetworkServiceProvider]
 /// or [torNetworkServiceProvider] based on `connection.transport`.
@@ -667,7 +667,7 @@ final class SyncEngineProvider
   }
 }
 
-String _$syncEngineHash() => r'31e109d73eecf1252ef0c4c8845df3a9cfc4f0f9';
+String _$syncEngineHash() => r'e32bd88c9bf29cc8faa0331b299d394a220a52c7';
 
 /// Surfaces sync state to the UI and exposes [syncNow] for pull-to-refresh.
 

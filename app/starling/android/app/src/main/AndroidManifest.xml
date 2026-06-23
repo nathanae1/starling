@@ -14,6 +14,13 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- Plan 16: voice calls. FOREGROUND_SERVICE_MICROPHONE is required on
+         Android 14+ to run the mic inside a foreground service for an
+         ongoing call; BLUETOOTH_CONNECT enables headset routing on 12+. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
     <application
         android:label="starling"
         android:name="${applicationName}"

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../providers/follow_provider.dart';
@@ -9,6 +10,7 @@ import '../../providers/service_providers.dart';
 import '../../services/follow_service.dart';
 import '../../services/types.dart';
 import '../../theme/starling_theme.dart';
+import '../../utils/feature_flags.dart';
 import '../../utils/time_ago.dart';
 import '../../widgets/avatar.dart';
 import '../../widgets/buttons.dart';
@@ -48,9 +50,19 @@ class FriendsScreen extends ConsumerWidget {
           children: [
             StarlingTopBar(
               title: 'Friends',
-              right: StarlingIconButton(
-                onPressed: () => _showInvite(context),
-                child: const Icon(LucideIcons.plus, size: 20),
+              right: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (kVoiceEnabled)
+                    StarlingIconButton(
+                      onPressed: () => context.push('/voice'),
+                      child: const Icon(LucideIcons.phone, size: 20),
+                    ),
+                  StarlingIconButton(
+                    onPressed: () => _showInvite(context),
+                    child: const Icon(LucideIcons.plus, size: 20),
+                  ),
+                ],
               ),
             ),
             Expanded(

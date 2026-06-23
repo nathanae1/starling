@@ -15,8 +15,10 @@ import '../../providers/identity_provider.dart';
 import '../../providers/server_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../providers/sync_provider.dart';
+import '../../providers/voice_provider.dart';
 import '../../sync/concurrency.dart';
 import '../../sync/peer_reachability_provider.dart';
+import '../../utils/feature_flags.dart';
 import '../background/foreground_service_controller.dart';
 import '../background/ios_background_handler.dart';
 import '../background/workmanager_dispatcher.dart';
@@ -476,6 +478,10 @@ class LifecycleManager {
     final signaling = ref.read(signalingServiceProvider);
     if (signaling is WsSignalingService) {
       ref.read(signalingDispatcherProvider).start();
+      if (kVoiceEnabled) {
+        // Plan 16: listen for inbound room invites whenever foregrounded.
+        ref.read(roomManagerProvider).start();
+      }
     }
   }
 

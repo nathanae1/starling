@@ -20,6 +20,10 @@ import 'screens/settings/connection_settings_screen.dart';
 import 'screens/settings/network_settings_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/settings/storage_settings_screen.dart';
+import 'screens/settings/voice_settings_screen.dart';
+import 'screens/voice/active_room_screen.dart';
+import 'screens/voice/create_room_screen.dart';
+import 'screens/voice/room_list_screen.dart';
 import 'shell/app_shell.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -124,6 +128,33 @@ GoRouter buildRouter(Ref ref) {
           title: 'Edit profile',
           planHint: 'Plan 15 fills this in.',
         ),
+      ),
+
+      // Plan 16 — voice rooms (root-level, over the shell).
+      GoRoute(
+        path: '/voice',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (_, _) => const RoomListScreen(),
+        routes: [
+          GoRoute(
+            path: 'create',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (_, _) => const CreateRoomScreen(),
+          ),
+          GoRoute(
+            path: 'room',
+            parentNavigatorKey: _rootNavigatorKey,
+            pageBuilder: (_, _) => const MaterialPage(
+              fullscreenDialog: true,
+              child: ActiveRoomScreen(),
+            ),
+          ),
+          GoRoute(
+            path: 'settings',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (_, _) => const VoiceSettingsScreen(),
+          ),
+        ],
       ),
 
       // Plan 08 — fullscreen scan (modal over the Friends tab).

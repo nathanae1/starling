@@ -7,3 +7,4 @@ export 'event.dart';
 export 'event_kind.dart';
 export 'media_ref.dart';
 export 'signaling_message.dart';
+export 'voice_room.dart';

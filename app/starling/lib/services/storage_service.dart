@@ -223,6 +223,28 @@ abstract class StorageService {
   /// Drop every queued card update for [targetPubkey] (e.g. on unfollow).
   Future<void> clearCardDistributionsFor(String targetPubkey);
 
+  // --- Voice rooms (Plan 16, local-only call history) ---
+
+  /// Upsert a room summary row. [VoiceRoom.participants] count is recorded.
+  Future<void> saveVoiceRoom(VoiceRoom room);
+
+  /// Stamp the time a room ended (closed or left).
+  Future<void> updateVoiceRoomEnded(String roomId, int endedAt);
+
+  /// Record (or update) a participant seen in a room.
+  Future<void> saveVoiceRoomParticipant(
+    String roomId,
+    String pubkey, {
+    String? displayName,
+    required int joinedAt,
+  });
+
+  /// Most recent rooms for the "recent rooms" list, newest first.
+  Future<List<VoiceRoom>> getRecentVoiceRooms({int limit});
+
+  /// Delete rooms older than [maxAgeSeconds]. Returns rooms removed.
+  Future<int> evictOldVoiceRooms(int maxAgeSeconds);
+
   // --- Follow requests ---
 
   Future<List<FollowRequest>> getInboundRequests();

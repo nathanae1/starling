@@ -11,6 +11,7 @@ class RetentionPolicy {
     this.maxAgeSeconds = 30 * 24 * 60 * 60,
     this.graceLastViewedSeconds = 7 * 24 * 60 * 60,
     this.maxMediaBytes = 2 * 1024 * 1024 * 1024,
+    this.maxVoiceRoomAgeSeconds = 7 * 24 * 60 * 60,
   });
 
   /// Events older than this and not pinned/own/saved/recently-viewed are
@@ -23,16 +24,21 @@ class RetentionPolicy {
 
   /// Total non-pinned media-cache size cap. Default: 2 GB.
   final int maxMediaBytes;
+
+  /// Voice-room history rows older than this are pruned. Default: 7 days.
+  final int maxVoiceRoomAgeSeconds;
 }
 
 class RetentionResult {
   const RetentionResult({
     required this.eventsEvicted,
     required this.mediaEvicted,
+    this.voiceRoomsEvicted = 0,
   });
 
   final int eventsEvicted;
   final int mediaEvicted;
+  final int voiceRoomsEvicted;
 }
 
 /// Run-once-per-launch retention pass.
@@ -77,9 +83,13 @@ class RetentionService {
       await _deleteMediaFile(entry.hash);
     }
 
+    final voiceRooms =
+        await _storage.evictOldVoiceRooms(_policy.maxVoiceRoomAgeSeconds);
+
     return RetentionResult(
       eventsEvicted: events,
       mediaEvicted: removed.length,
+      voiceRoomsEvicted: voiceRooms,
     );
   }
 

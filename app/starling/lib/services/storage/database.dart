@@ -15,6 +15,7 @@ import 'daos/media_cache_dao.dart';
 import 'daos/outbound_queue_dao.dart';
 import 'daos/paired_relay_dao.dart';
 import 'daos/unknown_items_dao.dart';
+import 'daos/voice_rooms_dao.dart';
 import 'tables/events_table.dart';
 import 'tables/feed_key_history_table.dart';
 import 'tables/follow_feed_key_history_table.dart';
@@ -28,6 +29,8 @@ import 'tables/paired_relay_table.dart';
 import 'tables/pending_card_distributions_table.dart';
 import 'tables/pending_key_distributions_table.dart';
 import 'tables/unknown_envelope_items_table.dart';
+import 'tables/voice_room_participants_table.dart';
+import 'tables/voice_rooms_table.dart';
 
 part 'database.g.dart';
 
@@ -46,6 +49,8 @@ part 'database.g.dart';
     PendingKeyDistributionEntries,
     PairedRelayEntries,
     PendingCardDistributionEntries,
+    VoiceRoomEntries,
+    VoiceRoomParticipantEntries,
   ],
   daos: [
     IdentityDao,
@@ -57,6 +62,7 @@ part 'database.g.dart';
     UnknownItemsDao,
     KeyRotationDao,
     PairedRelayDao,
+    VoiceRoomsDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -73,7 +79,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -170,6 +176,12 @@ class AppDatabase extends _$AppDatabase {
             // manifest diff; the periodic full pass catches events that
             // arrived at a store out of author-time order.
             await m.addColumn(followEntries, followEntries.lastFullSyncAt);
+          }
+          if (from < 8) {
+            // Plan 16: local-only voice-room call history (signaling-plane
+            // rooms, never feed events). Pruned after 7 days.
+            await m.createTable(voiceRoomEntries);
+            await m.createTable(voiceRoomParticipantEntries);
           }
         },
       );

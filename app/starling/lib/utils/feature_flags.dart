@@ -11,3 +11,9 @@
 /// flipped to `true` 2026-05-23. Manual two-phone smoke test is the next
 /// gate before any production users come online.
 const bool kLibp2pEnabled = true;
+
+/// Plan 16 — voice chatrooms. Gates the room-manager startup (inbound invite
+/// listening) and the voice UI entry points. A kill-switch: the signaling
+/// substrate it rides on is always present, so flipping this false simply
+/// stops the app from joining/offering calls.
+const bool kVoiceEnabled = true;

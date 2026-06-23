@@ -6,8 +6,13 @@ import 'package:go_router/go_router.dart';
 
 import '../providers/follow_requests_provider.dart';
 import '../providers/sync_provider.dart';
+import '../providers/voice_provider.dart';
+import '../services/background/foreground_service_controller.dart';
 import '../theme/starling_theme.dart';
+import '../utils/feature_flags.dart';
 import '../widgets/tab_bar.dart';
+import '../widgets/voice/call_overlay.dart';
+import '../widgets/voice/incoming_invite_sheet.dart';
 
 class AppShell extends ConsumerWidget {
   const AppShell({super.key, required this.navigationShell});
@@ -56,9 +61,38 @@ class AppShell extends ConsumerWidget {
     final starling = StarlingTheme.of(context);
     final inboundCount =
         ref.watch(inboundRequestsStreamProvider).value?.length ?? 0;
+
+    if (kVoiceEnabled) {
+      // Surface an inbound voice invite as a modal sheet from anywhere in the
+      // tab shell (Plan 16). The room manager auto-declines if we're busy, so
+      // no invite reaches here mid-call.
+      ref.listen(incomingVoiceInvitesProvider, (_, next) {
+        final invite = next.value;
+        if (invite != null) {
+          showIncomingInviteSheet(context, invite);
+        }
+      });
+
+      // Keep the Android foreground-service microphone type in sync with call
+      // state (Plan 16): a live call (non-null state) advertises `microphone`
+      // so audio survives backgrounding on Android 14+; ending the call
+      // downgrades to dataSync-only or stops. No-op on iOS/desktop.
+      ref.listen(voiceRoomStateProvider, (_, next) {
+        unawaited(
+          ForegroundServiceController.instance
+              .setCallActive(next.value != null),
+        );
+      });
+    }
+
     return Scaffold(
       backgroundColor: starling.colors.paper,
-      body: navigationShell,
+      body: Column(
+        children: [
+          Expanded(child: navigationShell),
+          if (kVoiceEnabled) const CallOverlay(),
+        ],
+      ),
       bottomNavigationBar: StarlingBottomTabBar(
         current: _current,
         onTap: (t) => _onTap(context, ref, t),

@@ -590,6 +590,62 @@ class MockStorageService implements StorageService {
     _deliveredCards.removeWhere((k) => k.startsWith('$targetPubkey|'));
   }
 
+  // --- Voice rooms (Plan 16) ---
+
+  final Map<String, VoiceRoom> _voiceRooms = {};
+  final Map<String, Map<String, VoiceParticipant>> _voiceParticipants = {};
+
+  @override
+  Future<void> saveVoiceRoom(VoiceRoom room) async {
+    _voiceRooms[room.id] = room;
+  }
+
+  @override
+  Future<void> updateVoiceRoomEnded(String roomId, int endedAt) async {
+    final r = _voiceRooms[roomId];
+    if (r != null) _voiceRooms[roomId] = r.copyWith(endedAt: endedAt);
+  }
+
+  @override
+  Future<void> saveVoiceRoomParticipant(
+    String roomId,
+    String pubkey, {
+    String? displayName,
+    required int joinedAt,
+  }) async {
+    (_voiceParticipants[roomId] ??= {})[pubkey] = VoiceParticipant(
+      pubkey: pubkey,
+      displayName: displayName,
+      connectionState: ParticipantConnectionState.disconnected,
+    );
+  }
+
+  @override
+  Future<List<VoiceRoom>> getRecentVoiceRooms({int limit = 10}) async {
+    final rooms = _voiceRooms.values.toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return rooms
+        .take(limit)
+        .map((r) => r.copyWith(
+              participants:
+                  (_voiceParticipants[r.id]?.values.toList()) ?? const [],
+            ))
+        .toList();
+  }
+
+  @override
+  Future<int> evictOldVoiceRooms(int maxAgeSeconds) async {
+    final cutoff =
+        DateTime.now().millisecondsSinceEpoch ~/ 1000 - maxAgeSeconds;
+    final stale =
+        _voiceRooms.values.where((r) => r.createdAt < cutoff).toList();
+    for (final r in stale) {
+      _voiceRooms.remove(r.id);
+      _voiceParticipants.remove(r.id);
+    }
+    return stale.length;
+  }
+
   // --- Follow requests ---
 
   @override

@@ -9,8 +9,9 @@ import 'types.dart';
 ///
 /// Signaling channels are distinct from the feed sync protocol. Feed sync
 /// is pull-based HTTP; signaling is push-based WebSocket. Signaling messages
-/// are ephemeral (never stored) and encrypted per-recipient with pairwise
-/// X25519 keys (salt: "starling-signaling-v1").
+/// are ephemeral (never stored) and encrypted per-recipient with the pairwise
+/// signaling key from `CryptoService.deriveSignalingKey` (8-byte KDF ctx
+/// `'starsig0'`, pubkeys lexicographically sorted so both peers agree).
 ///
 /// This service is generic enough for future real-time features (DMs, typing
 /// indicators) beyond voice rooms.

@@ -376,6 +376,76 @@ class DriftStorageService implements StorageService {
   Future<void> clearCardDistributionsFor(String targetPubkey) =>
       _db.pairedRelayDao.clearCardDistributionsFor(targetPubkey);
 
+  // --- Voice rooms (Plan 16) ---
+
+  @override
+  Future<void> saveVoiceRoom(VoiceRoom room) =>
+      _db.voiceRoomsDao.upsertRoom(
+        VoiceRoomEntriesCompanion.insert(
+          id: room.id,
+          name: room.name,
+          creatorPubkey: room.creatorPubkey,
+          createdAt: room.createdAt,
+          endedAt: Value(room.endedAt),
+          participantCount: Value(
+            room.participants.isEmpty ? 1 : room.participants.length,
+          ),
+        ),
+      );
+
+  @override
+  Future<void> updateVoiceRoomEnded(String roomId, int endedAt) =>
+      _db.voiceRoomsDao.setRoomEnded(roomId, endedAt);
+
+  @override
+  Future<void> saveVoiceRoomParticipant(
+    String roomId,
+    String pubkey, {
+    String? displayName,
+    required int joinedAt,
+  }) =>
+      _db.voiceRoomsDao.upsertParticipant(
+        VoiceRoomParticipantEntriesCompanion.insert(
+          roomId: roomId,
+          pubkey: pubkey,
+          joinedAt: joinedAt,
+          displayName: Value(displayName),
+        ),
+      );
+
+  @override
+  Future<List<VoiceRoom>> getRecentVoiceRooms({int limit = 10}) async {
+    final rooms = await _db.voiceRoomsDao.recentRooms(limit);
+    final out = <VoiceRoom>[];
+    for (final r in rooms) {
+      final parts = await _db.voiceRoomsDao.participantsFor(r.id);
+      out.add(
+        VoiceRoom(
+          id: r.id,
+          name: r.name,
+          creatorPubkey: r.creatorPubkey,
+          createdAt: r.createdAt,
+          endedAt: r.endedAt,
+          participants: parts
+              .map((p) => VoiceParticipant(
+                    pubkey: p.pubkey,
+                    displayName: p.displayName,
+                    connectionState: ParticipantConnectionState.disconnected,
+                  ))
+              .toList(),
+        ),
+      );
+    }
+    return out;
+  }
+
+  @override
+  Future<int> evictOldVoiceRooms(int maxAgeSeconds) {
+    final cutoff =
+        DateTime.now().millisecondsSinceEpoch ~/ 1000 - maxAgeSeconds;
+    return _db.voiceRoomsDao.evictOlderThan(cutoff);
+  }
+
   // --- Follow requests ---
 
   @override

@@ -6,9 +6,12 @@ import 'package:collection/collection.dart';
 /// An encrypted envelope for ephemeral signaling messages.
 ///
 /// Unlike [EncryptedEvent] which uses the broadcast feed key, ephemeral
-/// events are encrypted per-recipient using a pairwise X25519 shared key
-/// (salt: "starling-signaling-v1"). They are delivered via WebSocket, never
-/// stored in the events table, and never included in sync responses.
+/// events are encrypted per-recipient using the pairwise signaling key from
+/// `CryptoService.deriveSignalingKey` (X25519 DH + crypto_kdf, 8-byte ctx
+/// `'starsig0'`, with the two Ed25519 pubkeys lexicographically sorted into
+/// the KDF info so both peers derive the same key). They are delivered via
+/// WebSocket, never stored in the events table, and never included in sync
+/// responses.
 class EphemeralEncryptedEvent {
   const EphemeralEncryptedEvent({
     required this.senderPubkey,

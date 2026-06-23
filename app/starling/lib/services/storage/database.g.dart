@@ -5948,6 +5948,809 @@ class PendingCardDistributionEntriesCompanion
   }
 }
 
+class $VoiceRoomEntriesTable extends VoiceRoomEntries
+    with TableInfo<$VoiceRoomEntriesTable, VoiceRoomEntry> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $VoiceRoomEntriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _creatorPubkeyMeta = const VerificationMeta(
+    'creatorPubkey',
+  );
+  @override
+  late final GeneratedColumn<String> creatorPubkey = GeneratedColumn<String>(
+    'creator_pubkey',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _endedAtMeta = const VerificationMeta(
+    'endedAt',
+  );
+  @override
+  late final GeneratedColumn<int> endedAt = GeneratedColumn<int>(
+    'ended_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _participantCountMeta = const VerificationMeta(
+    'participantCount',
+  );
+  @override
+  late final GeneratedColumn<int> participantCount = GeneratedColumn<int>(
+    'participant_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    creatorPubkey,
+    createdAt,
+    endedAt,
+    participantCount,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'voice_room_entries';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<VoiceRoomEntry> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('creator_pubkey')) {
+      context.handle(
+        _creatorPubkeyMeta,
+        creatorPubkey.isAcceptableOrUnknown(
+          data['creator_pubkey']!,
+          _creatorPubkeyMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_creatorPubkeyMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('ended_at')) {
+      context.handle(
+        _endedAtMeta,
+        endedAt.isAcceptableOrUnknown(data['ended_at']!, _endedAtMeta),
+      );
+    }
+    if (data.containsKey('participant_count')) {
+      context.handle(
+        _participantCountMeta,
+        participantCount.isAcceptableOrUnknown(
+          data['participant_count']!,
+          _participantCountMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  VoiceRoomEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return VoiceRoomEntry(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      creatorPubkey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}creator_pubkey'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_at'],
+      )!,
+      endedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}ended_at'],
+      ),
+      participantCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}participant_count'],
+      )!,
+    );
+  }
+
+  @override
+  $VoiceRoomEntriesTable createAlias(String alias) {
+    return $VoiceRoomEntriesTable(attachedDatabase, alias);
+  }
+}
+
+class VoiceRoomEntry extends DataClass implements Insertable<VoiceRoomEntry> {
+  final String id;
+  final String name;
+  final String creatorPubkey;
+  final int createdAt;
+  final int? endedAt;
+  final int participantCount;
+  const VoiceRoomEntry({
+    required this.id,
+    required this.name,
+    required this.creatorPubkey,
+    required this.createdAt,
+    this.endedAt,
+    required this.participantCount,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['creator_pubkey'] = Variable<String>(creatorPubkey);
+    map['created_at'] = Variable<int>(createdAt);
+    if (!nullToAbsent || endedAt != null) {
+      map['ended_at'] = Variable<int>(endedAt);
+    }
+    map['participant_count'] = Variable<int>(participantCount);
+    return map;
+  }
+
+  VoiceRoomEntriesCompanion toCompanion(bool nullToAbsent) {
+    return VoiceRoomEntriesCompanion(
+      id: Value(id),
+      name: Value(name),
+      creatorPubkey: Value(creatorPubkey),
+      createdAt: Value(createdAt),
+      endedAt: endedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(endedAt),
+      participantCount: Value(participantCount),
+    );
+  }
+
+  factory VoiceRoomEntry.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return VoiceRoomEntry(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      creatorPubkey: serializer.fromJson<String>(json['creatorPubkey']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+      endedAt: serializer.fromJson<int?>(json['endedAt']),
+      participantCount: serializer.fromJson<int>(json['participantCount']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'creatorPubkey': serializer.toJson<String>(creatorPubkey),
+      'createdAt': serializer.toJson<int>(createdAt),
+      'endedAt': serializer.toJson<int?>(endedAt),
+      'participantCount': serializer.toJson<int>(participantCount),
+    };
+  }
+
+  VoiceRoomEntry copyWith({
+    String? id,
+    String? name,
+    String? creatorPubkey,
+    int? createdAt,
+    Value<int?> endedAt = const Value.absent(),
+    int? participantCount,
+  }) => VoiceRoomEntry(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    creatorPubkey: creatorPubkey ?? this.creatorPubkey,
+    createdAt: createdAt ?? this.createdAt,
+    endedAt: endedAt.present ? endedAt.value : this.endedAt,
+    participantCount: participantCount ?? this.participantCount,
+  );
+  VoiceRoomEntry copyWithCompanion(VoiceRoomEntriesCompanion data) {
+    return VoiceRoomEntry(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      creatorPubkey: data.creatorPubkey.present
+          ? data.creatorPubkey.value
+          : this.creatorPubkey,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      endedAt: data.endedAt.present ? data.endedAt.value : this.endedAt,
+      participantCount: data.participantCount.present
+          ? data.participantCount.value
+          : this.participantCount,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VoiceRoomEntry(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('creatorPubkey: $creatorPubkey, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('endedAt: $endedAt, ')
+          ..write('participantCount: $participantCount')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    creatorPubkey,
+    createdAt,
+    endedAt,
+    participantCount,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is VoiceRoomEntry &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.creatorPubkey == this.creatorPubkey &&
+          other.createdAt == this.createdAt &&
+          other.endedAt == this.endedAt &&
+          other.participantCount == this.participantCount);
+}
+
+class VoiceRoomEntriesCompanion extends UpdateCompanion<VoiceRoomEntry> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String> creatorPubkey;
+  final Value<int> createdAt;
+  final Value<int?> endedAt;
+  final Value<int> participantCount;
+  final Value<int> rowid;
+  const VoiceRoomEntriesCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.creatorPubkey = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.endedAt = const Value.absent(),
+    this.participantCount = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  VoiceRoomEntriesCompanion.insert({
+    required String id,
+    required String name,
+    required String creatorPubkey,
+    required int createdAt,
+    this.endedAt = const Value.absent(),
+    this.participantCount = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       creatorPubkey = Value(creatorPubkey),
+       createdAt = Value(createdAt);
+  static Insertable<VoiceRoomEntry> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? creatorPubkey,
+    Expression<int>? createdAt,
+    Expression<int>? endedAt,
+    Expression<int>? participantCount,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (creatorPubkey != null) 'creator_pubkey': creatorPubkey,
+      if (createdAt != null) 'created_at': createdAt,
+      if (endedAt != null) 'ended_at': endedAt,
+      if (participantCount != null) 'participant_count': participantCount,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  VoiceRoomEntriesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String>? creatorPubkey,
+    Value<int>? createdAt,
+    Value<int?>? endedAt,
+    Value<int>? participantCount,
+    Value<int>? rowid,
+  }) {
+    return VoiceRoomEntriesCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      creatorPubkey: creatorPubkey ?? this.creatorPubkey,
+      createdAt: createdAt ?? this.createdAt,
+      endedAt: endedAt ?? this.endedAt,
+      participantCount: participantCount ?? this.participantCount,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (creatorPubkey.present) {
+      map['creator_pubkey'] = Variable<String>(creatorPubkey.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (endedAt.present) {
+      map['ended_at'] = Variable<int>(endedAt.value);
+    }
+    if (participantCount.present) {
+      map['participant_count'] = Variable<int>(participantCount.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VoiceRoomEntriesCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('creatorPubkey: $creatorPubkey, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('endedAt: $endedAt, ')
+          ..write('participantCount: $participantCount, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $VoiceRoomParticipantEntriesTable extends VoiceRoomParticipantEntries
+    with
+        TableInfo<
+          $VoiceRoomParticipantEntriesTable,
+          VoiceRoomParticipantEntry
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $VoiceRoomParticipantEntriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _roomIdMeta = const VerificationMeta('roomId');
+  @override
+  late final GeneratedColumn<String> roomId = GeneratedColumn<String>(
+    'room_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pubkeyMeta = const VerificationMeta('pubkey');
+  @override
+  late final GeneratedColumn<String> pubkey = GeneratedColumn<String>(
+    'pubkey',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _displayNameMeta = const VerificationMeta(
+    'displayName',
+  );
+  @override
+  late final GeneratedColumn<String> displayName = GeneratedColumn<String>(
+    'display_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _joinedAtMeta = const VerificationMeta(
+    'joinedAt',
+  );
+  @override
+  late final GeneratedColumn<int> joinedAt = GeneratedColumn<int>(
+    'joined_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _leftAtMeta = const VerificationMeta('leftAt');
+  @override
+  late final GeneratedColumn<int> leftAt = GeneratedColumn<int>(
+    'left_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    roomId,
+    pubkey,
+    displayName,
+    joinedAt,
+    leftAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'voice_room_participant_entries';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<VoiceRoomParticipantEntry> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('room_id')) {
+      context.handle(
+        _roomIdMeta,
+        roomId.isAcceptableOrUnknown(data['room_id']!, _roomIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_roomIdMeta);
+    }
+    if (data.containsKey('pubkey')) {
+      context.handle(
+        _pubkeyMeta,
+        pubkey.isAcceptableOrUnknown(data['pubkey']!, _pubkeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pubkeyMeta);
+    }
+    if (data.containsKey('display_name')) {
+      context.handle(
+        _displayNameMeta,
+        displayName.isAcceptableOrUnknown(
+          data['display_name']!,
+          _displayNameMeta,
+        ),
+      );
+    }
+    if (data.containsKey('joined_at')) {
+      context.handle(
+        _joinedAtMeta,
+        joinedAt.isAcceptableOrUnknown(data['joined_at']!, _joinedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_joinedAtMeta);
+    }
+    if (data.containsKey('left_at')) {
+      context.handle(
+        _leftAtMeta,
+        leftAt.isAcceptableOrUnknown(data['left_at']!, _leftAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {roomId, pubkey};
+  @override
+  VoiceRoomParticipantEntry map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return VoiceRoomParticipantEntry(
+      roomId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}room_id'],
+      )!,
+      pubkey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pubkey'],
+      )!,
+      displayName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}display_name'],
+      ),
+      joinedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}joined_at'],
+      )!,
+      leftAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}left_at'],
+      ),
+    );
+  }
+
+  @override
+  $VoiceRoomParticipantEntriesTable createAlias(String alias) {
+    return $VoiceRoomParticipantEntriesTable(attachedDatabase, alias);
+  }
+}
+
+class VoiceRoomParticipantEntry extends DataClass
+    implements Insertable<VoiceRoomParticipantEntry> {
+  final String roomId;
+  final String pubkey;
+  final String? displayName;
+  final int joinedAt;
+  final int? leftAt;
+  const VoiceRoomParticipantEntry({
+    required this.roomId,
+    required this.pubkey,
+    this.displayName,
+    required this.joinedAt,
+    this.leftAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['room_id'] = Variable<String>(roomId);
+    map['pubkey'] = Variable<String>(pubkey);
+    if (!nullToAbsent || displayName != null) {
+      map['display_name'] = Variable<String>(displayName);
+    }
+    map['joined_at'] = Variable<int>(joinedAt);
+    if (!nullToAbsent || leftAt != null) {
+      map['left_at'] = Variable<int>(leftAt);
+    }
+    return map;
+  }
+
+  VoiceRoomParticipantEntriesCompanion toCompanion(bool nullToAbsent) {
+    return VoiceRoomParticipantEntriesCompanion(
+      roomId: Value(roomId),
+      pubkey: Value(pubkey),
+      displayName: displayName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(displayName),
+      joinedAt: Value(joinedAt),
+      leftAt: leftAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(leftAt),
+    );
+  }
+
+  factory VoiceRoomParticipantEntry.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return VoiceRoomParticipantEntry(
+      roomId: serializer.fromJson<String>(json['roomId']),
+      pubkey: serializer.fromJson<String>(json['pubkey']),
+      displayName: serializer.fromJson<String?>(json['displayName']),
+      joinedAt: serializer.fromJson<int>(json['joinedAt']),
+      leftAt: serializer.fromJson<int?>(json['leftAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'roomId': serializer.toJson<String>(roomId),
+      'pubkey': serializer.toJson<String>(pubkey),
+      'displayName': serializer.toJson<String?>(displayName),
+      'joinedAt': serializer.toJson<int>(joinedAt),
+      'leftAt': serializer.toJson<int?>(leftAt),
+    };
+  }
+
+  VoiceRoomParticipantEntry copyWith({
+    String? roomId,
+    String? pubkey,
+    Value<String?> displayName = const Value.absent(),
+    int? joinedAt,
+    Value<int?> leftAt = const Value.absent(),
+  }) => VoiceRoomParticipantEntry(
+    roomId: roomId ?? this.roomId,
+    pubkey: pubkey ?? this.pubkey,
+    displayName: displayName.present ? displayName.value : this.displayName,
+    joinedAt: joinedAt ?? this.joinedAt,
+    leftAt: leftAt.present ? leftAt.value : this.leftAt,
+  );
+  VoiceRoomParticipantEntry copyWithCompanion(
+    VoiceRoomParticipantEntriesCompanion data,
+  ) {
+    return VoiceRoomParticipantEntry(
+      roomId: data.roomId.present ? data.roomId.value : this.roomId,
+      pubkey: data.pubkey.present ? data.pubkey.value : this.pubkey,
+      displayName: data.displayName.present
+          ? data.displayName.value
+          : this.displayName,
+      joinedAt: data.joinedAt.present ? data.joinedAt.value : this.joinedAt,
+      leftAt: data.leftAt.present ? data.leftAt.value : this.leftAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VoiceRoomParticipantEntry(')
+          ..write('roomId: $roomId, ')
+          ..write('pubkey: $pubkey, ')
+          ..write('displayName: $displayName, ')
+          ..write('joinedAt: $joinedAt, ')
+          ..write('leftAt: $leftAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(roomId, pubkey, displayName, joinedAt, leftAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is VoiceRoomParticipantEntry &&
+          other.roomId == this.roomId &&
+          other.pubkey == this.pubkey &&
+          other.displayName == this.displayName &&
+          other.joinedAt == this.joinedAt &&
+          other.leftAt == this.leftAt);
+}
+
+class VoiceRoomParticipantEntriesCompanion
+    extends UpdateCompanion<VoiceRoomParticipantEntry> {
+  final Value<String> roomId;
+  final Value<String> pubkey;
+  final Value<String?> displayName;
+  final Value<int> joinedAt;
+  final Value<int?> leftAt;
+  final Value<int> rowid;
+  const VoiceRoomParticipantEntriesCompanion({
+    this.roomId = const Value.absent(),
+    this.pubkey = const Value.absent(),
+    this.displayName = const Value.absent(),
+    this.joinedAt = const Value.absent(),
+    this.leftAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  VoiceRoomParticipantEntriesCompanion.insert({
+    required String roomId,
+    required String pubkey,
+    this.displayName = const Value.absent(),
+    required int joinedAt,
+    this.leftAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : roomId = Value(roomId),
+       pubkey = Value(pubkey),
+       joinedAt = Value(joinedAt);
+  static Insertable<VoiceRoomParticipantEntry> custom({
+    Expression<String>? roomId,
+    Expression<String>? pubkey,
+    Expression<String>? displayName,
+    Expression<int>? joinedAt,
+    Expression<int>? leftAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (roomId != null) 'room_id': roomId,
+      if (pubkey != null) 'pubkey': pubkey,
+      if (displayName != null) 'display_name': displayName,
+      if (joinedAt != null) 'joined_at': joinedAt,
+      if (leftAt != null) 'left_at': leftAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  VoiceRoomParticipantEntriesCompanion copyWith({
+    Value<String>? roomId,
+    Value<String>? pubkey,
+    Value<String?>? displayName,
+    Value<int>? joinedAt,
+    Value<int?>? leftAt,
+    Value<int>? rowid,
+  }) {
+    return VoiceRoomParticipantEntriesCompanion(
+      roomId: roomId ?? this.roomId,
+      pubkey: pubkey ?? this.pubkey,
+      displayName: displayName ?? this.displayName,
+      joinedAt: joinedAt ?? this.joinedAt,
+      leftAt: leftAt ?? this.leftAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (roomId.present) {
+      map['room_id'] = Variable<String>(roomId.value);
+    }
+    if (pubkey.present) {
+      map['pubkey'] = Variable<String>(pubkey.value);
+    }
+    if (displayName.present) {
+      map['display_name'] = Variable<String>(displayName.value);
+    }
+    if (joinedAt.present) {
+      map['joined_at'] = Variable<int>(joinedAt.value);
+    }
+    if (leftAt.present) {
+      map['left_at'] = Variable<int>(leftAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VoiceRoomParticipantEntriesCompanion(')
+          ..write('roomId: $roomId, ')
+          ..write('pubkey: $pubkey, ')
+          ..write('displayName: $displayName, ')
+          ..write('joinedAt: $joinedAt, ')
+          ..write('leftAt: $leftAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -5976,6 +6779,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $PairedRelayEntriesTable(this);
   late final $PendingCardDistributionEntriesTable
   pendingCardDistributionEntries = $PendingCardDistributionEntriesTable(this);
+  late final $VoiceRoomEntriesTable voiceRoomEntries = $VoiceRoomEntriesTable(
+    this,
+  );
+  late final $VoiceRoomParticipantEntriesTable voiceRoomParticipantEntries =
+      $VoiceRoomParticipantEntriesTable(this);
   late final IdentityDao identityDao = IdentityDao(this as AppDatabase);
   late final FollowsDao followsDao = FollowsDao(this as AppDatabase);
   late final EventsDao eventsDao = EventsDao(this as AppDatabase);
@@ -5995,6 +6803,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final PairedRelayDao pairedRelayDao = PairedRelayDao(
     this as AppDatabase,
   );
+  late final VoiceRoomsDao voiceRoomsDao = VoiceRoomsDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -6013,6 +6822,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     pendingKeyDistributionEntries,
     pairedRelayEntries,
     pendingCardDistributionEntries,
+    voiceRoomEntries,
+    voiceRoomParticipantEntries,
   ];
 }
 
@@ -9223,6 +10034,456 @@ typedef $$PendingCardDistributionEntriesTableProcessedTableManager =
       PendingCardDistributionEntry,
       PrefetchHooks Function()
     >;
+typedef $$VoiceRoomEntriesTableCreateCompanionBuilder =
+    VoiceRoomEntriesCompanion Function({
+      required String id,
+      required String name,
+      required String creatorPubkey,
+      required int createdAt,
+      Value<int?> endedAt,
+      Value<int> participantCount,
+      Value<int> rowid,
+    });
+typedef $$VoiceRoomEntriesTableUpdateCompanionBuilder =
+    VoiceRoomEntriesCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<String> creatorPubkey,
+      Value<int> createdAt,
+      Value<int?> endedAt,
+      Value<int> participantCount,
+      Value<int> rowid,
+    });
+
+class $$VoiceRoomEntriesTableFilterComposer
+    extends Composer<_$AppDatabase, $VoiceRoomEntriesTable> {
+  $$VoiceRoomEntriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get creatorPubkey => $composableBuilder(
+    column: $table.creatorPubkey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get endedAt => $composableBuilder(
+    column: $table.endedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get participantCount => $composableBuilder(
+    column: $table.participantCount,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$VoiceRoomEntriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $VoiceRoomEntriesTable> {
+  $$VoiceRoomEntriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get creatorPubkey => $composableBuilder(
+    column: $table.creatorPubkey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get endedAt => $composableBuilder(
+    column: $table.endedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get participantCount => $composableBuilder(
+    column: $table.participantCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$VoiceRoomEntriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $VoiceRoomEntriesTable> {
+  $$VoiceRoomEntriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get creatorPubkey => $composableBuilder(
+    column: $table.creatorPubkey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get endedAt =>
+      $composableBuilder(column: $table.endedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get participantCount => $composableBuilder(
+    column: $table.participantCount,
+    builder: (column) => column,
+  );
+}
+
+class $$VoiceRoomEntriesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $VoiceRoomEntriesTable,
+          VoiceRoomEntry,
+          $$VoiceRoomEntriesTableFilterComposer,
+          $$VoiceRoomEntriesTableOrderingComposer,
+          $$VoiceRoomEntriesTableAnnotationComposer,
+          $$VoiceRoomEntriesTableCreateCompanionBuilder,
+          $$VoiceRoomEntriesTableUpdateCompanionBuilder,
+          (
+            VoiceRoomEntry,
+            BaseReferences<
+              _$AppDatabase,
+              $VoiceRoomEntriesTable,
+              VoiceRoomEntry
+            >,
+          ),
+          VoiceRoomEntry,
+          PrefetchHooks Function()
+        > {
+  $$VoiceRoomEntriesTableTableManager(
+    _$AppDatabase db,
+    $VoiceRoomEntriesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$VoiceRoomEntriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$VoiceRoomEntriesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$VoiceRoomEntriesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> creatorPubkey = const Value.absent(),
+                Value<int> createdAt = const Value.absent(),
+                Value<int?> endedAt = const Value.absent(),
+                Value<int> participantCount = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VoiceRoomEntriesCompanion(
+                id: id,
+                name: name,
+                creatorPubkey: creatorPubkey,
+                createdAt: createdAt,
+                endedAt: endedAt,
+                participantCount: participantCount,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required String creatorPubkey,
+                required int createdAt,
+                Value<int?> endedAt = const Value.absent(),
+                Value<int> participantCount = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VoiceRoomEntriesCompanion.insert(
+                id: id,
+                name: name,
+                creatorPubkey: creatorPubkey,
+                createdAt: createdAt,
+                endedAt: endedAt,
+                participantCount: participantCount,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$VoiceRoomEntriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $VoiceRoomEntriesTable,
+      VoiceRoomEntry,
+      $$VoiceRoomEntriesTableFilterComposer,
+      $$VoiceRoomEntriesTableOrderingComposer,
+      $$VoiceRoomEntriesTableAnnotationComposer,
+      $$VoiceRoomEntriesTableCreateCompanionBuilder,
+      $$VoiceRoomEntriesTableUpdateCompanionBuilder,
+      (
+        VoiceRoomEntry,
+        BaseReferences<_$AppDatabase, $VoiceRoomEntriesTable, VoiceRoomEntry>,
+      ),
+      VoiceRoomEntry,
+      PrefetchHooks Function()
+    >;
+typedef $$VoiceRoomParticipantEntriesTableCreateCompanionBuilder =
+    VoiceRoomParticipantEntriesCompanion Function({
+      required String roomId,
+      required String pubkey,
+      Value<String?> displayName,
+      required int joinedAt,
+      Value<int?> leftAt,
+      Value<int> rowid,
+    });
+typedef $$VoiceRoomParticipantEntriesTableUpdateCompanionBuilder =
+    VoiceRoomParticipantEntriesCompanion Function({
+      Value<String> roomId,
+      Value<String> pubkey,
+      Value<String?> displayName,
+      Value<int> joinedAt,
+      Value<int?> leftAt,
+      Value<int> rowid,
+    });
+
+class $$VoiceRoomParticipantEntriesTableFilterComposer
+    extends Composer<_$AppDatabase, $VoiceRoomParticipantEntriesTable> {
+  $$VoiceRoomParticipantEntriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get roomId => $composableBuilder(
+    column: $table.roomId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get pubkey => $composableBuilder(
+    column: $table.pubkey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get joinedAt => $composableBuilder(
+    column: $table.joinedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get leftAt => $composableBuilder(
+    column: $table.leftAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$VoiceRoomParticipantEntriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $VoiceRoomParticipantEntriesTable> {
+  $$VoiceRoomParticipantEntriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get roomId => $composableBuilder(
+    column: $table.roomId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get pubkey => $composableBuilder(
+    column: $table.pubkey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get joinedAt => $composableBuilder(
+    column: $table.joinedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get leftAt => $composableBuilder(
+    column: $table.leftAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$VoiceRoomParticipantEntriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $VoiceRoomParticipantEntriesTable> {
+  $$VoiceRoomParticipantEntriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get roomId =>
+      $composableBuilder(column: $table.roomId, builder: (column) => column);
+
+  GeneratedColumn<String> get pubkey =>
+      $composableBuilder(column: $table.pubkey, builder: (column) => column);
+
+  GeneratedColumn<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get joinedAt =>
+      $composableBuilder(column: $table.joinedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get leftAt =>
+      $composableBuilder(column: $table.leftAt, builder: (column) => column);
+}
+
+class $$VoiceRoomParticipantEntriesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $VoiceRoomParticipantEntriesTable,
+          VoiceRoomParticipantEntry,
+          $$VoiceRoomParticipantEntriesTableFilterComposer,
+          $$VoiceRoomParticipantEntriesTableOrderingComposer,
+          $$VoiceRoomParticipantEntriesTableAnnotationComposer,
+          $$VoiceRoomParticipantEntriesTableCreateCompanionBuilder,
+          $$VoiceRoomParticipantEntriesTableUpdateCompanionBuilder,
+          (
+            VoiceRoomParticipantEntry,
+            BaseReferences<
+              _$AppDatabase,
+              $VoiceRoomParticipantEntriesTable,
+              VoiceRoomParticipantEntry
+            >,
+          ),
+          VoiceRoomParticipantEntry,
+          PrefetchHooks Function()
+        > {
+  $$VoiceRoomParticipantEntriesTableTableManager(
+    _$AppDatabase db,
+    $VoiceRoomParticipantEntriesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$VoiceRoomParticipantEntriesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$VoiceRoomParticipantEntriesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$VoiceRoomParticipantEntriesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> roomId = const Value.absent(),
+                Value<String> pubkey = const Value.absent(),
+                Value<String?> displayName = const Value.absent(),
+                Value<int> joinedAt = const Value.absent(),
+                Value<int?> leftAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VoiceRoomParticipantEntriesCompanion(
+                roomId: roomId,
+                pubkey: pubkey,
+                displayName: displayName,
+                joinedAt: joinedAt,
+                leftAt: leftAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String roomId,
+                required String pubkey,
+                Value<String?> displayName = const Value.absent(),
+                required int joinedAt,
+                Value<int?> leftAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VoiceRoomParticipantEntriesCompanion.insert(
+                roomId: roomId,
+                pubkey: pubkey,
+                displayName: displayName,
+                joinedAt: joinedAt,
+                leftAt: leftAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$VoiceRoomParticipantEntriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $VoiceRoomParticipantEntriesTable,
+      VoiceRoomParticipantEntry,
+      $$VoiceRoomParticipantEntriesTableFilterComposer,
+      $$VoiceRoomParticipantEntriesTableOrderingComposer,
+      $$VoiceRoomParticipantEntriesTableAnnotationComposer,
+      $$VoiceRoomParticipantEntriesTableCreateCompanionBuilder,
+      $$VoiceRoomParticipantEntriesTableUpdateCompanionBuilder,
+      (
+        VoiceRoomParticipantEntry,
+        BaseReferences<
+          _$AppDatabase,
+          $VoiceRoomParticipantEntriesTable,
+          VoiceRoomParticipantEntry
+        >,
+      ),
+      VoiceRoomParticipantEntry,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -9276,5 +10537,13 @@ class $AppDatabaseManager {
       $$PendingCardDistributionEntriesTableTableManager(
         _db,
         _db.pendingCardDistributionEntries,
+      );
+  $$VoiceRoomEntriesTableTableManager get voiceRoomEntries =>
+      $$VoiceRoomEntriesTableTableManager(_db, _db.voiceRoomEntries);
+  $$VoiceRoomParticipantEntriesTableTableManager
+  get voiceRoomParticipantEntries =>
+      $$VoiceRoomParticipantEntriesTableTableManager(
+        _db,
+        _db.voiceRoomParticipantEntries,
       );
 }

@@ -138,7 +138,7 @@ final class KeyRotationServiceProvider
 }
 
 String _$keyRotationServiceHash() =>
-    r'60ac6640728d029f96bf8d4c5a633d882ba9beb4';
+    r'6b8f050176a968d69e9ae71d74334bc3cc704423';
 
 /// Singleton [FollowService] for the running app. Constructs the real
 /// HTTP transport, wires identity / secret-key lookups, and points the
@@ -196,7 +196,7 @@ final class FollowServiceProvider
   }
 }
 
-String _$followServiceHash() => r'83fca473f689b5115c6fc4be06be5f749210bb69';
+String _$followServiceHash() => r'4a56f98f8d001ff745d210800a4b26a71c6fc391';
 
 /// Convenience: assemble the connection card we share via QR. Returns
 /// `null` until the onion endpoint is available so the QR sheet can show

@@ -1,356 +1,93 @@
 # Plan 16 — Voice Chatrooms
 
-Voice chatrooms are the first real-time feature and the hardest to fit into Starling's P2P, serverless architecture. The core tension: Starling is async by design (seconds-to-hours latency is fine), but voice needs <200ms round-trip. Tor (3-5s) is unusable for audio. This plan addresses how to deliver voice within Starling's constraints.
+Voice chatrooms are Starling's first real-time feature. The core tension is unchanged from the original draft: Starling is async by design (seconds-to-hours latency is fine), but voice needs <200ms round-trip, and Tor (3-5s) is unusable for audio. What *has* changed is the substrate — Plans 11b/11c built the signaling plane this feature was going to build itself, and 11c retired STUN in favor of an IPv6-host-candidate strategy. This plan is rewritten to consume that substrate.
 
-**Prerequisites**: Plans 07 (HTTP server), 08 (follow flow / key exchange), 09 (LAN sync / mDNS), 11 (Tor).
+**Prerequisites (all landed):** 07 (HTTP server), 08 (follow flow / key exchange), 09 (LAN sync), 11/11b/11c (Tor + signaling plane), 14 (foreground service).
+
+## What is already built (do not rebuild)
+
+The original "Phase A: signaling infrastructure" is done. Verified in-tree:
+
+- **`/ws/signal` shelf route** with Ed25519 upgrade auth + ±30s replay window (`lib/server/handlers/signaling_handler.dart`).
+- **`WsSignalingService`** + **`WebSocketSignalingChannel`** — outbound dial over LAN/Tor (never libp2p), inbound via `handleInbound`, channels pooled by pubkey, `messages` is a **broadcast** stream (`lib/services/signaling/ws_signaling_service.dart`).
+- **Sealed envelope** — `wrapSignalingMessage`/`unwrapSignalingMessage` over `EphemeralEncryptedEvent`, pairwise key from `deriveSignalingKey`, ±30s replay window (`lib/services/signaling/signaling_envelope.dart`).
+- **`SignalingMessage` + `SignalingMessageType`** — all ten voice types already declared (`roomInvite`, `roomAccept`, `roomDecline`, `roomLeave`, `roomClose`, `offer`, `answer`, `iceCandidate`, `muteStatus`, `speakingStatus`); the model already carries `roomId` and an open `payload` map (`lib/models/signaling_message.dart`).
+- **`SignalingDispatcher`** — single owner of `onInboundConnection`; already has labeled (inert) `case` arms for every voice type (`lib/services/signaling/signaling_dispatcher.dart`); start gate is libp2p-independent (`lib/services/lifecycle/lifecycle_manager.dart`).
+
+## Corrected facts (the old draft was stale)
+
+- **Crypto.** Signaling key = `crypto_kdf(BLAKE2b-256(DH(x25519(sk), x25519(pk)) ‖ lo_pk ‖ hi_pk), ctx='starsig0')`, pubkeys **lexicographically sorted** (not `info = my_pk ‖ their_pk`). Feed key uses `ctx='starfk00'`. The old `ctx="starlingsig"` / `salt="starling-signaling-v1"` are wrong.
+- **No STUN.** 11c proved STUN/DCUtR unworkable here. WebRTC, however, runs its *own* native ICE agent (separate socket from libp2p), which gathers IPv6 **host** candidates with no server — the WebRTC counterpart of 11c's carrier-v6 bet.
+- **Rooms are signaling-plane, not stored `EventKind`s.** `EventKind.isKnown` is hardcoded `1..6`; kinds 10-13 are a documentation reservation only. Room lifecycle rides `SignalingMessage`s; rooms persist solely as local-only call history.
 
 ## Architecture
 
-Two new communication channels, separate from the existing feed sync:
-
-```
-Signaling (room setup, ICE exchange)     Audio (actual voice)
-  WebSocket on shelf server                WebRTC via flutter_webrtc
-  Encrypted with pairwise X25519 keys     Encrypted with DTLS-SRTP
-  Works over LAN or Tor                    Works over LAN or hole-punched WAN
-  Tolerates high latency                   Requires <200ms RTT
-```
-
-### New Service Interfaces
-
-**SignalingService** — persistent bidirectional channels between peers (WebSocket). Generic enough for future real-time features (DMs, typing indicators).
-
-```dart
-abstract class SignalingService {
-  Future<SignalingChannel> connect(ConnectionCard peer);
-  void onInboundConnection(void Function(SignalingChannel) handler);
-  Future<void> closeAll();
-}
-```
-
-**VoiceService** — WebRTC peer connections, audio capture, room lifecycle.
+| Channel | Mechanism | Transport | Latency |
+|---|---|---|---|
+| **Signaling** (invite, SDP, ICE, mute/speaking) | existing `WsSignalingService`, sealed per-recipient | LAN HTTP **or Tor** (never libp2p) | high — Tor fine for setup |
+| **Audio** | `flutter_webrtc` `RTCPeerConnection`, DTLS-SRTP | **direct**: LAN host or IPv6 host candidates | <200ms — must be direct |
 
-```dart
-abstract class VoiceService {
-  Future<void> init();
-  Future<VoiceRoom> createRoom({required String name, required List<String> invitedPubkeys});
-  Future<void> joinRoom(VoiceRoom room, Uint8List roomSessionKey);
-  Future<void> leaveRoom();
-  Future<void> closeRoom();
-  Future<void> setMicMuted(bool muted);
-  Future<void> setSpeakerMode(bool speaker);
-  Future<RTCSessionDescription> createOffer(String peerPubkey);
-  Future<RTCSessionDescription> createAnswer(String peerPubkey, RTCSessionDescription offer);
-  Future<void> addIceCandidate(String peerPubkey, RTCIceCandidate candidate);
-  VoiceRoom? get currentRoom;
-  Stream<VoiceRoomState> get roomStateStream;
-  Stream<Map<String, double>> get audioLevelStream;
-}
-```
+**The key to WAN voice: signaling rides Tor; media rides direct IPv6.** Setup never needs a direct path (Tor carries the invite/SDP/ICE); only media does, and WebRTC's native ICE gathers the carrier-v6 host candidate for free.
 
-Both follow the existing pattern: abstract interface in `lib/services/`, mock in `lib/services/mocks/`, real implementation behind Riverpod provider.
+## Connectivity strategy (NAT)
 
-## Protocol Additions
+Serverless by default, with an opt-in escape hatch:
 
-### New Event Kinds
+1. **LAN host candidates** — same network, <10ms, serverless. The floor.
+2. **IPv6 host candidates** — carrier/routable-v6 simultaneous-open over Tor-signaled ICE. The WAN workhorse (~70-85% of pairs, the same envelope 11c hits). No server, no metadata leak.
+3. **IPv4 host on permissive NAT** — opportunistic; ICE tries it automatically.
+4. **Fail honestly** — if no direct path forms within the ICE timeout, the call cannot connect (no Tor fallback for audio). UI: *"Couldn't connect directly — try the same WiFi, or set up a relay."*
 
-| Kind | Name | Content | Ephemeral |
-|------|------|---------|-----------|
-| 10 | RoomCreate | `{ room_id, name, invited_pubkeys }` | Yes |
-| 11 | RoomJoin | `{ room_id }` | Yes |
-| 12 | RoomLeave | `{ room_id }` | Yes |
-| 13 | RoomClose | `{ room_id }` | Yes |
+**Hard rules:** `RTCConfiguration.iceServers` defaults to `[]`; never set `iceTransportPolicy: relay`; keep IPv6 ICE enabled. **Opt-in escape hatch:** a Settings field where a user pastes their own `stun:`/`turn:` URLs (e.g. self-hosted coturn) — off by default, labeled as leaving the no-servers guarantee. **No public STUN by default** (ethos violation + IP/timing leak). Where `PeerReachabilityMonitor` already reports `libp2pDirect` reachable for a peer, a v6 voice call is very likely to succeed — surface that as a hint.
 
-Kinds 7-9 reserved for future feed events (DMs, groups, etc.).
+## Group topology
 
-### Ephemeral Events
+**v1: full mesh, hard cap 4.** Each device connects to every other (3 conns/device, Opus @ 64kbps ≈ 192kbps — trivial). Deferred: **v2** participant-as-relay forwarding (~95% group coverage, no servers) and mixer/SFU for 5-8; **v3** relay-as-TURN (the relay has no UDP socket and the spare-device relay sits behind NAT, so only the standalone/VPS tier could ever host it — requires a new clearnet UDP listener + TURN impl + threat-model rework).
 
-Room signaling events are **not** part of the persistent feed:
-- Delivered via WebSocket signaling channel, not `/manifest` or `/events`
-- Signed with Ed25519 (authentication) but encrypted **per-recipient** with pairwise X25519 keys, not the feed key
-- Never stored in the events table — processed immediately and discarded
-- Convention: `kind >= 10` = ephemeral
+## Room model & encryption
 
-Envelope:
-```
-EphemeralEncryptedEvent {
-  sender_pubkey:    string
-  recipient_pubkey: string
-  nonce:            bytes[24]
-  payload:          XChaCha20-Poly1305(pairwise_key, nonce, cbor(Event))
-}
-```
-
-The pairwise key is derived the same way as for feed key exchange but with a distinct salt:
-`crypto_kdf(X25519_DH(my_sk, their_pk), ctx="starlingsig", info=my_pk || their_pk)`
-
-### WebSocket Endpoint
+- **Invite-only among mutual follows.** Creator picks participants from the mutual-follow list (max 3 invitees). No open/discoverable rooms.
+- **Room session key** — creator generates a random 256-bit key, seals it to each participant via the pairwise signaling key. Used as a membership token, **not** the audio key. Audio is E2E via DTLS-SRTP (fingerprints exchanged over the encrypted signaling channel).
+- **Lifecycle over signaling** — `roomInvite`/`roomAccept`/`roomDecline`/`roomLeave`/`roomClose` + `offer`/`answer`/`iceCandidate` + `muteStatus`/`speakingStatus`, each a `SignalingMessage` sealed per-recipient with a **fresh timestamp** (the ±30s window forbids cached frames).
 
-New route on shelf server: **`GET /ws/signal`**
+## Implementation
 
-- Auth via headers on upgrade: `X-Starling-Pubkey` + `X-Starling-Sig` (Ed25519 sign of `"websocket-upgrade" + timestamp`)
-- Rejects if timestamp >30s old (replay protection)
-- Carries CBOR-serialized `EphemeralEncryptedEvent` frames
-- Heartbeat: ping/pong every 30s, close after 3 missed
+### Phase A — Voice signaling layer
+- **New `lib/services/voice/room_signaling.dart`** — above `SignalingService`. Per-participant channel open/reuse (`signaling.connect(card)`), fan-out send (re-seal a fresh-timestamped copy per recipient), inbound demux by `roomId`, reconnect-on-drop, dedup by the `SignalingMessage` equality tuple (handles the inbound-via-dispatcher + outbound-direct double path). Subscribes directly to outbound channels (broadcast stream); receives inbound via the dispatcher hook.
+- **Modify `signaling_dispatcher.dart`** — add `registerVoiceHandler(void Function(SignalingChannel, SignalingMessage))` / `unregister`; route all ten voice types to it (drop with a log if none registered). Keep `libp2pConnect` as-is.
+- **Modify `mock_signaling_service.dart`** — add loopback (paired delivery) so two mock services can drive a full two-peer flow in tests.
 
-## NAT Traversal Strategy
+### Phase B — Voice service core (WebRTC)
+- **New** `lib/services/voice_service.dart` (interface), `lib/services/voice/webrtc_voice_service.dart` (flutter_webrtc: `getUserMedia({audio:true})`, one `RTCPeerConnection` per peer, SDP offer/answer + trickle ICE over `RoomSignaling`, mute via track-enable, speaker route, `audioLevelStream` from stats; `iceServers` default `[]`), `lib/services/voice/ice_config.dart` (default-empty + user-pasted servers), `lib/services/mocks/mock_voice_service.dart`.
+- **New** `lib/models/voice_room.dart` — `VoiceRoom`, `VoiceParticipant`, `VoiceRoomState`, `ParticipantConnectionState{connecting,connected,reconnecting,disconnected}`.
+- **New** `lib/providers/voice_provider.dart` + binding in `providers/service_providers.dart`; optional `kVoiceEnabled` flag in `utils/feature_flags.dart`.
 
-Without developer-operated TURN servers:
-
-| Scenario | Audio works? | Latency |
-|----------|-------------|---------|
-| LAN (same WiFi) | Always | <10ms |
-| WAN, hole-punch succeeds (~70%) | Yes | 50-200ms |
-| WAN, hole-punch fails (~30%) | **No** (v1) | N/A |
-| WAN, Tor-only path | **No** — Tor too slow for audio | N/A |
-
-### Phased approach:
-1. **v1**: LAN + STUN hole-punch. If ICE fails, UI shows "Cannot connect — try the same network or set up a relay." Honest about the limitation.
-2. **v2 — Participant-as-relay**: If A cannot reach C but both can reach B, B relays audio between them. Improves WAN coverage to ~95% in group calls.
-3. **v3 — Relay-as-TURN**: Spare-device relay gets UDP forwarding. User-configured external TURN supported via `RTCConfiguration.iceServers`.
+### Phase C — Room management + storage
+- **New** `lib/services/voice/room_manager.dart` — create/invite/join/leave/close, roster, session-key seal/distribution, mutual-follow + 4-cap enforcement.
+- **New** drift tables + DAO: `voice_rooms`, `voice_room_participants` (local-only history, 7-day retention) under `lib/services/storage/`.
+- **Modify** `storage_service.dart` + `drift_storage_service.dart` (`saveVoiceRoom`, `updateVoiceRoomEnded`, `getRecentVoiceRooms`, `saveVoiceRoomParticipant`, `evictOldVoiceRooms`); `database.dart` schema v7→v8; `retention.dart` 7-day eviction.
 
-### When hole-punching fails
+### Phase D — UI
+- **New** `lib/screens/voice/{room_list,create_room,active_room}_screen.dart`, `lib/widgets/voice/{incoming_invite_sheet,call_overlay,participant_avatar}.dart`. Reuse Plan 04a design system (`Avatar`, `Sheet`, buttons, `SyncDot`).
+- **Modify** router + add an entry point (Friends tab / contact action sheet); surface the "voice likely to work" hint.
 
-Hole-punching fails when the NAT assigns a different external port for each destination (symmetric NAT). STUN reveals your port as seen by the STUN server, but the NAT picks a different port when you send to the actual peer. Specific real-world cases:
+### Phase E — Platform config + hardening
+- **Deps** (`pubspec.yaml`): add `flutter_webrtc`, `wakelock_plus`, `permission_handler` (`shelf_web_socket`/`web_socket_channel` already present). No minSdk/iOS-target bumps (Android 26 / iOS 26 clear flutter_webrtc).
+- **iOS**: `NSMicrophoneUsageDescription`; append `audio` to `UIBackgroundModes`; `AVAudioSession` `.playAndRecord`/`.voiceChat` at call start. **No CallKit/PushKit** (serverless; consistent with no-push-notifications). Foreground-initiated calls only.
+- **Android**: `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS`, `FOREGROUND_SERVICE_MICROPHONE`; parameterize Plan 14's `ForegroundServiceController.serviceTypes` to include `microphone` for call duration (currently hardcoded `dataSync`).
+- **Settings**: opt-in custom-ICE field (consumed by `ice_config.dart`).
+- **Hardening**: ICE auto-reconnect (~10s), mic-permission-denied UX, `wakelock_plus` during call, battery/thermal warnings, background lifecycle.
 
-- **Both peers on mobile data (LTE/5G)** — carriers use CGNAT, often symmetric. Most common failure.
-- **Corporate / university network** — enterprise firewalls block unsolicited inbound UDP.
-- **Hotel / airport / coffee shop WiFi** — captive portals with restrictive NAT.
-- **Double NAT** — ISP CGNAT + user's router. If either layer is symmetric, it breaks.
+## Known limitations (v1)
 
-## Group Topology
+1. ~15-30% of WAN pairs can't connect (IPv4-only-both-ends / no working v6). No default TURN; UI is honest; user can opt into their own TURN.
+2. No voice over Tor (too slow) — Tor is signaling only.
+3. 4-person cap (full mesh, no mixer).
+4. No background voice on iOS beyond the `audio` mode; no CallKit incoming-while-killed (no VoIP push server).
+5. No invite push notifications — app must be open to receive an invite.
+6. No recording (by design).
 
-### v1: Full Mesh (2-4 participants)
+## Verification
 
-Each device connects to every other. At N=4: 3 connections per device, ~192kbps up/down (Opus @ 64kbps). Trivial for any phone/network.
-
-**Hard cap: 4 participants in v1.**
-
-### v2: Mixer Node (5-8 participants)
-
-One participant (best connectivity) or a spare-device relay acts as mixer/SFU — receives all streams, sends N-1 mixed streams. Reduces per-device load from O(N) to O(1).
-
-**Hard cap: 8 participants.** Beyond this, even a mixer on a phone struggles with CPU/battery.
-
-## Encryption
-
-### Signaling
-Pairwise X25519 key exchange (reuses existing crypto infrastructure):
-- Derive key: `crypto_kdf(X25519_DH(my_sk, their_pk), ctx="starlingsig", info=my_pk || their_pk)`
-- Encrypt: `XChaCha20-Poly1305(pairwise_key, random_nonce, message)`
-
-### Audio
-DTLS-SRTP (WebRTC built-in):
-- SDP offer/answer containing DTLS fingerprints exchanged over E2E encrypted signaling channel
-- WebRTC verifies fingerprints during DTLS handshake
-- SRTP keys derived from DTLS session
-- Result: E2E encrypted audio — attacker must compromise both signaling encryption AND DTLS
-
-### Room Session Key
-- Creator generates random 256-bit key, distributes to each participant via pairwise X25519 encryption
-- Used as authentication data (proves room membership), **not** as audio encryption key
-- DTLS-SRTP provides forward secrecy per audio stream (a static room key would not)
-
-## Room Access Model
-
-- Voice rooms are invite-only among **mutual follows** (both parties follow each other)
-- Creator selects participants from mutual follow list
-- No open/discoverable rooms — consistent with Starling's "no strangers" principle
-
-## Storage Changes
-
-Two new tables (ephemeral, 7-day retention):
-
-```sql
-CREATE TABLE voice_rooms (
-    id              TEXT PRIMARY KEY,
-    name            TEXT NOT NULL,
-    creator_pubkey  TEXT NOT NULL,
-    created_at      INTEGER NOT NULL,
-    ended_at        INTEGER,
-    participant_count INTEGER NOT NULL DEFAULT 1
-);
-
-CREATE TABLE voice_room_participants (
-    room_id     TEXT NOT NULL REFERENCES voice_rooms(id),
-    pubkey      TEXT NOT NULL,
-    joined_at   INTEGER NOT NULL,
-    left_at     INTEGER,
-    PRIMARY KEY (room_id, pubkey)
-);
-
-CREATE INDEX idx_voice_rooms_recent ON voice_rooms(created_at DESC);
-```
-
-Add to `StorageService` (`lib/services/storage_service.dart`):
-- `saveVoiceRoom`, `updateVoiceRoomEnded`, `getRecentVoiceRooms`, `saveVoiceRoomParticipant`, `evictOldVoiceRooms`
-
-## New Types
-
-Add to `lib/services/types.dart` or new `lib/models/voice_room.dart`:
-
-```dart
-class VoiceRoom {
-  final String id;
-  final String name;
-  final String creatorPubkey;
-  final int createdAt;
-  final List<VoiceParticipant> participants;
-  final List<String> invitedPubkeys;
-}
-
-class VoiceParticipant {
-  final String pubkey;
-  final String? displayName;
-  final bool isMuted;
-  final bool isSpeaking;
-  final ParticipantConnectionState connectionState;
-}
-
-enum ParticipantConnectionState {
-  connecting, connected, reconnecting, disconnected
-}
-
-class VoiceRoomState {
-  final VoiceRoom room;
-  final bool localMuted;
-  final bool speakerMode;
-}
-
-class SignalingChannel {
-  final String remotePubkey;
-  final PeerTransport transport;
-  Future<void> send(SignalingMessage message);
-  Stream<SignalingMessage> get messages;
-  bool get isOpen;
-  Future<void> close();
-}
-
-class SignalingMessage {
-  final SignalingMessageType type;
-  final String roomId;
-  final String senderPubkey;
-  final Map<String, dynamic> payload;
-  final int timestamp;
-}
-
-enum SignalingMessageType {
-  roomInvite, roomAccept, roomDecline, roomLeave, roomClose,
-  offer, answer, iceCandidate, muteStatus, speakingStatus
-}
-```
-
-## UI Screens
-
-| Screen | Purpose |
-|--------|---------|
-| **Room List** | "Start a Room" button + recent room history (last 10) |
-| **Create Room** | Name field + mutual follow picker (max 3 invitees) |
-| **Incoming Invite Sheet** | Modal: room name, creator, "Join" / "Decline", 60s auto-dismiss |
-| **Active Room** | Participant avatar grid with speaking indicators, mute/speaker/leave buttons, connection quality dots, elapsed time |
-| **Call Overlay** | Floating mini-banner when navigating away mid-call |
-
-## Dependencies
-
-```yaml
-flutter_webrtc: ^0.12.x        # WebRTC peer connections + audio
-shelf_web_socket: ^2.0.x        # WebSocket upgrade for shelf server
-web_socket_channel: ^3.0.x      # Outbound WebSocket client
-wakelock_plus: ^1.2.x           # Keep screen awake during call
-permission_handler: ^11.x       # Microphone permission
-```
-
-No new native FFI — `flutter_webrtc` ships its own platform binaries.
-
-## Implementation Phases
-
-### Phase A: Signaling Infrastructure
-**Depends on**: Plan 07 (server), Plan 08 (follow flow)
-
-New files:
-- `lib/services/signaling_service.dart` — abstract interface
-- `lib/services/signaling/ws_signaling_service.dart` — WebSocket implementation
-- `lib/services/mocks/mock_signaling_service.dart`
-- `lib/server/handlers/signaling_handler.dart` — WebSocket upgrade handler
-- `lib/models/signaling_message.dart` — message types
-- `lib/models/ephemeral_encrypted_event.dart` — pairwise-encrypted envelope
-
-Modified:
-- `lib/server/http_server.dart` — add `/ws/signal` route
-- `lib/providers/service_providers.dart` — add `signalingServiceProvider`
-
-**Verify**: Two devices on LAN establish WebSocket, exchange encrypted messages, auth rejects invalid signatures.
-
-### Phase B: Voice Service Core
-**Depends on**: Phase A
-
-New files:
-- `lib/services/voice_service.dart` — abstract interface
-- `lib/services/voice/webrtc_voice_service.dart` — flutter_webrtc implementation
-- `lib/services/mocks/mock_voice_service.dart`
-- `lib/models/voice_room.dart` — VoiceRoom, VoiceParticipant, VoiceRoomState types
-- `lib/providers/voice_provider.dart`
-
-**Verify**: Two devices on LAN establish WebRTC connection via signaling, bidirectional audio works, mute works, clean disconnect.
-
-### Phase C: Room Management
-**Depends on**: Phase B
-
-New files:
-- `lib/services/voice/room_manager.dart` — room lifecycle orchestration
-- `lib/services/storage/tables/voice_rooms_table.dart`
-- `lib/services/storage/tables/voice_room_participants_table.dart`
-- `lib/services/storage/daos/voice_rooms_dao.dart`
-
-Modified:
-- `lib/models/event_kind.dart` — add kinds 10-13
-- `lib/services/storage_service.dart` — add voice room methods
-- `lib/services/storage/drift_storage_service.dart` — implement voice room methods
-- `lib/services/storage/database.dart` — schema migration
-
-**Verify**: Create room, invite peer, peer joins, 3-person mesh works, leave/close room, metadata persisted to DB.
-
-### Phase D: UI
-**Depends on**: Phase C
-
-New files:
-- `lib/screens/voice/room_list_screen.dart`
-- `lib/screens/voice/create_room_screen.dart`
-- `lib/screens/voice/active_room_screen.dart`
-- `lib/widgets/voice/incoming_invite_sheet.dart`
-- `lib/widgets/voice/call_overlay.dart`
-- `lib/widgets/voice/participant_avatar.dart` — with speaking indicator animation
-
-Modified:
-- App router — add voice room routes
-
-**Verify**: Full user flow end-to-end: create room from UI, invite friend, friend sees invite, joins, both talk, leave cleanly.
-
-### Phase E: Hardening
-- Reconnection on network glitch (auto-retry ICE for 10s before giving up)
-- Microphone permission handling (explain and link to settings on denial)
-- iOS AVAudioSession configuration (`.playAndRecord` category)
-- Android audio focus management
-- Background lifecycle: leave room on iOS background; Android foreground service keeps call alive (requires Plan 14)
-- Battery/thermal monitoring and warnings
-
-## Known Limitations (v1)
-
-1. **~30% of WAN peer pairs can't connect** — symmetric NAT / CGNAT / corporate firewalls. No TURN fallback. UI is honest about it.
-2. **No voice over Tor** — Tor is signaling only. If peers have no direct IP path, voice is impossible between them.
-3. **4-person cap** — full mesh only, no mixer.
-4. **No background voice on iOS** — call ends on background (unless CallKit is pursued later).
-5. **No push notifications for invites** — consistent with the rest of Starling. App must be open to receive invites.
-6. **No audio recording** — by design, not limitation. Consistent with Starling's privacy philosophy.
-
-## Key Existing Files to Modify
-
-- `lib/models/event_kind.dart` — add kinds 10-13
-- `lib/services/types.dart` — add voice-related types
-- `lib/services/storage_service.dart` — voice room storage methods
-- `lib/services/storage/database.dart` — migration adding tables
-- `lib/services/storage/drift_storage_service.dart` — implement voice room storage
-- `lib/services/crypto_service.dart` — reuse `deriveSharedKey` with `"starling-signaling-v1"` salt
-- `lib/providers/service_providers.dart` — new providers
-- `lib/server/http_server.dart` — WebSocket route
-- `pubspec.yaml` — new dependencies
+- **Unit/integration (`flutter test`):** fan-out seals N fresh-timestamped copies; dispatcher routes each voice type to the registered handler; ±30s replay drops stale frames; mock-loopback two-peer `invite→accept→offer→answer→ice` flow; session-key seal/unseal; 4-cap + mutual-follow gates; storage round-trip + 7-day eviction; migration v7→v8; assert `starsig0`/lex-sorted derivation (no `starlingsig` regressions).
+- **Manual, two real devices:** (1) **LAN** — create/invite/join, bidirectional audio, mute, leave/close. (2) **WAN over mobile data** — invite over Tor, audio connects directly over IPv6. (3) **Honest-fail** — IPv4-only both ends → clean "couldn't connect" message, no hang. (4) **Opt-in hatch** — paste a self-hosted `turn:` URL → previously-failing pair connects.

@@ -297,7 +297,7 @@ final class RelayPushCoordinatorProvider
 }
 
 String _$relayPushCoordinatorHash() =>
-    r'e73c764f3b58bcdc30705c7c5b0a60ab56f1419c';
+    r'589047c820dc10b18181b32faa087e3c5cd2ea1d';
 
 /// Phone-side relay pairing orchestrator (Plan 15). Async because it
 /// depends on [relayPushCoordinator]. Null until Tor is ready.
@@ -347,4 +347,4 @@ final class RelayPairingServiceProvider
 }
 
 String _$relayPairingServiceHash() =>
-    r'd6413732f232026ef3635273796693d3b32ff136';
+    r'cde01492ba486e195f17d25e7621d80b0fb61e2f';

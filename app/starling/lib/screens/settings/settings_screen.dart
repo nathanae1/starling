@@ -65,6 +65,12 @@ class SettingsScreen extends StatelessWidget {
                     detail: 'Per-friend LAN and Tor reachability',
                     onTap: () => context.push('/settings/connection'),
                   ),
+                  _SettingsRow(
+                    icon: LucideIcons.phone,
+                    label: 'Voice',
+                    detail: 'Custom ICE servers for voice calls',
+                    onTap: () => context.push('/voice/settings'),
+                  ),
                 ],
               ),
             ),

@@ -34,12 +34,15 @@ class ForegroundServiceState extends _$ForegroundServiceState {
   Future<bool> setEnabled(bool enabled) async {
     if (!Platform.isAndroid) return false;
     if (enabled) {
-      final ok = await ForegroundServiceController.instance.start();
+      final ok = await ForegroundServiceController.instance
+          .setPersistentEnabled(true);
       state = AsyncData(ok);
       return ok;
     } else {
-      await ForegroundServiceController.instance.stop();
-      state = const AsyncData(false);
+      // Reconciles to stopped only if no call is keeping the service alive.
+      final running = await ForegroundServiceController.instance
+          .setPersistentEnabled(false);
+      state = AsyncData(running);
       return false;
     }
   }

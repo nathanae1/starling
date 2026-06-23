@@ -17,6 +17,8 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Starling uses the camera to capture photos for your posts and to scan friend invite QR codes.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Starling uses the microphone for voice calls with your friends.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Starling finds nearby friends on your WiFi to sync your feed without a server.</string>
 	<key>NSBonjourServices</key>
@@ -99,6 +101,10 @@
 	<array>
 		<string>fetch</string>
 		<string>processing</string>
+		<!-- Plan 16: keep an active voice call alive when the screen locks /
+		     the app backgrounds. No CallKit/VoIP push (serverless), so this
+		     only sustains an already-running call, never wakes for one. -->
+		<string>audio</string>
 	</array>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>

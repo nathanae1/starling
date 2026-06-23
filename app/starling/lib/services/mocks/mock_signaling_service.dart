@@ -5,22 +5,60 @@ import '../../models/models.dart';
 import '../signaling_service.dart';
 import '../types.dart';
 
-/// In-memory mock SignalingService for testing without real WebSockets.
+/// In-memory mock [SignalingService] for testing without real WebSockets.
 ///
-/// Channels are connected in-memory: calling [connect] returns a channel
-/// whose [send] delivers directly to the paired channel's [messages] stream.
+/// Two usage modes:
+///  * **Capture-only** (default): [connect] returns a channel whose [send]
+///    records into `sentMessages`; tests drive inbound traffic explicitly via
+///    [simulateInbound] / [MockSignalingChannel.simulateReceive].
+///  * **Loopback**: [link] two services together (by [localPubkey]); then a
+///    [send] on one side is delivered to the paired channel's [messages]
+///    stream on the other side, firing that side's `onInboundConnection`
+///    handler. Lets a full two-peer voice flow run end-to-end in a unit test.
 class MockSignalingService implements SignalingService {
+  MockSignalingService({this.localPubkey = ''});
+
+  /// This service's own Ed25519 pubkey — used to address loopback peers.
+  final String localPubkey;
+
   final Map<String, SignalingChannel> _channels = {};
+  final Map<String, MockSignalingService> _peers = {};
   void Function(SignalingChannel channel)? _inboundHandler;
+
+  /// Wire two services for loopback delivery (symmetric).
+  void link(MockSignalingService other) {
+    _peers[other.localPubkey] = other;
+    other._peers[localPubkey] = this;
+  }
 
   @override
   Future<SignalingChannel> connect(ConnectionCard peer) async {
-    final channel = MockSignalingChannel(
+    final existing = _channels[peer.pubkey];
+    if (existing != null && existing.isOpen) return existing;
+
+    final localChannel = MockSignalingChannel(
       remotePubkey: peer.pubkey,
       transport: PeerTransport.lan,
     );
-    _channels[peer.pubkey] = channel;
-    return channel;
+    _channels[peer.pubkey] = localChannel;
+
+    // Loopback: cross-link with the peer service's inbound channel for us,
+    // creating + announcing it on first contact.
+    final peerService = _peers[peer.pubkey];
+    if (peerService != null) {
+      var remoteChannel = peerService._channels[localPubkey];
+      if (remoteChannel is! MockSignalingChannel || !remoteChannel.isOpen) {
+        remoteChannel = MockSignalingChannel(
+          remotePubkey: localPubkey,
+          transport: PeerTransport.lan,
+        );
+        peerService._channels[localPubkey] = remoteChannel;
+        peerService._inboundHandler?.call(remoteChannel);
+      }
+      localChannel._peer = remoteChannel;
+      remoteChannel._peer = localChannel;
+    }
+    return localChannel;
   }
 
   @override
@@ -71,11 +109,16 @@ class MockSignalingChannel implements SignalingChannel {
   final _controller = StreamController<Uint8List>.broadcast();
   bool _isOpen = true;
 
+  /// In loopback mode, the channel on the other service this one delivers to.
+  MockSignalingChannel? _peer;
+
   @override
   Future<void> send(Uint8List data) async {
     if (!_isOpen) throw StateError('Channel is closed');
-    // In tests, the sent data can be captured by listening to sentMessages.
+    // Always capture for capture-only tests.
     _sentMessages.add(data);
+    // In loopback mode, deliver to the linked channel's inbound stream.
+    _peer?._deliver(data);
   }
 
   @override
@@ -97,6 +140,11 @@ class MockSignalingChannel implements SignalingChannel {
   /// Simulate receiving a message from the remote peer.
   void simulateReceive(Uint8List data) {
     if (!_isOpen) throw StateError('Channel is closed');
+    _controller.add(data);
+  }
+
+  void _deliver(Uint8List data) {
+    if (!_isOpen || _controller.isClosed) return;
     _controller.add(data);
   }
 }

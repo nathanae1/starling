@@ -9,12 +9,20 @@ import '../crypto_service.dart';
 import '../signaling_service.dart';
 import 'signaling_envelope.dart';
 
+/// Handler for inbound voice-room signaling messages (Plan 16). Registered
+/// by `RoomSignaling.start`; receives every voice [SignalingMessageType] on
+/// the channel it arrived on, already decrypted.
+typedef VoiceSignalingHandler = void Function(
+  SignalingChannel channel,
+  SignalingMessage message,
+);
+
 /// Single owner of [SignalingService.onInboundConnection]. Listens to each
 /// authenticated channel, decrypts incoming [EphemeralEncryptedEvent]
-/// envelopes, and routes the inner [SignalingMessage] by type. Today only
-/// [SignalingMessageType.libp2pConnect] is dispatched (to
-/// [Libp2pUpgrader.handleInboundLibp2pConnect]); other types fall through
-/// for future consumers (Plan 16 voice rooms).
+/// envelopes, and routes the inner [SignalingMessage] by type.
+/// [SignalingMessageType.libp2pConnect] is dispatched to
+/// [Libp2pUpgrader.handleInboundLibp2pConnect]; every voice type is routed to
+/// the registered [VoiceSignalingHandler] (Plan 16 voice rooms).
 ///
 /// The identity + secret key are looked up via the provided closures on
 /// every inbound message — see `[[project_target_users]]`-style note:
@@ -23,7 +31,7 @@ import 'signaling_envelope.dart';
 class SignalingDispatcher {
   SignalingDispatcher({
     required SignalingService signaling,
-    required Libp2pUpgrader upgrader,
+    Libp2pUpgrader? upgrader,
     required CryptoService crypto,
     required Future<String?> Function() localPubkeyLookup,
     required Future<Uint8List?> Function() localSecretKeyLookup,
@@ -34,13 +42,25 @@ class SignalingDispatcher {
         _localSecretKeyLookup = localSecretKeyLookup;
 
   final SignalingService _signaling;
-  final Libp2pUpgrader _upgrader;
+  final Libp2pUpgrader? _upgrader;
   final CryptoService _crypto;
   final Future<String?> Function() _localPubkeyLookup;
   final Future<Uint8List?> Function() _localSecretKeyLookup;
 
   bool _started = false;
   final _subscriptions = <StreamSubscription<dynamic>>[];
+  VoiceSignalingHandler? _voiceHandler;
+
+  /// Register the single consumer of inbound voice-room messages. Replacing
+  /// an existing handler is allowed (idempotent re-registration).
+  void registerVoiceHandler(VoiceSignalingHandler handler) {
+    _voiceHandler = handler;
+  }
+
+  /// Remove [handler] if it is the currently-registered voice handler.
+  void unregisterVoiceHandler(VoiceSignalingHandler handler) {
+    if (identical(_voiceHandler, handler)) _voiceHandler = null;
+  }
 
   /// Idempotent. Registers the dispatcher as the single inbound-channel
   /// consumer.
@@ -98,7 +118,7 @@ class SignalingDispatcher {
 
     switch (msg.type) {
       case SignalingMessageType.libp2pConnect:
-        _upgrader.handleInboundLibp2pConnect(channel, msg);
+        _upgrader?.handleInboundLibp2pConnect(channel, msg);
       case SignalingMessageType.roomInvite:
       case SignalingMessageType.roomAccept:
       case SignalingMessageType.roomDecline:
@@ -109,8 +129,16 @@ class SignalingDispatcher {
       case SignalingMessageType.iceCandidate:
       case SignalingMessageType.muteStatus:
       case SignalingMessageType.speakingStatus:
-        // Reserved for Plan 16 voice-room dispatch.
-        break;
+        final handler = _voiceHandler;
+        if (handler != null) {
+          handler(channel, msg);
+        } else {
+          developer.log(
+            'signaling_dispatcher: no voice handler registered, dropping '
+            '${msg.type.value}',
+            name: 'signaling_dispatcher',
+          );
+        }
     }
   }
 
