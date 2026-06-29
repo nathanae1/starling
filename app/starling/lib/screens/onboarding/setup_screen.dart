@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../providers/onboarding_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../theme/starling_theme.dart';
+import '../../utils/avatar_picker.dart';
 import '../../widgets/avatar.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/inputs.dart';
@@ -40,6 +41,14 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
 
   bool get _canContinue => _controller.text.trim().isNotEmpty && !_creating;
 
+  Future<void> _pickAvatar() async {
+    final bytes = await pickAndCropAvatar(context);
+    if (bytes == null || !mounted) return;
+    ref
+        .read(onboardingProfileControllerProvider.notifier)
+        .setAvatarBytes(bytes);
+  }
+
   Future<void> _onContinue() async {
     setState(() => _creating = true);
     try {
@@ -49,9 +58,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _creating = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not create identity: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not create identity: $e')));
     }
   }
 
@@ -59,6 +68,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
     final name = _controller.text.trim();
+    final avatarBytes = ref
+        .watch(onboardingProfileControllerProvider)
+        .avatarBytes;
 
     return Scaffold(
       backgroundColor: starling.colors.paper,
@@ -70,11 +82,17 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
             children: [
               StarlingIconButton(
                 onPressed: () => context.go('/onboarding/welcome'),
+                semanticLabel: 'Back',
                 child: const Icon(LucideIcons.arrowLeft, size: 20),
               ),
               const SizedBox(height: 18),
-              Text('Pick a name and photo',
-                  style: starling.typography.h1.copyWith(fontSize: 28, height: 1.15)),
+              Text(
+                'Pick a name and photo',
+                style: starling.typography.h1.copyWith(
+                  fontSize: 28,
+                  height: 1.15,
+                ),
+              ),
               const SizedBox(height: 6),
               Text(
                 'Just for your friends. You can change it anytime.',
@@ -82,34 +100,40 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
               ),
               const SizedBox(height: 36),
               Center(
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Avatar(
-                      name: name.isEmpty ? 'Sam' : name,
-                      color: starling.colors.clay,
-                      size: AvatarSize.lg,
-                    ),
-                    Positioned(
-                      bottom: -4,
-                      right: -4,
-                      child: Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: starling.colors.paper,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: starling.colors.hairline),
-                        ),
-                        alignment: Alignment.center,
-                        child: Icon(
-                          LucideIcons.camera,
-                          size: 16,
-                          color: starling.colors.graphite,
+                child: GestureDetector(
+                  onTap: _pickAvatar,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Avatar(
+                        name: name.isEmpty ? 'You' : name,
+                        color: starling.colors.clay,
+                        size: AvatarSize.lg,
+                        imageProvider: avatarBytes != null
+                            ? MemoryImage(avatarBytes)
+                            : null,
+                      ),
+                      Positioned(
+                        bottom: -4,
+                        right: -4,
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: starling.colors.paper,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: starling.colors.hairline),
+                          ),
+                          alignment: Alignment.center,
+                          child: Icon(
+                            LucideIcons.camera,
+                            size: 16,
+                            color: starling.colors.graphite,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 28),

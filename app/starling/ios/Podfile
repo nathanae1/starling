@@ -49,6 +49,20 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
 
+    # permission_handler_apple defaults every PERMISSION_* macro to 0, which
+    # compiles the matching permission handler OUT — so `Permission.microphone
+    # .request()` returns `denied` without ever showing the system dialog,
+    # regardless of NSMicrophoneUsageDescription. Voice calls (Plan 16) need
+    # the mic, so enable just that one. Robust against GCC_PREPROCESSOR_
+    # DEFINITIONS already being a String or Array, and idempotent across
+    # repeated `pod install` runs.
+    target.build_configurations.each do |config|
+      defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || ['$(inherited)']
+      defs = [defs] if defs.is_a?(String)
+      defs << 'PERMISSION_MICROPHONE=1' unless defs.include?('PERMISSION_MICROPHONE=1')
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs
+    end
+
     # share_plus 12.x ships its iOS sources in a Swift Package Manager
     # layout (`Sources/share_plus/include/...`) that doesn't play nice with
     # `use_modular_headers!`. The auto-generated umbrella header emits a

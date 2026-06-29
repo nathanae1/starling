@@ -21,8 +21,8 @@ class KeyRefreshThrottle {
   KeyRefreshThrottle({
     required Clock clock,
     Duration cooldown = const Duration(seconds: 60),
-  })  : _clock = clock,
-        _cooldown = cooldown;
+  }) : _clock = clock,
+       _cooldown = cooldown;
 
   final Clock _clock;
   final Duration _cooldown;

@@ -21,8 +21,14 @@ class EventKind {
   static const delete = EventKind(6);
 
   /// Known kinds for iteration. Does not include unknown kinds.
-  static List<EventKind> get values =>
-      const [post, profile, followList, comment, like, delete];
+  static List<EventKind> get values => const [
+    post,
+    profile,
+    followList,
+    comment,
+    like,
+    delete,
+  ];
 
   /// Returns the matching known kind, or a new EventKind for unknown values.
   /// Never throws — unknown kinds are valid and must be preserved.

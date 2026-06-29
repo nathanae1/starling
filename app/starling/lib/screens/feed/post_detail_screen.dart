@@ -54,14 +54,16 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
     return Scaffold(
       backgroundColor: starling.colors.paper,
       body: eventAsync.when(
-        loading: () =>
-            const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Text('$e',
-                style: starling.typography.small
-                    .copyWith(color: starling.colors.danger)),
+            child: Text(
+              '$e',
+              style: starling.typography.small.copyWith(
+                color: starling.colors.danger,
+              ),
+            ),
           ),
         ),
         data: (event) {
@@ -193,6 +195,7 @@ class _DetailHeader extends ConsumerWidget {
         children: [
           StarlingIconButton(
             onPressed: () => Navigator.of(context).maybePop(),
+            semanticLabel: 'Back',
             child: const Icon(LucideIcons.arrowLeft, size: 20),
           ),
           const SizedBox(width: 4),

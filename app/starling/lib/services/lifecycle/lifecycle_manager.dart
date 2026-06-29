@@ -46,7 +46,6 @@ class LifecycleManager {
 
   final WidgetRef ref;
 
-
   FollowRetryPump? _retryPump;
   SyncPump? _syncPump;
   ProviderSubscription<AsyncValue<int?>>? _torPortSub;
@@ -415,7 +414,9 @@ class LifecycleManager {
     _log('libp2p prewarm: ${candidates.length} candidate follow(s)');
 
     final pool = Pool(3);
-    await Future.wait(candidates.map((f) => pool.run(() async {
+    await Future.wait(
+      candidates.map(
+        (f) => pool.run(() async {
           final conn = await factory.resolve(f.pubkey);
           if (conn == null) return;
           // LAN beats libp2p; libp2p already promoted means nothing to do.
@@ -429,7 +430,9 @@ class LifecycleManager {
             // Upgrader logs internally; prewarm failures stay on Tor
             // until the next sync re-tries.
           }
-        })));
+        }),
+      ),
+    );
   }
 
   /// Pull the 32-byte Ed25519 seed from the keychain-stored expanded secret.

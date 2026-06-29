@@ -40,12 +40,12 @@ class StarlingHttpServer {
     int rateLimitPerMinute = 120,
     int maxBodyBytes = 1024 * 1024,
     Random? random,
-  })  : _buildRouter = buildRouter,
-        _clock = clock,
-        _maxBindAttempts = maxBindAttempts,
-        _rateLimitPerMinute = rateLimitPerMinute,
-        _maxBodyBytes = maxBodyBytes,
-        _random = random ?? Random.secure();
+  }) : _buildRouter = buildRouter,
+       _clock = clock,
+       _maxBindAttempts = maxBindAttempts,
+       _rateLimitPerMinute = rateLimitPerMinute,
+       _maxBodyBytes = maxBodyBytes,
+       _random = random ?? Random.secure();
 
   factory StarlingHttpServer.social({
     required StorageService storage,
@@ -161,10 +161,7 @@ Router _buildSocialRouter({
   final router = Router();
   router.get(
     '/status',
-    statusHandler(
-      storage: storage,
-      identityLookup: identityLookup,
-    ),
+    statusHandler(storage: storage, identityLookup: identityLookup),
   );
   router.get(
     '/manifest',
@@ -184,25 +181,15 @@ Router _buildSocialRouter({
   );
   router.post(
     '/events',
-    eventsPushHandler(
-      storage: storage,
-      contentKey: contentKey,
-      clock: clock,
-    ),
+    eventsPushHandler(storage: storage, contentKey: contentKey, clock: clock),
   );
   router.get(
     '/media/<hash>',
-    mediaHandler(
-      storage: storage,
-      appSupportDir: appSupportDir,
-    ),
+    mediaHandler(storage: storage, appSupportDir: appSupportDir),
   );
   router.post(
     '/follow-request',
-    followRequestHandler(
-      storage: storage,
-      clock: clock,
-    ),
+    followRequestHandler(storage: storage, clock: clock),
   );
   router.post('/follow-accept', (Request request) async {
     final followService = followServiceLookup();
@@ -213,11 +200,7 @@ Router _buildSocialRouter({
   });
   router.get(
     '/ws/signal',
-    signalingHandler(
-      crypto: crypto,
-      onChannel: signalingInboundHandler,
-    ),
+    signalingHandler(crypto: crypto, onChannel: signalingInboundHandler),
   );
   return router;
 }
-

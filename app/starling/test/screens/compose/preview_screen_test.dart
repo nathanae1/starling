@@ -144,8 +144,8 @@ void main() {
     await tester.tap(find.widgetWithText(GhostButton, 'Back to edit'));
     await tester.pumpAndSettle();
 
-    // Compose is visible again: ✕ icon button is present.
-    expect(find.byType(StarlingIconButton), findsOneWidget);
+    // Compose is visible again.
+    expect(find.byType(ComposeScreen), findsOneWidget);
     // Caption preserved.
     expect(container.read(composeControllerProvider).caption, 'hello');
   });

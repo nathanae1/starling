@@ -8,6 +8,7 @@ import '../../providers/follows_provider.dart';
 import '../../providers/search_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../theme/starling_theme.dart';
+import '../../widgets/buttons.dart';
 import '../../widgets/empty_feed.dart';
 import 'feed_sync_search_bar.dart';
 import 'post_card.dart';
@@ -66,8 +67,7 @@ class _FeedList extends ConsumerWidget {
         data: (events) {
           if (events.isEmpty) {
             final hasFollows =
-                (ref.watch(followsStreamProvider).value ?? const [])
-                    .isNotEmpty;
+                (ref.watch(followsStreamProvider).value ?? const []).isNotEmpty;
             return _EmptyScroll(
               child: hasFollows ? const _NoPostsYet() : const EmptyFeed(),
             );
@@ -167,9 +167,17 @@ class _NoPostsYet extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Pull down to check for new posts from your friends.',
+            'Pull down to check for new posts from your friends — or share '
+            'the first one yourself.',
             textAlign: TextAlign.center,
             style: starling.typography.small,
+          ),
+          const SizedBox(height: 24),
+          Align(
+            child: PrimaryButton(
+              label: 'Share your first post',
+              onPressed: () => context.push('/compose'),
+            ),
           ),
         ],
       ),
@@ -203,7 +211,9 @@ class _ErrorState extends StatelessWidget {
         child: Text(
           message,
           textAlign: TextAlign.center,
-          style: starling.typography.small.copyWith(color: starling.colors.danger),
+          style: starling.typography.small.copyWith(
+            color: starling.colors.danger,
+          ),
         ),
       ),
     );

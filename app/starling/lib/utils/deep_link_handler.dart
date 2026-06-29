@@ -3,8 +3,10 @@ import 'package:app_links/app_links.dart';
 import 'connection_card_parser.dart';
 
 /// Wraps the platform deep-link stream and parses incoming
-/// `starling://connect?card=...` URIs into [ParsedInvite] events. URIs that
-/// don't match the scheme/host are dropped silently.
+/// `starling://connect?card=...` (friend invite) and
+/// `starling-relay://pair?card=...` (relay pairing, Plan 15) URIs into
+/// [ParsedInvite] events. URIs that don't match a known scheme/host are
+/// dropped silently.
 class DeepLinkHandler {
   DeepLinkHandler({AppLinks? appLinks}) : _appLinks = appLinks ?? AppLinks();
 
@@ -24,7 +26,9 @@ class DeepLinkHandler {
   }
 
   ParsedInvite? _parse(Uri uri) {
-    if (uri.scheme != 'starling' || uri.host != 'connect') return null;
+    final isFriendInvite = uri.scheme == 'starling' && uri.host == 'connect';
+    final isRelayPair = uri.scheme == 'starling-relay' && uri.host == 'pair';
+    if (!isFriendInvite && !isRelayPair) return null;
     return parseInvite(uri.toString());
   }
 }

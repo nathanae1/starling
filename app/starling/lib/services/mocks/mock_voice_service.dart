@@ -98,7 +98,8 @@ class MockVoiceService implements VoiceService {
 
   void emitLocalIce(String peerPubkey, Map<String, dynamic> candidate) =>
       _localIce.add(
-          VoiceIceCandidate(peerPubkey: peerPubkey, candidate: candidate));
+        VoiceIceCandidate(peerPubkey: peerPubkey, candidate: candidate),
+      );
 
   void emitPeerState(String peerPubkey, ParticipantConnectionState state) =>
       _peerStateCtrl.add(VoicePeerState(peerPubkey: peerPubkey, state: state));

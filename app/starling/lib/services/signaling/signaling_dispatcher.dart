@@ -12,10 +12,8 @@ import 'signaling_envelope.dart';
 /// Handler for inbound voice-room signaling messages (Plan 16). Registered
 /// by `RoomSignaling.start`; receives every voice [SignalingMessageType] on
 /// the channel it arrived on, already decrypted.
-typedef VoiceSignalingHandler = void Function(
-  SignalingChannel channel,
-  SignalingMessage message,
-);
+typedef VoiceSignalingHandler =
+    void Function(SignalingChannel channel, SignalingMessage message);
 
 /// Single owner of [SignalingService.onInboundConnection]. Listens to each
 /// authenticated channel, decrypts incoming [EphemeralEncryptedEvent]
@@ -35,11 +33,11 @@ class SignalingDispatcher {
     required CryptoService crypto,
     required Future<String?> Function() localPubkeyLookup,
     required Future<Uint8List?> Function() localSecretKeyLookup,
-  })  : _signaling = signaling,
-        _upgrader = upgrader,
-        _crypto = crypto,
-        _localPubkeyLookup = localPubkeyLookup,
-        _localSecretKeyLookup = localSecretKeyLookup;
+  }) : _signaling = signaling,
+       _upgrader = upgrader,
+       _crypto = crypto,
+       _localPubkeyLookup = localPubkeyLookup,
+       _localSecretKeyLookup = localSecretKeyLookup;
 
   final SignalingService _signaling;
   final Libp2pUpgrader? _upgrader;
@@ -78,15 +76,10 @@ class SignalingDispatcher {
     });
   }
 
-  Future<void> _handleMessage(
-    SignalingChannel channel,
-    Uint8List bytes,
-  ) async {
+  Future<void> _handleMessage(SignalingChannel channel, Uint8List bytes) async {
     final localPubkey = await _localPubkeyLookup();
     final localSecretKey = await _localSecretKeyLookup();
-    if (localPubkey == null ||
-        localPubkey.isEmpty ||
-        localSecretKey == null) {
+    if (localPubkey == null || localPubkey.isEmpty || localSecretKey == null) {
       developer.log(
         'signaling_dispatcher: identity not ready, dropping inbound bytes',
         name: 'signaling_dispatcher',
@@ -128,7 +121,6 @@ class SignalingDispatcher {
       case SignalingMessageType.answer:
       case SignalingMessageType.iceCandidate:
       case SignalingMessageType.muteStatus:
-      case SignalingMessageType.speakingStatus:
         final handler = _voiceHandler;
         if (handler != null) {
           handler(channel, msg);

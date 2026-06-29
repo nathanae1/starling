@@ -10,18 +10,16 @@ part of 'own_profile_provider.dart';
 // ignore_for_file: type=lint, type=warning
 /// Reads the latest kind=2 event for own pubkey and decodes its JSON content
 /// into a profile snapshot. Falls back to "You" with no avatar when no
-/// profile event has been written yet (the Plan 04 onboarding flow currently
-/// does not write one — see the project README and Plan 04 spec for the
-/// kind=2 contract; a future profile-edit screen, Plan 15, will create it).
+/// profile event has been written yet (e.g. a restore that hasn't re-synced)
+/// or the content is malformed.
 
 @ProviderFor(ownProfile)
 final ownProfileProvider = OwnProfileProvider._();
 
 /// Reads the latest kind=2 event for own pubkey and decodes its JSON content
 /// into a profile snapshot. Falls back to "You" with no avatar when no
-/// profile event has been written yet (the Plan 04 onboarding flow currently
-/// does not write one — see the project README and Plan 04 spec for the
-/// kind=2 contract; a future profile-edit screen, Plan 15, will create it).
+/// profile event has been written yet (e.g. a restore that hasn't re-synced)
+/// or the content is malformed.
 
 final class OwnProfileProvider
     extends
@@ -35,9 +33,8 @@ final class OwnProfileProvider
         $FutureProvider<OwnProfileSnapshot> {
   /// Reads the latest kind=2 event for own pubkey and decodes its JSON content
   /// into a profile snapshot. Falls back to "You" with no avatar when no
-  /// profile event has been written yet (the Plan 04 onboarding flow currently
-  /// does not write one — see the project README and Plan 04 spec for the
-  /// kind=2 contract; a future profile-edit screen, Plan 15, will create it).
+  /// profile event has been written yet (e.g. a restore that hasn't re-synced)
+  /// or the content is malformed.
   OwnProfileProvider._()
     : super(
         from: null,
@@ -64,4 +61,4 @@ final class OwnProfileProvider
   }
 }
 
-String _$ownProfileHash() => r'ac436a421a9da3b1568e50ce404479095034817f';
+String _$ownProfileHash() => r'17823a230154a3d4859948541b1f06e4aa5068f9';

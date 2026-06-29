@@ -58,8 +58,8 @@ class MethodChannelQrScannerService implements QrScannerService {
   }
 
   @override
-  Stream<String> get scans => _scans ??=
-      _eventChannel.receiveBroadcastStream().cast<String>();
+  Stream<String> get scans =>
+      _scans ??= _eventChannel.receiveBroadcastStream().cast<String>();
 
   @override
   String get platformViewType => 'dev.starling.qr_scanner_view';

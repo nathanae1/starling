@@ -63,9 +63,9 @@ Future<void> _openCompose(WidgetTester tester, ProviderContainer container) asyn
   await tester.pumpAndSettle();
 }
 
-GhostButton _postButton(WidgetTester tester) =>
+PrimaryButton _nextButton(WidgetTester tester) =>
     tester.widget(find.byWidgetPredicate(
-      (w) => w is GhostButton && w.label == 'Post',
+      (w) => w is PrimaryButton && w.label == 'Next',
     ));
 
 Uint8List _tinyJpeg() {
@@ -94,13 +94,13 @@ void main() {
     }
   });
 
-  testWidgets('Post is disabled without a photo, enabled with one',
+  testWidgets('Next is disabled without a photo, enabled with one',
       (tester) async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
     await _openCompose(tester, container);
 
-    expect(_postButton(tester).onPressed, isNull);
+    expect(_nextButton(tester).onPressed, isNull);
 
     container.read(composeControllerProvider.notifier).debugSeedState(
           ComposeState(
@@ -110,10 +110,10 @@ void main() {
         );
     await tester.pump();
 
-    expect(_postButton(tester).onPressed, isNotNull);
+    expect(_nextButton(tester).onPressed, isNotNull);
   });
 
-  testWidgets('tapping ✕ invalidates compose state and pops the modal',
+  testWidgets('tapping Cancel invalidates compose state and pops the modal',
       (tester) async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
@@ -122,7 +122,7 @@ void main() {
     container.read(composeControllerProvider.notifier).setCaption('draft');
     expect(container.read(composeControllerProvider).caption, 'draft');
 
-    await tester.tap(find.byType(StarlingIconButton));
+    await tester.tap(find.widgetWithText(GhostButton, 'Cancel'));
     await tester.pumpAndSettle();
 
     expect(container.read(composeControllerProvider).caption, '');

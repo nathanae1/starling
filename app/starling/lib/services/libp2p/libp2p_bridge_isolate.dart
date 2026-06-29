@@ -261,8 +261,13 @@ class _WorkerState {
       if (data.isNotEmpty) {
         ptr.asTypedList(data.length).setAll(0, data);
       }
-      final rc =
-          _bindings.streamWrite(_handle, streamId, ptr, data.length, finish);
+      final rc = _bindings.streamWrite(
+        _handle,
+        streamId,
+        ptr,
+        data.length,
+        finish,
+      );
       if (rc != Libp2pStatusCode.ok) {
         return {'error': 'write rc=$rc: ${_lastError()}'};
       }
@@ -282,8 +287,13 @@ class _WorkerState {
     while (true) {
       final buf = malloc.allocate<Uint8>(bufSize);
       try {
-        final n =
-            _bindings.streamRead(_handle, streamId, buf, bufSize, timeoutMs);
+        final n = _bindings.streamRead(
+          _handle,
+          streamId,
+          buf,
+          bufSize,
+          timeoutMs,
+        );
         if (n == Libp2pStatusCode.errBufferTooSmall) {
           bufSize *= 2;
           if (bufSize > 16 << 20) {

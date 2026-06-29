@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import '../utils/debug_log.dart';
 import '../services/media_service.dart';
 import '../services/storage_service.dart';
 import 'peer_connection_factory.dart';
@@ -22,11 +23,11 @@ class RemoteMediaFetcher {
     required StorageService storage,
     required PeerConnectionFactory peerFactory,
     required PeerReachabilityMonitor reachabilityMonitor,
-  })  : _transport = transport,
-        _mediaService = mediaService,
-        _storage = storage,
-        _peerFactory = peerFactory,
-        _reachability = reachabilityMonitor;
+  }) : _transport = transport,
+       _mediaService = mediaService,
+       _storage = storage,
+       _peerFactory = peerFactory,
+       _reachability = reachabilityMonitor;
 
   final SyncTransport _transport;
   final MediaService _mediaService;
@@ -48,51 +49,51 @@ class RemoteMediaFetcher {
       return null;
     }
     if (cached != null) {
-      // ignore: avoid_print
-      print(
-        '[starling.fetch] stale CachedMedia row for $hash (no file on disk) '
-        '— re-fetching',
+      debugLog(
+        'starling.fetch',
+        'stale CachedMedia row for $hash (no file on disk) — re-fetching',
       );
       await _storage.deleteMedia(hash);
     }
 
     final connection = await _peerFactory.resolve(authorPubkey);
     if (connection == null) {
-      // ignore: avoid_print
-      print('[starling.fetch] no transport for media $hash from $authorPubkey');
+      debugLog(
+        'starling.fetch',
+        'no transport for media $hash from $authorPubkey',
+      );
       return null;
     }
 
-    // ignore: avoid_print
-    print(
-      '[starling.fetch] attempting media $hash from $authorPubkey via '
-      '${connection.transport.name} url=${connection.baseUrl}',
+    debugLog(
+      'starling.fetch',
+      'attempting media $hash from $authorPubkey via '
+          '${connection.transport.name} url=${connection.baseUrl}',
     );
 
     final Uint8List bytes;
     try {
       bytes = await _transport.fetchMedia(connection, hash);
     } catch (e) {
-      // ignore: avoid_print
-      print(
-        '[starling.fetch] media fetch failed for $hash from $authorPubkey via '
-        '${connection.transport.name}: $e',
+      debugLog(
+        'starling.fetch',
+        'media fetch failed for $hash from $authorPubkey via '
+            '${connection.transport.name}: $e',
       );
       _reachability.markUnreachable(authorPubkey, connection.transport, e);
       return null;
     }
 
-    // ignore: avoid_print
-    print(
-      '[starling.fetch] media fetch OK $hash via ${connection.transport.name} '
-      'bytes=${bytes.length}',
+    debugLog(
+      'starling.fetch',
+      'media fetch OK $hash via ${connection.transport.name} '
+          'bytes=${bytes.length}',
     );
 
     try {
       await _mediaService.storeReceivedBlob(hash, bytes);
     } catch (e) {
-      // ignore: avoid_print
-      print('[starling.fetch] media store failed for $hash: $e');
+      debugLog('starling.fetch', 'media store failed for $hash: $e');
       return null;
     }
     return bytes;

@@ -24,13 +24,10 @@ class RoomListScreen extends ConsumerWidget {
         child: Column(
           children: [
             StarlingTopBar(
-              title: 'Voice',
-              left: StarlingIconButton(
-                onPressed: () => context.pop(),
-                child: const Icon(LucideIcons.arrowLeft, size: 20),
-              ),
+              title: 'Rooms',
               right: StarlingIconButton(
                 onPressed: () => context.push('/voice/settings'),
+                semanticLabel: 'Voice settings',
                 child: const Icon(LucideIcons.settings, size: 20),
               ),
             ),
@@ -45,11 +42,12 @@ class RoomListScreen extends ConsumerWidget {
             ),
             Expanded(
               child: recent.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (_, _) => Center(
-                  child: Text('Couldn\'t load history',
-                      style: starling.typography.small),
+                  child: Text(
+                    'Couldn\'t load history',
+                    style: starling.typography.small,
+                  ),
                 ),
                 data: (rooms) {
                   if (rooms.isEmpty) {
@@ -69,32 +67,39 @@ class RoomListScreen extends ConsumerWidget {
                     children: [
                       Padding(
                         padding: const EdgeInsets.only(left: 4, bottom: 8),
-                        child: Text('Recent',
-                            style: starling.typography.micro),
+                        child: Text('Recent', style: starling.typography.micro),
                       ),
                       for (final r in rooms)
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 14),
+                            horizontal: 4,
+                            vertical: 14,
+                          ),
                           decoration: BoxDecoration(
                             border: Border(
-                                bottom: BorderSide(
-                                    color: starling.colors.hairline)),
+                              bottom: BorderSide(
+                                color: starling.colors.hairline,
+                              ),
+                            ),
                           ),
                           child: Row(
                             children: [
-                              Icon(LucideIcons.phoneCall,
-                                  size: 18, color: starling.colors.stone),
+                              Icon(
+                                LucideIcons.phoneCall,
+                                size: 18,
+                                color: starling.colors.stone,
+                              ),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(r.name,
-                                        style: starling.typography.body
-                                            .copyWith(
-                                                fontWeight: FontWeight.w500)),
+                                    Text(
+                                      r.name,
+                                      style: starling.typography.body.copyWith(
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
                                     const SizedBox(height: 2),
                                     Text(
                                       '${r.participants.length} '

@@ -14,6 +14,7 @@ import '../../providers/service_providers.dart';
 import '../../services/media/encrypted_media_paths.dart';
 import '../../theme/starling_theme.dart';
 import '../../widgets/buttons.dart';
+import '../../widgets/starling_alert_dialog.dart';
 
 class StorageSettingsScreen extends ConsumerStatefulWidget {
   const StorageSettingsScreen({super.key});
@@ -23,8 +24,7 @@ class StorageSettingsScreen extends ConsumerStatefulWidget {
       _StorageSettingsScreenState();
 }
 
-class _StorageSettingsScreenState
-    extends ConsumerState<StorageSettingsScreen> {
+class _StorageSettingsScreenState extends ConsumerState<StorageSettingsScreen> {
   Future<_StorageSummary>? _summary;
   bool _busy = false;
 
@@ -64,40 +64,29 @@ class _StorageSettingsScreenState
   }
 
   Future<void> _clearCache() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Clear cached media?'),
-        content: const Text(
+    final confirmed = await showStarlingConfirm(
+      context,
+      title: 'Clear cache?',
+      message:
           'Removes downloaded photos from friends. Your own posts and '
           'saved posts are kept. Photos will reload from peers when '
           'you next view them.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Clear'),
-          ),
-        ],
-      ),
+      confirmLabel: 'Clear',
+      destructive: true,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
 
     setState(() => _busy = true);
     try {
       final storage = ref.read(storageServiceProvider);
-      final supportDir =
-          await ref.read(appSupportDirectoryProvider.future);
+      final supportDir = await ref.read(appSupportDirectoryProvider.future);
       final pinned = await storage.getPinnedMediaHashes();
       final removed = await storage.clearCachedMediaExcluding(pinned);
       for (final entry in removed) {
         try {
-          final file =
-              File(p.join(supportDir.path, mediaRelativePath(entry.hash)));
+          final file = File(
+            p.join(supportDir.path, mediaRelativePath(entry.hash)),
+          );
           if (file.existsSync()) await file.delete();
         } catch (_) {
           // best effort
@@ -132,9 +121,9 @@ class _StorageSettingsScreenState
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Export failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -151,15 +140,16 @@ class _StorageSettingsScreenState
             Container(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
               decoration: BoxDecoration(
-                border:
-                    Border(bottom: BorderSide(color: starling.colors.hairline)),
+                border: Border(
+                  bottom: BorderSide(color: starling.colors.hairline),
+                ),
               ),
               child: Row(
                 children: [
                   StarlingIconButton(
                     onPressed: () => context.pop(),
-                    child:
-                        const Icon(LucideIcons.arrowLeft, size: 20),
+                    semanticLabel: 'Back',
+                    child: const Icon(LucideIcons.arrowLeft, size: 20),
                   ),
                   Expanded(
                     child: Text(
@@ -188,8 +178,9 @@ class _StorageSettingsScreenState
                         padding: const EdgeInsets.all(24),
                         child: Text(
                           '${snap.error}',
-                          style: starling.typography.small
-                              .copyWith(color: starling.colors.danger),
+                          style: starling.typography.small.copyWith(
+                            color: starling.colors.danger,
+                          ),
                         ),
                       ),
                     );
@@ -211,8 +202,7 @@ class _StorageSettingsScreenState
                       ),
                       const SizedBox(height: 16),
                       Padding(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 20),
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
                         child: PrimaryButton(
                           label: 'Clear cache',
                           onPressed: _busy ? null : _clearCache,
@@ -220,8 +210,7 @@ class _StorageSettingsScreenState
                       ),
                       const SizedBox(height: 12),
                       Padding(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 20),
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
                         child: SecondaryButton(
                           label: 'Export your content',
                           onPressed: _busy ? null : _exportOwnContent,

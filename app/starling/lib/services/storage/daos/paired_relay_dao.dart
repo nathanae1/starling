@@ -14,12 +14,7 @@ part 'paired_relay_dao.g.dart';
 /// - `pending_card_distribution_entries`: per-Follower outbox of signed
 ///   Connection card updates piggybacked on `/manifest`. Mirrors the
 ///   `pending_key_distribution_entries` flow in [KeyRotationDao].
-@DriftAccessor(
-  tables: [
-    PairedRelayEntries,
-    PendingCardDistributionEntries,
-  ],
-)
+@DriftAccessor(tables: [PairedRelayEntries, PendingCardDistributionEntries])
 class PairedRelayDao extends DatabaseAccessor<AppDatabase>
     with _$PairedRelayDaoMixin {
   PairedRelayDao(super.db);
@@ -45,24 +40,21 @@ class PairedRelayDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<void> markBackfillComplete(String relayId) =>
-      (update(pairedRelayEntries)
-            ..where((r) => r.relayId.equals(relayId)))
-          .write(const PairedRelayEntriesCompanion(
-        relayBackfillComplete: Value(1),
-      ));
+      (update(
+        pairedRelayEntries,
+      )..where((r) => r.relayId.equals(relayId))).write(
+        const PairedRelayEntriesCompanion(relayBackfillComplete: Value(1)),
+      );
 
-  Future<void> clearPairedRelay() =>
-      delete(pairedRelayEntries).go();
+  Future<void> clearPairedRelay() => delete(pairedRelayEntries).go();
 
   // --- pending_card_distributions ---
 
   Future<void> queueCardDistribution(
     PendingCardDistributionEntriesCompanion entry,
-  ) =>
-      into(pendingCardDistributionEntries).insert(
-        entry,
-        mode: InsertMode.insertOrReplace,
-      );
+  ) => into(
+    pendingCardDistributionEntries,
+  ).insert(entry, mode: InsertMode.insertOrReplace);
 
   /// Latest undelivered card update for [targetPubkey], or null.
   /// "Latest" because a Follower offline across multiple updates only
@@ -71,32 +63,32 @@ class PairedRelayDao extends DatabaseAccessor<AppDatabase>
     String targetPubkey,
   ) =>
       (select(pendingCardDistributionEntries)
-            ..where((p) =>
-                p.targetPubkey.equals(targetPubkey) &
-                p.distributed.equals(0))
+            ..where(
+              (p) =>
+                  p.targetPubkey.equals(targetPubkey) & p.distributed.equals(0),
+            )
             ..orderBy([(p) => OrderingTerm.desc(p.createdAt)])
             ..limit(1))
           .getSingleOrNull();
 
   /// Mark every undelivered card distribution for [targetPubkey] with
   /// `createdAt <= upTo` as delivered. Idempotent.
-  Future<void> markCardDistributionsDelivered(
-    String targetPubkey,
-    int upTo,
-  ) =>
-      (update(pendingCardDistributionEntries)
-            ..where((p) =>
+  Future<void> markCardDistributionsDelivered(String targetPubkey, int upTo) =>
+      (update(pendingCardDistributionEntries)..where(
+            (p) =>
                 p.targetPubkey.equals(targetPubkey) &
-                p.createdAt.isSmallerOrEqualValue(upTo)))
-          .write(const PendingCardDistributionEntriesCompanion(
-        distributed: Value(1),
-      ));
+                p.createdAt.isSmallerOrEqualValue(upTo),
+          ))
+          .write(
+            const PendingCardDistributionEntriesCompanion(
+              distributed: Value(1),
+            ),
+          );
 
   /// Drop every card distribution row for [targetPubkey]. Used when a
   /// Follower is removed — any pending card for them shouldn't leak via
   /// a later sync attempt.
-  Future<void> clearCardDistributionsFor(String targetPubkey) =>
-      (delete(pendingCardDistributionEntries)
-            ..where((p) => p.targetPubkey.equals(targetPubkey)))
-          .go();
+  Future<void> clearCardDistributionsFor(String targetPubkey) => (delete(
+    pendingCardDistributionEntries,
+  )..where((p) => p.targetPubkey.equals(targetPubkey))).go();
 }

@@ -30,8 +30,7 @@ class _ConfirmRequestSheetState extends ConsumerState<ConfirmRequestSheet> {
         : widget.card.pubkey;
     final endpointCount = widget.card.endpoints.length;
     final ownEndpoints = ref.watch(ownEndpointsProvider);
-    final ourOnionReady =
-        ownEndpoints.any((e) => e.type == 'onion');
+    final ourOnionReady = ownEndpoints.any((e) => e.type == 'onion');
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -56,7 +55,9 @@ class _ConfirmRequestSheetState extends ConsumerState<ConfirmRequestSheet> {
           const SizedBox(height: 12),
           Text(
             'Waiting for Tor to come up — try again in a moment.',
-            style: starling.typography.small.copyWith(color: starling.colors.stone),
+            style: starling.typography.small.copyWith(
+              color: starling.colors.stone,
+            ),
             textAlign: TextAlign.center,
           ),
         ],
@@ -64,7 +65,9 @@ class _ConfirmRequestSheetState extends ConsumerState<ConfirmRequestSheet> {
           const SizedBox(height: 12),
           Text(
             _error!,
-            style: starling.typography.small.copyWith(color: starling.colors.danger),
+            style: starling.typography.small.copyWith(
+              color: starling.colors.danger,
+            ),
             textAlign: TextAlign.center,
           ),
         ],
@@ -75,8 +78,9 @@ class _ConfirmRequestSheetState extends ConsumerState<ConfirmRequestSheet> {
             Expanded(
               child: SecondaryButton(
                 label: 'Cancel',
-                onPressed:
-                    _sending ? null : () => Navigator.of(context).pop(false),
+                onPressed: _sending
+                    ? null
+                    : () => Navigator.of(context).pop(false),
                 block: true,
               ),
             ),
@@ -84,8 +88,7 @@ class _ConfirmRequestSheetState extends ConsumerState<ConfirmRequestSheet> {
             Expanded(
               child: PrimaryButton(
                 label: _sending ? 'Sending…' : 'Send follow request',
-                onPressed:
-                    (_sending || !ourOnionReady) ? null : _send,
+                onPressed: (_sending || !ourOnionReady) ? null : _send,
                 block: true,
               ),
             ),
@@ -112,8 +115,7 @@ class _ConfirmRequestSheetState extends ConsumerState<ConfirmRequestSheet> {
         _error = switch (e.kind) {
           FollowFailureKind.noEndpoints =>
             "We couldn't reach this person — they have no endpoints yet.",
-          FollowFailureKind.network =>
-            'Network error: ${e.message}',
+          FollowFailureKind.network => 'Network error: ${e.message}',
           FollowFailureKind.unknownRequester =>
             "Couldn't load your identity. Try again.",
           FollowFailureKind.decryptFailed =>

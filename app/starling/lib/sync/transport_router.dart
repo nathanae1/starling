@@ -25,9 +25,9 @@ class TransportRouter implements SyncTransport {
     required SyncTransport lan,
     required SyncTransport tor,
     SyncTransport? libp2p,
-  })  : _lan = lan,
-        _tor = tor,
-        _libp2p = libp2p;
+  }) : _lan = lan,
+       _tor = tor,
+       _libp2p = libp2p;
 
   final SyncTransport _lan;
   final SyncTransport _tor;
@@ -65,17 +65,16 @@ class TransportRouter implements SyncTransport {
     int? ackRotationAt,
     int? cardSeenAt,
     Uint8List? ackSig,
-  }) =>
-      _pick(peer).fetchManifest(
-        peer,
-        since: since,
-        until: until,
-        untilId: untilId,
-        requesterPubkey: requesterPubkey,
-        ackRotationAt: ackRotationAt,
-        cardSeenAt: cardSeenAt,
-        ackSig: ackSig,
-      );
+  }) => _pick(peer).fetchManifest(
+    peer,
+    since: since,
+    until: until,
+    untilId: untilId,
+    requesterPubkey: requesterPubkey,
+    ackRotationAt: ackRotationAt,
+    cardSeenAt: cardSeenAt,
+    ackSig: ackSig,
+  );
 
   @override
   Future<Envelope> fetchEnvelope(PeerConnection peer, {int? since}) =>

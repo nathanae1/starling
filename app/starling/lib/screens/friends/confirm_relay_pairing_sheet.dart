@@ -57,8 +57,9 @@ class _ConfirmRelayPairingSheetState
           const SizedBox(height: 12),
           Text(
             'Waiting for Tor to come up — try again in a moment.',
-            style: starling.typography.small
-                .copyWith(color: starling.colors.stone),
+            style: starling.typography.small.copyWith(
+              color: starling.colors.stone,
+            ),
             textAlign: TextAlign.center,
           ),
         ],
@@ -67,8 +68,9 @@ class _ConfirmRelayPairingSheetState
           Text(
             'This can take a minute while the relay sets up its Tor '
             'address.',
-            style: starling.typography.small
-                .copyWith(color: starling.colors.stone),
+            style: starling.typography.small.copyWith(
+              color: starling.colors.stone,
+            ),
             textAlign: TextAlign.center,
           ),
         ],
@@ -76,8 +78,9 @@ class _ConfirmRelayPairingSheetState
           const SizedBox(height: 12),
           Text(
             _error!,
-            style: starling.typography.small
-                .copyWith(color: starling.colors.danger),
+            style: starling.typography.small.copyWith(
+              color: starling.colors.danger,
+            ),
             textAlign: TextAlign.center,
           ),
         ],
@@ -88,8 +91,9 @@ class _ConfirmRelayPairingSheetState
             Expanded(
               child: SecondaryButton(
                 label: 'Cancel',
-                onPressed:
-                    _pairing ? null : () => Navigator.of(context).pop(false),
+                onPressed: _pairing
+                    ? null
+                    : () => Navigator.of(context).pop(false),
                 block: true,
               ),
             ),
@@ -133,16 +137,17 @@ class _ConfirmRelayPairingSheetState
         // retrying the same claim succeeds idempotently.
         _error = e.statusCode == 409
             ? 'That pairing code was already claimed — if your earlier '
-                'attempt timed out, the relay may still be finishing. Try '
-                'again in a minute, or scan a fresh code from the relay’s '
-                'pairing page.'
+                  'attempt timed out, the relay may still be finishing. Try '
+                  'again in a minute, or scan a fresh code from the relay’s '
+                  'pairing page.'
             : 'Pairing failed: ${e.message}';
       });
     } on TimeoutException {
       if (!mounted) return;
       setState(() {
         _pairing = false;
-        _error = 'The relay didn’t respond in time — it may still be '
+        _error =
+            'The relay didn’t respond in time — it may still be '
             'setting up its address. Wait a minute, then try again.';
       });
     } catch (e) {

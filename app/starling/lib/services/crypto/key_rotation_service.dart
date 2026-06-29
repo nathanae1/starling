@@ -32,12 +32,12 @@ class KeyRotationService {
     required FeedKeyCache feedKeyCache,
     required PublishLock publishLock,
     required Future<Uint8List?> Function() ownSecretKeyLookup,
-  })  : _crypto = crypto,
-        _storage = storage,
-        _clock = clock,
-        _feedKeyCache = feedKeyCache,
-        _publishLock = publishLock,
-        _ownSecretKeyLookup = ownSecretKeyLookup;
+  }) : _crypto = crypto,
+       _storage = storage,
+       _clock = clock,
+       _feedKeyCache = feedKeyCache,
+       _publishLock = publishLock,
+       _ownSecretKeyLookup = ownSecretKeyLookup;
 
   final CryptoService _crypto;
   final StorageService _storage;

@@ -45,8 +45,8 @@ class ManifestExchange {
   ManifestExchange({
     required SyncTransport transport,
     required StorageService storage,
-  })  : _transport = transport,
-        _storage = storage;
+  }) : _transport = transport,
+       _storage = storage;
 
   final SyncTransport _transport;
   final StorageService _storage;
@@ -124,21 +124,22 @@ class ManifestExchange {
     Uint8List? ackSig,
   }) async {
     var first = true;
-    final pages = await pageManifestToCompletion(
-      ({int? until, String? untilId}) {
-        final attachAcks = first;
-        first = false;
-        return _transport.fetchManifest(
-          peer,
-          until: until,
-          untilId: untilId,
-          requesterPubkey: attachAcks ? requesterPubkey : null,
-          ackRotationAt: attachAcks ? ackRotationAt : null,
-          cardSeenAt: attachAcks ? cardSeenAt : null,
-          ackSig: attachAcks ? ackSig : null,
-        );
-      },
-    );
+    final pages = await pageManifestToCompletion(({
+      int? until,
+      String? untilId,
+    }) {
+      final attachAcks = first;
+      first = false;
+      return _transport.fetchManifest(
+        peer,
+        until: until,
+        untilId: untilId,
+        requesterPubkey: attachAcks ? requesterPubkey : null,
+        ackRotationAt: attachAcks ? ackRotationAt : null,
+        cardSeenAt: attachAcks ? cardSeenAt : null,
+        ackSig: attachAcks ? ackSig : null,
+      );
+    });
     final firstPage = pages.first;
     if (firstPage.pubkey != follow.pubkey) {
       return const ManifestDiff(

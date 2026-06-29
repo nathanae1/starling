@@ -16,8 +16,7 @@ class FollowFeedKeyHistoryEntries extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get followPubkey => text()();
   BlobColumn get feedKey => blob()();
-  IntColumn get feedKeyEpoch =>
-      integer().withDefault(const Constant(0))();
+  IntColumn get feedKeyEpoch => integer().withDefault(const Constant(0))();
   IntColumn get validFrom => integer()();
   IntColumn get validUntil => integer()();
 }

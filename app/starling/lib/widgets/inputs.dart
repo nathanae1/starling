@@ -45,8 +45,8 @@ class StarlingInput extends StatelessWidget {
         fillColor: starling.colors.paper,
         hintText: placeholder,
         hintStyle: textStyle.copyWith(color: starling.colors.stone),
-        contentPadding: padding ??
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        contentPadding:
+            padding ?? const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: starling.colors.hairline),
@@ -95,8 +95,13 @@ class StarlingTextarea extends StatelessWidget {
         filled: true,
         fillColor: starling.colors.paper,
         hintText: placeholder,
-        hintStyle: starling.typography.body.copyWith(color: starling.colors.stone),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        hintStyle: starling.typography.body.copyWith(
+          color: starling.colors.stone,
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 12,
+        ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: starling.colors.hairline),

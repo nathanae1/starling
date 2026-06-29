@@ -67,6 +67,28 @@ void main() {
       expect(await alice.storage.dequeue(bob.identity.pubkey), isEmpty);
     });
 
+    test('duplicate accept after the follow exists is idempotent (re-acks, '
+        'not 404 → no stuck retry)', () async {
+      await alice.service.sendFollowRequest(bob.connectionCard());
+      final first =
+          await bob.service.acceptFollowRequest(alice.identity.pubkey);
+      expect(first, AcceptDelivery.delivered);
+      expect(await alice.storage.getFollow(bob.identity.pubkey), isNotNull);
+      // Outbound row consumed on the first ingest.
+      expect(await alice.storage.getOutboundRequests(), isEmpty);
+
+      // Simulate the responder's 202 getting lost on the onion reverse path:
+      // bob re-delivers the same accept. Alice already created the follow and
+      // deleted the outbound row, so a non-idempotent ingest would 404 and
+      // bob would re-queue forever ("accept queued"). The re-delivery must
+      // instead succeed so bob's retry pump can settle.
+      final second =
+          await bob.service.acceptFollowRequest(alice.identity.pubkey);
+      expect(second, AcceptDelivery.delivered);
+      // Nothing left stuck in bob's retry queue.
+      expect(await bob.storage.dequeue(alice.identity.pubkey), isEmpty);
+    });
+
     test('reject deletes inbound row, no follows write', () async {
       await alice.service.sendFollowRequest(bob.connectionCard());
       expect(await bob.storage.getInboundRequests(), hasLength(1));
@@ -105,6 +127,145 @@ void main() {
       final follow = await alice.storage.getFollow(bob.identity.pubkey);
       expect(follow, isNotNull);
       expect(follow!.feedKey, equals(bob.identity.feedKey));
+    });
+
+    test('retry re-resolves a stale queued URL (peer relaunched / ephemeral '
+        'port rotated) and still delivers', () async {
+      await alice.service.sendFollowRequest(bob.connectionCard());
+
+      // Bob accepts, delivery fails → queued in pending-send.
+      transport.failNextAcceptTo = alice.baseUrl;
+      await bob.service.acceptFollowRequest(alice.identity.pubkey);
+      expect(
+        await bob.storage.getInboundRequestsByStatus('pending-send'),
+        hasLength(1),
+      );
+
+      // Simulate the queued URL going stale: rewrite the entry to a dead
+      // address the transport can't resolve, keeping the original accept body.
+      final queued = await bob.storage.dequeue(alice.identity.pubkey);
+      expect(queued, hasLength(1));
+      final wrapper =
+          cbor.decode(queued.first.eventBlob) as Map<dynamic, dynamic>;
+      await bob.storage.removeFromQueue(queued.first.id);
+      await bob.storage.enqueue(
+        alice.identity.pubkey,
+        Uint8List.fromList(cbor.encode(<String, dynamic>{
+          'url': 'http://stale.invalid:1/follow-accept',
+          // Coerce back to bytes so it re-encodes as a CBOR byte string and
+          // isFollowAcceptQueueEntry still recognizes it.
+          'body': Uint8List.fromList(List<int>.from(wrapper['body'] as List)),
+        })),
+      );
+
+      // Transport works now. Alice is still reachable at her real baseUrl,
+      // which the monitor resolves via probeCard; the stale URL is NOT in the
+      // transport map, so delivery succeeding proves the retry re-resolved.
+      transport.failNextAcceptTo = null;
+      await bob.service.retryQueuedAccepts();
+
+      expect(
+        await alice.storage.getFollow(bob.identity.pubkey),
+        isNotNull,
+        reason: 'accept must deliver via the freshly-resolved endpoint, '
+            'not the stale queued URL',
+      );
+      expect(await bob.storage.dequeue(alice.identity.pubkey), isEmpty);
+      expect(
+        await bob.storage.isAcceptedFollower(alice.identity.pubkey),
+        isTrue,
+      );
+    });
+
+    test('mutual follow: an unresolvable frozen card recovers via the '
+        'monitor\'s validated transport', () async {
+      await alice.service.sendFollowRequest(bob.connectionCard());
+
+      // Bob accepts, delivery fails → queued in pending-send.
+      transport.failNextAcceptTo = alice.baseUrl;
+      await bob.service.acceptFollowRequest(alice.identity.pubkey);
+      expect(
+        await bob.storage.getInboundRequestsByStatus('pending-send'),
+        hasLength(1),
+      );
+
+      // Make this a MUTUAL pair: bob also follows alice — the exact case the
+      // Friends screen surfaces as "Finishing connection…". A working feed
+      // sync means the monitor holds a live, validated transport for alice.
+      await bob.storage.saveFollow(Follow(
+        pubkey: alice.identity.pubkey,
+        connectionCard: '{}',
+        feedKey: Uint8List(32),
+      ));
+
+      // The frozen request card can no longer be resolved over Tor (onion
+      // absent / unpublished at request time) AND the queued URL is dead, so
+      // the ONLY path to delivery is the mutual-follow bestConnectionFor
+      // fallback.
+      bob.monitor.failProbeCard = true;
+      final queued = await bob.storage.dequeue(alice.identity.pubkey);
+      expect(queued, hasLength(1));
+      final wrapper =
+          cbor.decode(queued.single.eventBlob) as Map<dynamic, dynamic>;
+      await bob.storage.removeFromQueue(queued.single.id);
+      await bob.storage.enqueue(
+        alice.identity.pubkey,
+        Uint8List.fromList(cbor.encode(<String, dynamic>{
+          'url': 'http://stale.invalid:1/follow-accept',
+          'body': Uint8List.fromList(List<int>.from(wrapper['body'] as List)),
+        })),
+      );
+
+      transport.failNextAcceptTo = null;
+      await bob.service.retryQueuedAccepts();
+
+      expect(
+        await alice.storage.getFollow(bob.identity.pubkey),
+        isNotNull,
+        reason: 'accept must deliver via the monitor\'s validated transport '
+            'for the mutual follow, not the dead URL or unresolvable card',
+      );
+      expect(await bob.storage.dequeue(alice.identity.pubkey), isEmpty);
+      expect(
+        await bob.storage.getInboundRequestsByStatus('pending-send'),
+        isEmpty,
+        reason: 'a delivered accept flips the inbound row back to accepted',
+      );
+    });
+
+    test('non-mutual requester is NOT routed via bestConnectionFor (Tor-only '
+        'probeCard stays the sole resolver)', () async {
+      await alice.service.sendFollowRequest(bob.connectionCard());
+      transport.failNextAcceptTo = alice.baseUrl;
+      await bob.service.acceptFollowRequest(alice.identity.pubkey);
+
+      // No Follow row for alice → not mutual. Even with the frozen card
+      // unresolvable, the queued URL dead, and the monitor holding a live
+      // transport for alice, the accept must stay queued: dialing a
+      // non-mutual peer's LAN/onion from here would leak reachability, so the
+      // fallback is gated on a mutual follow.
+      bob.monitor.failProbeCard = true;
+      final queued = await bob.storage.dequeue(alice.identity.pubkey);
+      final wrapper =
+          cbor.decode(queued.single.eventBlob) as Map<dynamic, dynamic>;
+      await bob.storage.removeFromQueue(queued.single.id);
+      await bob.storage.enqueue(
+        alice.identity.pubkey,
+        Uint8List.fromList(cbor.encode(<String, dynamic>{
+          'url': 'http://stale.invalid:1/follow-accept',
+          'body': Uint8List.fromList(List<int>.from(wrapper['body'] as List)),
+        })),
+      );
+
+      transport.failNextAcceptTo = null;
+      await bob.service.retryQueuedAccepts();
+
+      expect(
+        await alice.storage.getFollow(bob.identity.pubkey),
+        isNull,
+        reason: 'a non-mutual accept must not borrow the monitor\'s transport',
+      );
+      expect(await bob.storage.dequeue(alice.identity.pubkey), hasLength(1));
     });
 
     test('flips to send-failed at threshold, keeps the entry, then recovers',
@@ -325,6 +486,7 @@ class _Peer {
   final String baseUrl;
 
   late FollowService service;
+  late FakePeerReachabilityMonitor monitor;
 
   static Future<_Peer> build(CryptoService crypto, {required String label}) async {
     final kp = await crypto.generateKeyPair();
@@ -356,7 +518,7 @@ class _Peer {
       );
 
   void attachTransport(_PairTransport transport, {required _Peer peer}) {
-    final monitor = FakePeerReachabilityMonitor()
+    monitor = FakePeerReachabilityMonitor()
       ..setReachable(peer.identity.pubkey, PeerTransport.lan, peer.baseUrl);
     service = FollowService(
       crypto: crypto,

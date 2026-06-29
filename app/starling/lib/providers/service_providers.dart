@@ -33,8 +33,7 @@ part 'service_providers.g.dart';
 CryptoService cryptoService(Ref ref) => MockCryptoService();
 
 @riverpod
-ContentKeyService contentKeyService(Ref ref) =>
-    MockContentKeyService();
+ContentKeyService contentKeyService(Ref ref) => MockContentKeyService();
 
 @riverpod
 StorageService storageService(Ref ref) => MockStorageService();
@@ -49,8 +48,9 @@ TorService torService(Ref ref) => MockTorService();
 @Riverpod(keepAlive: true)
 Libp2pService libp2pService(Ref ref) {
   final canUseNative = kLibp2pEnabled && (Platform.isIOS || Platform.isAndroid);
-  final Libp2pService bridge =
-      canUseNative ? Libp2pBridge() : Libp2pBridgeStub();
+  final Libp2pService bridge = canUseNative
+      ? Libp2pBridge()
+      : Libp2pBridgeStub();
   ref.onDispose(bridge.shutdown);
   return bridge;
 }
@@ -126,19 +126,18 @@ SaveService saveService(Ref ref) =>
 
 @riverpod
 CommentService commentService(Ref ref) => DefaultCommentService(
-      contentKey: ref.watch(contentKeyServiceProvider),
-      storage: ref.watch(storageServiceProvider),
-      clock: ref.watch(clockProvider),
-      identityLookup: () => ref.read(storageServiceProvider).getIdentity(),
-      publishLock: ref.watch(publishLockProvider),
-    );
+  contentKey: ref.watch(contentKeyServiceProvider),
+  storage: ref.watch(storageServiceProvider),
+  clock: ref.watch(clockProvider),
+  identityLookup: () => ref.read(storageServiceProvider).getIdentity(),
+  publishLock: ref.watch(publishLockProvider),
+);
 
 @riverpod
-ReactionService reactionService(Ref ref) =>
-    DefaultReactionService(
-      contentKey: ref.watch(contentKeyServiceProvider),
-      storage: ref.watch(storageServiceProvider),
-      clock: ref.watch(clockProvider),
-      identityLookup: () => ref.read(storageServiceProvider).getIdentity(),
-      publishLock: ref.watch(publishLockProvider),
-    );
+ReactionService reactionService(Ref ref) => DefaultReactionService(
+  contentKey: ref.watch(contentKeyServiceProvider),
+  storage: ref.watch(storageServiceProvider),
+  clock: ref.watch(clockProvider),
+  identityLookup: () => ref.read(storageServiceProvider).getIdentity(),
+  publishLock: ref.watch(publishLockProvider),
+);

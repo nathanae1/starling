@@ -42,14 +42,14 @@ class Libp2pStreamServer {
     required Directory appSupportDir,
     required Future<Identity?> Function() identityLookup,
     required FollowService Function() followServiceLookup,
-  })  : _libp2p = libp2p,
-        _storage = storage,
-        _contentKey = contentKey,
-        _crypto = crypto,
-        _clock = clock,
-        _appSupportDir = appSupportDir,
-        _identityLookup = identityLookup,
-        _followServiceLookup = followServiceLookup;
+  }) : _libp2p = libp2p,
+       _storage = storage,
+       _contentKey = contentKey,
+       _crypto = crypto,
+       _clock = clock,
+       _appSupportDir = appSupportDir,
+       _identityLookup = identityLookup,
+       _followServiceLookup = followServiceLookup;
 
   final Libp2pService _libp2p;
   final StorageService _storage;
@@ -79,12 +79,18 @@ class Libp2pStreamServer {
     _libp2p.registerInboundHandler(_pManifest, _handleStream(_handleManifest));
     _libp2p.registerInboundHandler(_pEvents, _handleStream(_handleEvents));
     _libp2p.registerInboundHandler(
-        _pEventsPush, _handleStream(_handleEventsPush));
+      _pEventsPush,
+      _handleStream(_handleEventsPush),
+    );
     _libp2p.registerInboundHandler(_pMedia, _handleStream(_handleMedia));
     _libp2p.registerInboundHandler(
-        _pFollowRequest, _handleStream(_handleFollowRequest));
+      _pFollowRequest,
+      _handleStream(_handleFollowRequest),
+    );
     _libp2p.registerInboundHandler(
-        _pFollowAccept, _handleStream(_handleFollowAccept));
+      _pFollowAccept,
+      _handleStream(_handleFollowAccept),
+    );
     _libp2p.registerInboundHandler(_pPing, _handleStream(_handlePing));
   }
 

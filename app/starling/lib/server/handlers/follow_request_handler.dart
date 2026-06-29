@@ -46,9 +46,7 @@ Handler followRequestHandler({
 }
 
 class FollowRequestIngestResult {
-  const FollowRequestIngestResult.ok()
-      : ok = true,
-        error = null;
+  const FollowRequestIngestResult.ok() : ok = true, error = null;
   const FollowRequestIngestResult.invalid(this.error) : ok = false;
   final bool ok;
   final String? error;

@@ -22,10 +22,10 @@ class EnvelopeItem {
   final Map<String, Uint8List> extensions;
 
   Map<String, dynamic> toMap() => {
-        'type': type,
-        'payload': payload,
-        'extensions': Map<String, dynamic>.from(extensions),
-      };
+    'type': type,
+    'payload': payload,
+    'extensions': Map<String, dynamic>.from(extensions),
+  };
 
   static EnvelopeItem fromMap(Map<dynamic, dynamic> map) {
     final extensions = <String, Uint8List>{};
@@ -85,10 +85,10 @@ class Envelope {
   final Map<String, Uint8List> extensions;
 
   Map<String, dynamic> toMap() => {
-        'version': version,
-        'items': items.map((i) => i.toMap()).toList(),
-        'extensions': Map<String, dynamic>.from(extensions),
-      };
+    'version': version,
+    'items': items.map((i) => i.toMap()).toList(),
+    'extensions': Map<String, dynamic>.from(extensions),
+  };
 
   Uint8List toBytes() => Uint8List.fromList(cbor.encode(toMap()));
 
@@ -125,8 +125,7 @@ class Envelope {
   int get hashCode => Object.hash(version, items.length);
 
   @override
-  String toString() =>
-      'Envelope(version: $version, items: ${items.length})';
+  String toString() => 'Envelope(version: $version, items: ${items.length})';
 }
 
 Uint8List _toUint8List(dynamic value) {

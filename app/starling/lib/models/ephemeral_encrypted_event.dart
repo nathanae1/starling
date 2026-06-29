@@ -33,11 +33,11 @@ class EphemeralEncryptedEvent {
   final Uint8List payload;
 
   Map<String, dynamic> toMap() => {
-        'sender_pubkey': senderPubkey,
-        'recipient_pubkey': recipientPubkey,
-        'nonce': nonce,
-        'payload': payload,
-      };
+    'sender_pubkey': senderPubkey,
+    'recipient_pubkey': recipientPubkey,
+    'nonce': nonce,
+    'payload': payload,
+  };
 
   Uint8List toBytes() => Uint8List.fromList(cbor.encode(toMap()));
 

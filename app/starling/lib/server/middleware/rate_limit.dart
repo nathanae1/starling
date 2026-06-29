@@ -26,28 +26,28 @@ class RateLimiter {
   late final Timer _sweepTimer;
 
   Middleware get middleware => (Handler inner) {
-        return (Request request) async {
-          final addr = _remoteAddress(request);
-          final now = _clock.nowUnixSeconds();
-          final bucket = _buckets.putIfAbsent(
-            addr,
-            () => _Bucket(windowStart: now),
-          );
-          if (now - bucket.windowStart >= window.inSeconds) {
-            bucket.windowStart = now;
-            bucket.count = 0;
-          }
-          bucket.count += 1;
-          if (bucket.count > requestsPerMinute) {
-            return Response(
-              429,
-              body: 'rate limit exceeded',
-              headers: const {'retry-after': '60'},
-            );
-          }
-          return inner(request);
-        };
-      };
+    return (Request request) async {
+      final addr = _remoteAddress(request);
+      final now = _clock.nowUnixSeconds();
+      final bucket = _buckets.putIfAbsent(
+        addr,
+        () => _Bucket(windowStart: now),
+      );
+      if (now - bucket.windowStart >= window.inSeconds) {
+        bucket.windowStart = now;
+        bucket.count = 0;
+      }
+      bucket.count += 1;
+      if (bucket.count > requestsPerMinute) {
+        return Response(
+          429,
+          body: 'rate limit exceeded',
+          headers: const {'retry-after': '60'},
+        );
+      }
+      return inner(request);
+    };
+  };
 
   void dispose() {
     _sweepTimer.cancel();

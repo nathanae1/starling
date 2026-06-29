@@ -31,9 +31,7 @@ abstract class SignalingService {
   /// Called once during server setup. When a remote peer connects to our
   /// `/ws/signal` endpoint, the handler is invoked with the authenticated
   /// channel.
-  void onInboundConnection(
-    void Function(SignalingChannel channel) handler,
-  );
+  void onInboundConnection(void Function(SignalingChannel channel) handler);
 
   /// Close all active signaling channels (inbound and outbound).
   Future<void> closeAll();

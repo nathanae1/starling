@@ -33,8 +33,11 @@ class CallOverlay extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
-                  const Icon(LucideIcons.phoneCall,
-                      size: 18, color: Color(0xFFFDFBF5)),
+                  const Icon(
+                    LucideIcons.phoneCall,
+                    size: 18,
+                    color: Color(0xFFFDFBF5),
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(

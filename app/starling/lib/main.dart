@@ -13,6 +13,7 @@ import 'providers/identity_provider.dart';
 import 'providers/service_providers.dart';
 import 'providers/sync_provider.dart';
 import 'router.dart';
+import 'screens/friends/confirm_relay_pairing_sheet.dart';
 import 'screens/friends/confirm_request_sheet.dart';
 import 'services/clock.dart';
 import 'services/content_key_service.dart';
@@ -30,6 +31,7 @@ import 'services/storage/retention.dart';
 import 'services/tor/arti_tor_service.dart';
 import 'theme/starling_theme.dart';
 import 'utils/connection_card_parser.dart';
+import 'utils/debug_log.dart';
 import 'widgets/sheet.dart';
 
 Future<void> main() async {
@@ -56,26 +58,32 @@ Future<void> main() async {
   // onboarding will wire it up.
   final identity = await storage.getIdentity();
   if (identity == null) {
-    _keysLog('boot identity=null (pre-onboarding or restore-in-progress)');
+    debugLog(
+      'starling.keys',
+      'boot identity=null (pre-onboarding or restore-in-progress)',
+    );
   } else {
-    _keysLog(
+    debugLog(
+      'starling.keys',
       'boot identity pubkey=${identity.pubkey} '
-      'feedKeyFp=${_shortBytes(identity.feedKey)} '
-      'epoch=${identity.feedKeyEpoch} '
-      'msgSeq=${identity.msgSeqCounter}',
+          'feedKeyFp=${shortFingerprint(identity.feedKey)} '
+          'epoch=${identity.feedKeyEpoch} '
+          'msgSeq=${identity.msgSeqCounter}',
     );
   }
   if (identity != null) {
     final secretKey = await keychain.loadIdentitySecretKey();
     if (secretKey == null) {
-      _keysLog(
+      debugLog(
+        'starling.keys',
         'WARNING boot secret_key=null but identity row present — '
-        'PairwiseContentKeyService will NOT be wired (signing/decrypt broken)',
+            'PairwiseContentKeyService will NOT be wired (signing/decrypt broken)',
       );
     } else {
-      _keysLog(
+      debugLog(
+        'starling.keys',
         'boot secret_key loaded len=${secretKey.length} '
-        'fp=${_shortBytes(secretKey)}',
+            'fp=${shortFingerprint(secretKey)}',
       );
       // libsodium Ed25519: 64-byte secret key carries the 32-byte public
       // key in its trailing half. Compare against the DB-stored pubkey to
@@ -85,19 +93,24 @@ Future<void> main() async {
         final derivedPub = Uint8List.sublistView(secretKey, 32, 64);
         final derivedPubEnc = _crockfordSafe(derivedPub);
         if (derivedPubEnc != identity.pubkey) {
-          _keysLog(
+          debugLog(
+            'starling.keys',
             'WARNING pubkey MISMATCH: '
-            'identity.pubkey=${identity.pubkey} '
-            'derivedFromSecret=$derivedPubEnc — '
-            'keychain secret was regenerated independently of DB identity',
+                'identity.pubkey=${identity.pubkey} '
+                'derivedFromSecret=$derivedPubEnc — '
+                'keychain secret was regenerated independently of DB identity',
           );
         } else {
-          _keysLog('boot pubkey match OK (keychain secret ↔ DB identity)');
+          debugLog(
+            'starling.keys',
+            'boot pubkey match OK (keychain secret ↔ DB identity)',
+          );
         }
       } else {
-        _keysLog(
+        debugLog(
+          'starling.keys',
           'WARNING boot secret_key unexpected len=${secretKey.length} '
-          '(expected 64 for Ed25519)',
+              '(expected 64 for Ed25519)',
         );
       }
 
@@ -107,19 +120,26 @@ Future<void> main() async {
       for (final f in follows) {
         cache.put(f.pubkey, f.feedKey, f.feedKeyEpoch);
       }
-      _keysLog('boot FeedKeyCache hydrated entries=${follows.length + 1}');
+      debugLog(
+        'starling.keys',
+        'boot FeedKeyCache hydrated entries=${follows.length + 1}',
+      );
       if (kDebugMode) {
         final preview = follows.take(20);
         for (final f in preview) {
-          _keysLog(
+          debugLog(
+            'starling.keys',
             'boot follow pubkey=${f.pubkey} '
-            'feedKeyFp=${_shortBytes(f.feedKey)} '
-            'epoch=${f.feedKeyEpoch} '
-            'lastDecryptFailureAt=${f.lastDecryptFailureAt}',
+                'feedKeyFp=${shortFingerprint(f.feedKey)} '
+                'epoch=${f.feedKeyEpoch} '
+                'lastDecryptFailureAt=${f.lastDecryptFailureAt}',
           );
         }
         if (follows.length > 20) {
-          _keysLog('boot follow … (+${follows.length - 20} more)');
+          debugLog(
+            'starling.keys',
+            'boot follow … (+${follows.length - 20} more)',
+          );
         }
       }
       final contentKey = PairwiseContentKeyService(
@@ -129,8 +149,9 @@ Future<void> main() async {
         ownSecretKey: secretKey,
       );
       overrides.add(
-        contentKeyServiceProvider
-            .overrideWithValue(contentKey as ContentKeyService),
+        contentKeyServiceProvider.overrideWithValue(
+          contentKey as ContentKeyService,
+        ),
       );
       // KeyRotationService (Plan 13) and PairwiseContentKeyService both
       // read from this single cache instance — rotations must update the
@@ -174,7 +195,9 @@ Future<void> main() async {
   runApp(ProviderScope(overrides: overrides, child: const StarlingApp()));
 }
 
-Future<DriftStorageService> _initStorageService(KeychainManager keychain) async {
+Future<DriftStorageService> _initStorageService(
+  KeychainManager keychain,
+) async {
   var dbKey = await keychain.read(KeychainManager.dbKeyName);
   if (dbKey == null) {
     final random = Random.secure();
@@ -187,16 +210,6 @@ Future<DriftStorageService> _initStorageService(KeychainManager keychain) async 
   return DriftStorageService(db, const SystemClock());
 }
 
-/// First 8 hex chars of [bytes] for safe-to-log fingerprints. Same shape as
-/// `_StarlingAppState._short` so log lines can be diffed across the two sites.
-String _shortBytes(Uint8List bytes) {
-  final hex = bytes
-      .take(4)
-      .map((b) => b.toRadixString(16).padLeft(2, '0'))
-      .join();
-  return '$hex…';
-}
-
 String _crockfordSafe(Uint8List bytes) {
   try {
     return crockfordBase32Encode(bytes);
@@ -205,25 +218,17 @@ String _crockfordSafe(Uint8List bytes) {
   }
 }
 
-/// Boot-time key state line — always-on (warnings included). DevTools sees
-/// it via `developer.log`; Xcode/adb console sees it via `print`.
-void _keysLog(String msg) {
-  developer.log(msg, name: 'starling.keys');
-  // ignore: avoid_print
-  print('[starling.keys] $msg');
-}
-
 Future<void> _runRetention(DriftStorageService storage) async {
   try {
     final supportDir = await getApplicationSupportDirectory();
-    final retention = RetentionService(
-      storage: storage,
-      mediaRoot: supportDir,
-    );
+    final retention = RetentionService(storage: storage, mediaRoot: supportDir);
     await retention.run();
   } catch (e, st) {
-    developer.log('retention failed: $e',
-        name: 'starling.retention', stackTrace: st);
+    developer.log(
+      'retention failed: $e',
+      name: 'starling.retention',
+      stackTrace: st,
+    );
   }
 }
 
@@ -257,31 +262,33 @@ class _StarlingAppState extends ConsumerState<StarlingApp>
       deepLinkInvitesProvider,
       (_, next) {
         final invite = next.value;
-        if (invite is ValidInvite) {
-          final ctx = ref.read(routerProvider).routerDelegate.navigatorKey
-              .currentContext;
-          if (ctx != null) {
-            showStarlingSheet(
-              context: ctx,
-              builder: (_) => ConfirmRequestSheet(card: invite.card),
-            );
-          }
-        }
+        if (invite is! ValidInvite && invite is! ValidRelayPair) return;
+        final ctx = ref
+            .read(routerProvider)
+            .routerDelegate
+            .navigatorKey
+            .currentContext;
+        if (ctx == null) return;
+        showStarlingSheet(
+          context: ctx,
+          builder: (_) => invite is ValidRelayPair
+              ? ConfirmRelayPairingSheet(payload: invite.payload)
+              : ConfirmRequestSheet(card: (invite as ValidInvite).card),
+        );
       },
     );
     // Debug: dump identity + per-follow key state every time the
     // identity controller hydrates. Fires on first launch and again
     // after any subsequent identity refresh — so a hot restart is
     // enough to surface the dump (no full kill required).
-    ref.listenManual<AsyncValue<dynamic>>(
-      identityControllerProvider,
-      (_, next) {
-        if (next is AsyncData) {
-          unawaited(_debugDumpKeyState());
-        }
-      },
-      fireImmediately: true,
-    );
+    ref.listenManual<AsyncValue<dynamic>>(identityControllerProvider, (
+      _,
+      next,
+    ) {
+      if (next is AsyncData) {
+        unawaited(_debugDumpKeyState());
+      }
+    }, fireImmediately: true);
   }
 
   @override
@@ -307,53 +314,37 @@ class _StarlingAppState extends ConsumerState<StarlingApp>
   }
 
   Future<void> _debugDumpKeyState() async {
+    // Diagnostic-only — skip the DB reads entirely in release builds.
+    if (!kDebugMode) return;
     try {
       final storage = ref.read(storageServiceProvider);
       final identity = await storage.getIdentity();
       if (identity == null) {
-        _debugLine('no identity row');
+        debugLog('starling.debug.keys', 'no identity row');
         return;
       }
-      _debugLine(
+      debugLog(
+        'starling.debug.keys',
         'IDENTITY pubkey=${identity.pubkey} '
-        'feedKey=${_short(identity.feedKey)} '
-        'epoch=${identity.feedKeyEpoch}',
+            'feedKey=${shortFingerprint(identity.feedKey)} '
+            'epoch=${identity.feedKeyEpoch}',
       );
       final follows = await storage.getFollows();
-      _debugLine('FOLLOWS count=${follows.length}');
+      debugLog('starling.debug.keys', 'FOLLOWS count=${follows.length}');
       for (final f in follows) {
-        _debugLine(
+        debugLog(
+          'starling.debug.keys',
           'FOLLOW pubkey=${f.pubkey} '
-          'feedKey=${_short(f.feedKey)} '
-          'epoch=${f.feedKeyEpoch} '
-          'lastSyncedAt=${f.lastSyncedAt} '
-          'lastReceivedRotationAt=${f.lastReceivedRotationAt} '
-          'lastDecryptFailureAt=${f.lastDecryptFailureAt}',
+              'feedKey=${shortFingerprint(f.feedKey)} '
+              'epoch=${f.feedKeyEpoch} '
+              'lastSyncedAt=${f.lastSyncedAt} '
+              'lastReceivedRotationAt=${f.lastReceivedRotationAt} '
+              'lastDecryptFailureAt=${f.lastDecryptFailureAt}',
         );
       }
     } catch (e, st) {
-      _debugLine('KEY DUMP FAILED: $e\n$st');
+      debugLog('starling.debug.keys', 'KEY DUMP FAILED: $e\n$st');
     }
-  }
-
-  /// Routes a debug line through both `developer.log` (for DevTools) and
-  /// `print` (for `flutter run` stdout / Xcode console). Intentionally
-  /// loud so we can compare key state across devices without hunting in
-  /// filtered log panels.
-  void _debugLine(String msg) {
-    developer.log(msg, name: 'starling.debug.keys');
-    // ignore: avoid_print
-    print('[starling.debug.keys] $msg');
-  }
-
-  /// First 8 hex chars of [bytes]. Enough to compare across devices in a
-  /// log line without putting a full key on screen.
-  static String _short(Uint8List bytes) {
-    final hex = bytes
-        .take(4)
-        .map((b) => b.toRadixString(16).padLeft(2, '0'))
-        .join();
-    return '$hex…';
   }
 
   @override

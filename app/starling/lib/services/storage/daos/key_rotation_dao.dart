@@ -30,9 +30,7 @@ class KeyRotationDao extends DatabaseAccessor<AppDatabase>
 
   /// Append a retired key. Caller supplies the half-open `[validFrom,
   /// validUntil)` window the key was active for.
-  Future<void> appendFeedKeyHistory(
-    FeedKeyHistoryEntriesCompanion entry,
-  ) =>
+  Future<void> appendFeedKeyHistory(FeedKeyHistoryEntriesCompanion entry) =>
       into(feedKeyHistoryEntries).insert(entry);
 
   /// Returns the retired key whose `[validFrom, validUntil)` contains
@@ -40,16 +38,17 @@ class KeyRotationDao extends DatabaseAccessor<AppDatabase>
   /// authored under a previous key.
   Future<FeedKeyHistoryEntry?> feedKeyAt(int timestamp) =>
       (select(feedKeyHistoryEntries)
-            ..where((h) =>
-                h.validFrom.isSmallerOrEqualValue(timestamp) &
-                h.validUntil.isBiggerThanValue(timestamp))
+            ..where(
+              (h) =>
+                  h.validFrom.isSmallerOrEqualValue(timestamp) &
+                  h.validUntil.isBiggerThanValue(timestamp),
+            )
             ..limit(1))
           .getSingleOrNull();
 
-  Future<List<FeedKeyHistoryEntry>> getFeedKeyHistory() =>
-      (select(feedKeyHistoryEntries)
-            ..orderBy([(h) => OrderingTerm.asc(h.validFrom)]))
-          .get();
+  Future<List<FeedKeyHistoryEntry>> getFeedKeyHistory() => (select(
+    feedKeyHistoryEntries,
+  )..orderBy([(h) => OrderingTerm.asc(h.validFrom)])).get();
 
   // --- follow_feed_key_history ---
 
@@ -57,8 +56,7 @@ class KeyRotationDao extends DatabaseAccessor<AppDatabase>
   /// `[validFrom, validUntil)` window the key was active.
   Future<void> appendFollowFeedKeyHistory(
     FollowFeedKeyHistoryEntriesCompanion entry,
-  ) =>
-      into(followFeedKeyHistoryEntries).insert(entry);
+  ) => into(followFeedKeyHistoryEntries).insert(entry);
 
   /// All retired chain roots for [followPubkey], oldest first.
   Future<List<FollowFeedKeyHistoryEntry>> getFollowFeedKeyHistory(
@@ -73,22 +71,19 @@ class KeyRotationDao extends DatabaseAccessor<AppDatabase>
 
   Future<void> addPendingDistribution(
     PendingKeyDistributionEntriesCompanion entry,
-  ) =>
-      into(pendingKeyDistributionEntries).insert(
-        entry,
-        mode: InsertMode.insertOrReplace,
-      );
+  ) => into(
+    pendingKeyDistributionEntries,
+  ).insert(entry, mode: InsertMode.insertOrReplace);
 
   /// Latest undelivered distribution for [targetPubkey], or null.
   /// "Latest" because a follower offline across multiple rotations only
   /// needs the most recent key — the older intermediate keys are skipped.
-  Future<PendingKeyDistributionEntry?> latestPendingFor(
-    String targetPubkey,
-  ) =>
+  Future<PendingKeyDistributionEntry?> latestPendingFor(String targetPubkey) =>
       (select(pendingKeyDistributionEntries)
-            ..where((p) =>
-                p.targetPubkey.equals(targetPubkey) &
-                p.distributed.equals(0))
+            ..where(
+              (p) =>
+                  p.targetPubkey.equals(targetPubkey) & p.distributed.equals(0),
+            )
             ..orderBy([(p) => OrderingTerm.desc(p.createdAt)])
             ..limit(1))
           .getSingleOrNull();
@@ -97,31 +92,29 @@ class KeyRotationDao extends DatabaseAccessor<AppDatabase>
     String targetPubkey,
   ) =>
       (select(pendingKeyDistributionEntries)
-            ..where((p) =>
-                p.targetPubkey.equals(targetPubkey) &
-                p.distributed.equals(0))
+            ..where(
+              (p) =>
+                  p.targetPubkey.equals(targetPubkey) & p.distributed.equals(0),
+            )
             ..orderBy([(p) => OrderingTerm.asc(p.createdAt)]))
           .get();
 
   /// Mark every undelivered distribution row for [targetPubkey] with
   /// `createdAt <= upTo` as `distributed=1`. Idempotent.
-  Future<void> markDistributionsDelivered(
-    String targetPubkey,
-    int upTo,
-  ) =>
-      (update(pendingKeyDistributionEntries)
-            ..where((p) =>
+  Future<void> markDistributionsDelivered(String targetPubkey, int upTo) =>
+      (update(pendingKeyDistributionEntries)..where(
+            (p) =>
                 p.targetPubkey.equals(targetPubkey) &
-                p.createdAt.isSmallerOrEqualValue(upTo)))
-          .write(const PendingKeyDistributionEntriesCompanion(
-        distributed: Value(1),
-      ));
+                p.createdAt.isSmallerOrEqualValue(upTo),
+          ))
+          .write(
+            const PendingKeyDistributionEntriesCompanion(distributed: Value(1)),
+          );
 
   /// Drop every distribution row for [targetPubkey] outright. Used when
   /// the follower is being removed: any pending key for them shouldn't
   /// leak via a later sync attempt.
-  Future<void> clearPendingDistributionsFor(String targetPubkey) =>
-      (delete(pendingKeyDistributionEntries)
-            ..where((p) => p.targetPubkey.equals(targetPubkey)))
-          .go();
+  Future<void> clearPendingDistributionsFor(String targetPubkey) => (delete(
+    pendingKeyDistributionEntries,
+  )..where((p) => p.targetPubkey.equals(targetPubkey))).go();
 }

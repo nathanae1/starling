@@ -278,9 +278,10 @@ CREATE TABLE outbound_queue (
 - No algorithmic sorting, no ads, no explore, no suggested content
 
 ### Compose
+- Launched from a compose **floating action button** (post-audit 2026-06-28; was the "Post" tab)
 - Select photo from gallery or take with camera
 - Add caption
-- Preview, then post
+- Actions sit in a **bottom action bar**: **Cancel** + **Next** (Next → Preview → Post). A photo is required to advance; a hint says so while it's missing.
 - Photo is compressed, encrypted, signed, stored locally
 - If relay configured: push to relay in background
 
@@ -293,7 +294,7 @@ CREATE TABLE outbound_queue (
 - Settings gear
 
 ### Profile (others)
-- Display name, avatar, bio
+- Display name, avatar, bio — resolved from the peer's latest **kind=2 profile event** (via `followProfileProvider` + `EncryptedAvatar`); the `follows` row carries no live name/avatar. The friends list resolves names/avatars the same way.
 - Grid of their posts (from local cache)
 - "Load older posts" to backfill
 - Unfollow button
@@ -313,6 +314,9 @@ CREATE TABLE outbound_queue (
 - Tor status (on/off, .onion address)
 - Network status (peers reachable, sync stats)
 - About / version
+
+### Navigation (app shell)
+Bottom tab bar with four destinations — **Feed · Friends · Rooms · You** — plus a compose **FAB** (hidden during a voice call). _(Post-audit 2026-06-28: replaced the earlier Feed/Friends/Post/You bar where "Post" was a modal action.)_ **Rooms** is the voice hub (Plan 16) — start a room + recent call history — promoted from a Friends app-bar icon to a top-level tab.
 
 ## Background Behavior
 

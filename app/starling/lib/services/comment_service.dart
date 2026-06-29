@@ -13,10 +13,7 @@ abstract class CommentService {
   /// Create a kind=4 comment referencing [targetPostId] with the given body.
   /// Returns the new comment's id. If the target post is on someone else's
   /// device, the encrypted comment is enqueued for delivery to that author.
-  Future<String> create({
-    required String targetPostId,
-    required String text,
-  });
+  Future<String> create({required String targetPostId, required String text});
 
   /// Create a kind=6 delete event referencing [commentId]. Returns the
   /// new delete event's id. Same delivery rules: if the comment was on
@@ -36,11 +33,11 @@ class DefaultCommentService implements CommentService {
     required Clock clock,
     required Future<Identity?> Function() identityLookup,
     PublishLock? publishLock,
-  })  : _contentKey = contentKey,
-        _storage = storage,
-        _clock = clock,
-        _identityLookup = identityLookup,
-        _publishLock = publishLock ?? PublishLock();
+  }) : _contentKey = contentKey,
+       _storage = storage,
+       _clock = clock,
+       _identityLookup = identityLookup,
+       _publishLock = publishLock ?? PublishLock();
 
   final ContentKeyService _contentKey;
   final StorageService _storage;
@@ -49,10 +46,7 @@ class DefaultCommentService implements CommentService {
   final PublishLock _publishLock;
 
   @override
-  Future<String> create({
-    required String targetPostId,
-    required String text,
-  }) =>
+  Future<String> create({required String targetPostId, required String text}) =>
       _publishLock.synchronized(() async {
         final identity = await _identityLookup();
         if (identity == null) {
@@ -91,53 +85,48 @@ class DefaultCommentService implements CommentService {
       });
 
   @override
-  Future<String> delete(String commentId) =>
-      _publishLock.synchronized(() async {
-        final identity = await _identityLookup();
-        if (identity == null) {
-          throw StateError('deleteComment called before identity is loaded');
-        }
+  Future<String> delete(String commentId) => _publishLock.synchronized(
+    () async {
+      final identity = await _identityLookup();
+      if (identity == null) {
+        throw StateError('deleteComment called before identity is loaded');
+      }
 
-        final msgSeq = identity.msgSeqCounter;
+      final msgSeq = identity.msgSeqCounter;
 
-        final unsigned = Event(
-          version: kStarlingProtocolVersion,
-          id: '',
-          pubkey: identity.pubkey,
-          createdAt: _clock.nowUnixSeconds(),
-          kind: EventKind.delete,
-          ref: commentId,
-          content: Uint8List(0),
-          media: const [],
-          extensions: const {},
-          sig: Uint8List(0),
-        );
+      final unsigned = Event(
+        version: kStarlingProtocolVersion,
+        id: '',
+        pubkey: identity.pubkey,
+        createdAt: _clock.nowUnixSeconds(),
+        kind: EventKind.delete,
+        ref: commentId,
+        content: Uint8List(0),
+        media: const [],
+        extensions: const {},
+        sig: Uint8List(0),
+      );
 
-        final result = _contentKey.signAndEncryptForAudience(
-          unsigned,
-          Audience.broadcast,
-          msgSeq: msgSeq,
-        );
-        await _storage.saveOwnEventWithEncrypted(
-          result.signed,
-          result.encrypted.toBytes(),
-        );
-        await _storage.saveIdentity(
-          identity.copyWith(msgSeqCounter: msgSeq + 1),
-        );
+      final result = _contentKey.signAndEncryptForAudience(
+        unsigned,
+        Audience.broadcast,
+        msgSeq: msgSeq,
+      );
+      await _storage.saveOwnEventWithEncrypted(
+        result.signed,
+        result.encrypted.toBytes(),
+      );
+      await _storage.saveIdentity(identity.copyWith(msgSeqCounter: msgSeq + 1));
 
-        // Walk one ref up: if the deleted comment was on someone else's
-        // post, the post author wants the tombstone too.
-        final original = await _storage.getEvent(commentId);
-        if (original != null && original.ref != null) {
-          await _maybeEnqueueForAuthor(
-            original.ref!,
-            identity,
-            result.encrypted,
-          );
-        }
-        return result.signed.id;
-      });
+      // Walk one ref up: if the deleted comment was on someone else's
+      // post, the post author wants the tombstone too.
+      final original = await _storage.getEvent(commentId);
+      if (original != null && original.ref != null) {
+        await _maybeEnqueueForAuthor(original.ref!, identity, result.encrypted);
+      }
+      return result.signed.id;
+    },
+  );
 
   Future<void> _maybeEnqueueForAuthor(
     String postId,

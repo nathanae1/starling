@@ -3,7 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/starling_theme.dart';
 
-enum StarlingTab { feed, friends, post, you }
+enum StarlingTab { feed, friends, rooms, you }
 
 class StarlingBottomTabBar extends StatelessWidget {
   const StarlingBottomTabBar({
@@ -24,24 +24,20 @@ class StarlingBottomTabBar extends StatelessWidget {
   static const _tabs = <_TabDef>[
     _TabDef(StarlingTab.feed, 'Feed'),
     _TabDef(StarlingTab.friends, 'Friends'),
-    _TabDef(StarlingTab.post, 'Post'),
+    _TabDef(StarlingTab.rooms, 'Rooms'),
     _TabDef(StarlingTab.you, 'You'),
   ];
 
-  IconData _iconFor(StarlingTab tab, bool active) {
+  IconData _iconFor(StarlingTab tab) {
     switch (tab) {
       case StarlingTab.feed:
-        return active ? LucideIcons.house : LucideIcons.house;
+        return LucideIcons.house;
       case StarlingTab.friends:
-        return active
-            ? LucideIcons.users
-            : LucideIcons.users;
-      case StarlingTab.post:
-        return active
-            ? LucideIcons.circlePlus
-            : LucideIcons.circlePlus;
+        return LucideIcons.users;
+      case StarlingTab.rooms:
+        return LucideIcons.radio;
       case StarlingTab.you:
-        return active ? LucideIcons.user : LucideIcons.user;
+        return LucideIcons.user;
     }
   }
 
@@ -65,7 +61,7 @@ class StarlingBottomTabBar extends StatelessWidget {
             Expanded(
               child: _TabButton(
                 label: tab.label,
-                icon: _iconFor(tab.id, tab.id == current),
+                icon: _iconFor(tab.id),
                 active: tab.id == current,
                 hasBadge: (badges[tab.id] ?? 0) > 0,
                 onTap: () => onTap(tab.id),

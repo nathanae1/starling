@@ -84,14 +84,20 @@ Future<FollowAcceptIngestResult> ingestFollowAcceptBytes({
     switch (e.kind) {
       case FollowFailureKind.unknownRequester:
         return const FollowAcceptIngestResult(
-            status: 404, body: 'unknown owner');
+          status: 404,
+          body: 'unknown owner',
+        );
       case FollowFailureKind.decryptFailed:
         return const FollowAcceptIngestResult(
-            status: 400, body: 'decryption failed');
+          status: 400,
+          body: 'decryption failed',
+        );
       case FollowFailureKind.network:
       case FollowFailureKind.noEndpoints:
         return const FollowAcceptIngestResult(
-            status: 500, body: 'internal error');
+          status: 500,
+          body: 'internal error',
+        );
     }
   }
 }

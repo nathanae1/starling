@@ -60,18 +60,16 @@ typedef ArtiInitDart = Pointer<Void> Function(Pointer<Utf8>, int);
 typedef ArtiBootstrapNative = Int32 Function(Pointer<Void>);
 typedef ArtiBootstrapDart = int Function(Pointer<Void>);
 
-typedef ArtiCreateOnionServiceNative = Pointer<Utf8> Function(
-    Pointer<Void>, Uint16);
-typedef ArtiCreateOnionServiceDart = Pointer<Utf8> Function(
-    Pointer<Void>, int);
+typedef ArtiCreateOnionServiceNative =
+    Pointer<Utf8> Function(Pointer<Void>, Uint16);
+typedef ArtiCreateOnionServiceDart = Pointer<Utf8> Function(Pointer<Void>, int);
 
 typedef ArtiSocksPortNative = Uint16 Function(Pointer<Void>);
 typedef ArtiSocksPortDart = int Function(Pointer<Void>);
 
-typedef ArtiStatusNative = Int32 Function(
-    Pointer<Void>, Pointer<ArtiStatusStruct>);
-typedef ArtiStatusDart = int Function(
-    Pointer<Void>, Pointer<ArtiStatusStruct>);
+typedef ArtiStatusNative =
+    Int32 Function(Pointer<Void>, Pointer<ArtiStatusStruct>);
+typedef ArtiStatusDart = int Function(Pointer<Void>, Pointer<ArtiStatusStruct>);
 
 typedef ArtiShutdownNative = Int32 Function(Pointer<Void>);
 typedef ArtiShutdownDart = int Function(Pointer<Void>);
@@ -84,25 +82,30 @@ typedef ArtiLastErrorDart = Pointer<Utf8> Function();
 
 class ArtiBindings {
   ArtiBindings._(DynamicLibrary lib)
-      : init = lib
-            .lookupFunction<ArtiInitNative, ArtiInitDart>('arti_init'),
-        bootstrap = lib
-            .lookupFunction<ArtiBootstrapNative, ArtiBootstrapDart>(
-                'arti_bootstrap'),
-        createOnionService = lib.lookupFunction<ArtiCreateOnionServiceNative,
-            ArtiCreateOnionServiceDart>('arti_create_onion_service'),
-        socksPort = lib.lookupFunction<ArtiSocksPortNative, ArtiSocksPortDart>(
-            'arti_socks_port'),
-        status = lib.lookupFunction<ArtiStatusNative, ArtiStatusDart>(
-            'arti_status'),
-        shutdown = lib.lookupFunction<ArtiShutdownNative, ArtiShutdownDart>(
-            'arti_shutdown'),
-        stringFree =
-            lib.lookupFunction<ArtiStringFreeNative, ArtiStringFreeDart>(
-                'arti_string_free'),
-        lastError =
-            lib.lookupFunction<ArtiLastErrorNative, ArtiLastErrorDart>(
-                'arti_last_error');
+    : init = lib.lookupFunction<ArtiInitNative, ArtiInitDart>('arti_init'),
+      bootstrap = lib.lookupFunction<ArtiBootstrapNative, ArtiBootstrapDart>(
+        'arti_bootstrap',
+      ),
+      createOnionService = lib
+          .lookupFunction<
+            ArtiCreateOnionServiceNative,
+            ArtiCreateOnionServiceDart
+          >('arti_create_onion_service'),
+      socksPort = lib.lookupFunction<ArtiSocksPortNative, ArtiSocksPortDart>(
+        'arti_socks_port',
+      ),
+      status = lib.lookupFunction<ArtiStatusNative, ArtiStatusDart>(
+        'arti_status',
+      ),
+      shutdown = lib.lookupFunction<ArtiShutdownNative, ArtiShutdownDart>(
+        'arti_shutdown',
+      ),
+      stringFree = lib.lookupFunction<ArtiStringFreeNative, ArtiStringFreeDart>(
+        'arti_string_free',
+      ),
+      lastError = lib.lookupFunction<ArtiLastErrorNative, ArtiLastErrorDart>(
+        'arti_last_error',
+      );
 
   final ArtiInitDart init;
   final ArtiBootstrapDart bootstrap;

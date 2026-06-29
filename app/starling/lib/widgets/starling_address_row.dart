@@ -50,11 +50,7 @@ class StarlingAddressRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 6),
-            Icon(
-              LucideIcons.copy,
-              size: 14,
-              color: starling.colors.stone,
-            ),
+            Icon(LucideIcons.copy, size: 14, color: starling.colors.stone),
           ],
         ),
       ),

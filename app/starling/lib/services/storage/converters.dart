@@ -10,14 +10,14 @@ import 'database.dart';
 // --- Identity ---
 
 Identity identityFromRow(IdentityEntry row) => Identity(
-      pubkey: row.pubkey,
-      feedKey: row.feedKey,
-      feedKeyEpoch: row.feedKeyEpoch,
-      feedKeyValidFrom: row.feedKeyValidFrom,
-      msgSeqCounter: row.msgSeqCounter,
-      recoveryPhrase: row.recoveryPhrase,
-      createdAt: row.createdAt,
-    );
+  pubkey: row.pubkey,
+  feedKey: row.feedKey,
+  feedKeyEpoch: row.feedKeyEpoch,
+  feedKeyValidFrom: row.feedKeyValidFrom,
+  msgSeqCounter: row.msgSeqCounter,
+  recoveryPhrase: row.recoveryPhrase,
+  createdAt: row.createdAt,
+);
 
 IdentityEntriesCompanion identityToCompanion(Identity identity) =>
     IdentityEntriesCompanion.insert(
@@ -33,15 +33,13 @@ IdentityEntriesCompanion identityToCompanion(Identity identity) =>
 // --- Feed key history (Plan 13) ---
 
 RetiredFeedKey retiredFeedKeyFromRow(FeedKeyHistoryEntry row) => RetiredFeedKey(
-      feedKey: row.feedKey,
-      feedKeyEpoch: row.feedKeyEpoch,
-      validFrom: row.validFrom,
-      validUntil: row.validUntil,
-    );
+  feedKey: row.feedKey,
+  feedKeyEpoch: row.feedKeyEpoch,
+  validFrom: row.validFrom,
+  validUntil: row.validUntil,
+);
 
-RetiredFeedKey retiredFeedKeyFromFollowRow(
-  FollowFeedKeyHistoryEntry row,
-) =>
+RetiredFeedKey retiredFeedKeyFromFollowRow(FollowFeedKeyHistoryEntry row) =>
     RetiredFeedKey(
       feedKey: row.feedKey,
       feedKeyEpoch: row.feedKeyEpoch,
@@ -53,30 +51,29 @@ RetiredFeedKey retiredFeedKeyFromFollowRow(
 
 PendingKeyDistribution pendingKeyDistributionFromRow(
   PendingKeyDistributionEntry row,
-) =>
-    PendingKeyDistribution(
-      targetPubkey: row.targetPubkey,
-      encryptedFeedKey: row.encryptedFeedKey,
-      nonce: row.nonce,
-      createdAt: row.createdAt,
-    );
+) => PendingKeyDistribution(
+  targetPubkey: row.targetPubkey,
+  encryptedFeedKey: row.encryptedFeedKey,
+  nonce: row.nonce,
+  createdAt: row.createdAt,
+);
 
 // --- Follow ---
 
 Follow followFromRow(FollowEntry row) => Follow(
-      pubkey: row.pubkey,
-      displayName: row.displayName,
-      avatarHash: row.avatarHash,
-      connectionCard: row.connectionCard,
-      feedKey: row.feedKey,
-      feedKeyEpoch: row.feedKeyEpoch,
-      lastSyncedAt: row.lastSyncedAt,
-      lastFullSyncAt: row.lastFullSyncAt,
-      lastReceivedRotationAt: row.lastReceivedRotationAt,
-      lastReceivedCardAt: row.lastReceivedCardAt,
-      lastDecryptFailureAt: row.lastDecryptFailureAt,
-      status: row.status,
-    );
+  pubkey: row.pubkey,
+  displayName: row.displayName,
+  avatarHash: row.avatarHash,
+  connectionCard: row.connectionCard,
+  feedKey: row.feedKey,
+  feedKeyEpoch: row.feedKeyEpoch,
+  lastSyncedAt: row.lastSyncedAt,
+  lastFullSyncAt: row.lastFullSyncAt,
+  lastReceivedRotationAt: row.lastReceivedRotationAt,
+  lastReceivedCardAt: row.lastReceivedCardAt,
+  lastDecryptFailureAt: row.lastDecryptFailureAt,
+  status: row.status,
+);
 
 FollowEntriesCompanion followToCompanion(Follow follow) =>
     FollowEntriesCompanion.insert(
@@ -97,60 +94,58 @@ FollowEntriesCompanion followToCompanion(Follow follow) =>
 // --- Paired relay + card distributions (Plan 15) ---
 
 PairedRelay pairedRelayFromRow(PairedRelayEntry row) => PairedRelay(
-      relayId: row.relayId,
-      relayOnion: row.relayOnion,
-      pairedAt: row.pairedAt,
-      backfillComplete: row.relayBackfillComplete == 1,
-    );
+  relayId: row.relayId,
+  relayOnion: row.relayOnion,
+  pairedAt: row.pairedAt,
+  backfillComplete: row.relayBackfillComplete == 1,
+);
 
 PendingCardDistribution pendingCardDistributionFromRow(
   PendingCardDistributionEntry row,
-) =>
-    PendingCardDistribution(
-      targetPubkey: row.targetPubkey,
-      encryptedCard: row.encryptedCard,
-      nonce: row.nonce,
-      createdAt: row.createdAt,
-    );
+) => PendingCardDistribution(
+  targetPubkey: row.targetPubkey,
+  encryptedCard: row.encryptedCard,
+  nonce: row.nonce,
+  createdAt: row.createdAt,
+);
 
 // --- Event ---
 
 Event eventFromRow(EventEntry row) => Event(
-      version: row.version,
-      id: row.id,
-      pubkey: row.pubkey,
-      createdAt: row.createdAt,
-      kind: EventKind.fromValue(row.kind),
-      ref: row.refId,
-      content: row.content,
-      media: _decodeMediaRefs(row.mediaRefs),
-      extensions: _decodeExtensions(row.extensions),
-      sig: row.sig,
-      msgSeq: row.msgSeq,
-    );
+  version: row.version,
+  id: row.id,
+  pubkey: row.pubkey,
+  createdAt: row.createdAt,
+  kind: EventKind.fromValue(row.kind),
+  ref: row.refId,
+  content: row.content,
+  media: _decodeMediaRefs(row.mediaRefs),
+  extensions: _decodeExtensions(row.extensions),
+  sig: row.sig,
+  msgSeq: row.msgSeq,
+);
 
 EventEntriesCompanion eventToCompanion(
   Event event, {
   required bool isOwn,
   required int fetchedAt,
   Uint8List? encryptedPayload,
-}) =>
-    EventEntriesCompanion.insert(
-      id: event.id,
-      pubkey: event.pubkey,
-      createdAt: event.createdAt,
-      kind: event.kind.value,
-      refId: Value(event.ref),
-      content: event.content,
-      mediaRefs: Value(_encodeMediaRefs(event.media)),
-      sig: event.sig,
-      isOwn: Value(isOwn ? 1 : 0),
-      fetchedAt: fetchedAt,
-      version: Value(event.version),
-      extensions: Value(_encodeExtensions(event.extensions)),
-      msgSeq: Value(event.msgSeq),
-      encryptedPayload: Value(encryptedPayload),
-    );
+}) => EventEntriesCompanion.insert(
+  id: event.id,
+  pubkey: event.pubkey,
+  createdAt: event.createdAt,
+  kind: event.kind.value,
+  refId: Value(event.ref),
+  content: event.content,
+  mediaRefs: Value(_encodeMediaRefs(event.media)),
+  sig: event.sig,
+  isOwn: Value(isOwn ? 1 : 0),
+  fetchedAt: fetchedAt,
+  version: Value(event.version),
+  extensions: Value(_encodeExtensions(event.extensions)),
+  msgSeq: Value(event.msgSeq),
+  encryptedPayload: Value(encryptedPayload),
+);
 
 String? _encodeMediaRefs(List<MediaRef> media) {
   if (media.isEmpty) return null;
@@ -168,11 +163,11 @@ List<MediaRef> _decodeMediaRefs(String? json) {
 // --- CachedMedia ---
 
 CachedMedia cachedMediaFromRow(MediaCacheEntry row) => CachedMedia(
-      hash: row.hash,
-      path: row.path,
-      size: row.size,
-      lastAccessed: row.lastAccessed,
-    );
+  hash: row.hash,
+  path: row.path,
+  size: row.size,
+  lastAccessed: row.lastAccessed,
+);
 
 MediaCacheEntriesCompanion cachedMediaToCompanion(CachedMedia media) =>
     MediaCacheEntriesCompanion.insert(
@@ -205,12 +200,12 @@ FollowRequest outboundRequestFromRow(OutboundFollowRequestEntry row) =>
 // --- QueuedEvent ---
 
 QueuedEvent queuedEventFromRow(OutboundQueueEntry row) => QueuedEvent(
-      id: row.id,
-      targetPubkey: row.targetPubkey,
-      eventBlob: row.eventBlob,
-      createdAt: row.createdAt,
-      retryCount: row.retryCount,
-    );
+  id: row.id,
+  targetPubkey: row.targetPubkey,
+  eventBlob: row.eventBlob,
+  createdAt: row.createdAt,
+  retryCount: row.retryCount,
+);
 
 // --- Extensions ---
 

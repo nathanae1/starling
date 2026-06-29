@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
+import 'workmanager_dispatcher.dart';
+
 /// The desired foreground-service shape given the two independent intents that
 /// drive it. Pure (no plugin/platform access) so it is unit-testable.
 ///
@@ -18,8 +20,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 ({bool running, bool mic}) desiredFgState({
   required bool persistent,
   required bool callActive,
-}) =>
-    (running: persistent || callActive, mic: callActive);
+}) => (running: persistent || callActive, mic: callActive);
 
 /// Plan 14 Phase C — opt-in Android foreground service.
 ///
@@ -146,8 +147,10 @@ class ForegroundServiceController {
 
   Future<bool> _applyDesired() async {
     if (!Platform.isAndroid) return false;
-    final desired =
-        desiredFgState(persistent: _persistentEnabled, callActive: _callActive);
+    final desired = desiredFgState(
+      persistent: _persistentEnabled,
+      callActive: _callActive,
+    );
     final running = await FlutterForegroundTask.isRunningService;
 
     if (!desired.running) {
@@ -157,6 +160,10 @@ class ForegroundServiceController {
           'foreground service stop result=$result',
           name: 'starling.fgservice',
         );
+        // The FG service was keeping the process alive and syncing; with it
+        // gone, restore the WorkManager periodic task as the background sync
+        // fallback. Re-registering is idempotent (ExistingPeriodicWorkPolicy.keep).
+        await initializeBackgroundSync();
       }
       _microphoneActive = false;
       return false;
@@ -197,6 +204,10 @@ class ForegroundServiceController {
 
     if (result is ServiceRequestSuccess) {
       _microphoneActive = desired.mic;
+      // The FG service now keeps the process alive and syncs continuously, so
+      // cancel the WorkManager periodic task to avoid double-syncing. It is
+      // re-registered when the service stops (see the !desired.running branch).
+      await cancelBackgroundSync();
       developer.log(
         'foreground service running (mic=${desired.mic})',
         name: 'starling.fgservice',
@@ -213,10 +224,7 @@ class ForegroundServiceController {
 
   (String, String) _notificationCopy({required bool callActive}) {
     if (callActive) {
-      return (
-        'Starling — voice call',
-        'Voice call in progress.',
-      );
+      return ('Starling — voice call', 'Voice call in progress.');
     }
     return (
       'Starling is running',

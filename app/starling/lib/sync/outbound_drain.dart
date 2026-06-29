@@ -51,11 +51,7 @@ Future<OutboundDrainResult> drainOutboundQueueForPeer({
     for (final entry in queued) {
       await storage.removeFromQueue(entry.id);
     }
-    return OutboundDrainResult(
-      pushed: queued.length,
-      dropped: 0,
-      retried: 0,
-    );
+    return OutboundDrainResult(pushed: queued.length, dropped: 0, retried: 0);
   } catch (e) {
     developer.log(
       'pushEvents failed for ${follow.pubkey}: $e',
@@ -67,11 +63,7 @@ Future<OutboundDrainResult> drainOutboundQueueForPeer({
       // Transport-level failure or server error: the envelope may simply
       // not have arrived. Leave retry counts alone — these entries retry
       // on every future pass until a delivery is actually answered.
-      return OutboundDrainResult(
-        pushed: 0,
-        dropped: 0,
-        retried: queued.length,
-      );
+      return OutboundDrainResult(pushed: 0, dropped: 0, retried: queued.length);
     }
     var dropped = 0;
     var retried = 0;
@@ -89,11 +81,7 @@ Future<OutboundDrainResult> drainOutboundQueueForPeer({
         retried++;
       }
     }
-    return OutboundDrainResult(
-      pushed: 0,
-      dropped: dropped,
-      retried: retried,
-    );
+    return OutboundDrainResult(pushed: 0, dropped: dropped, retried: retried);
   }
 }
 

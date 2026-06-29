@@ -39,49 +39,47 @@ class Event {
   final int? msgSeq;
 
   Map<String, dynamic> toMap() => {
-        'version': version,
-        'id': id,
-        'pubkey': pubkey,
-        'created_at': createdAt,
-        'kind': kind.value,
-        if (ref != null) 'ref': ref,
-        'content': content,
-        'media': media.map((m) => m.toMap()).toList(),
-        'extensions': _extensionsToSerializable(extensions),
-        'sig': sig,
-      };
+    'version': version,
+    'id': id,
+    'pubkey': pubkey,
+    'created_at': createdAt,
+    'kind': kind.value,
+    if (ref != null) 'ref': ref,
+    'content': content,
+    'media': media.map((m) => m.toMap()).toList(),
+    'extensions': _extensionsToSerializable(extensions),
+    'sig': sig,
+  };
 
   /// Fields used for ID computation. Includes version and extensions.
   /// Excludes id and sig only.
   Map<String, dynamic> toIdFields() => {
-        'version': version,
-        'pubkey': pubkey,
-        'created_at': createdAt,
-        'kind': kind.value,
-        if (ref != null) 'ref': ref,
-        'content': content,
-        'media': media.map((m) => m.toMap()).toList(),
-        'extensions': _extensionsToSerializable(extensions),
-      };
+    'version': version,
+    'pubkey': pubkey,
+    'created_at': createdAt,
+    'kind': kind.value,
+    if (ref != null) 'ref': ref,
+    'content': content,
+    'media': media.map((m) => m.toMap()).toList(),
+    'extensions': _extensionsToSerializable(extensions),
+  };
 
   Uint8List toBytes() => Uint8List.fromList(cbor.encode(toMap()));
 
   static Event fromMap(Map<dynamic, dynamic> map) => Event(
-        version: map['version'] as String,
-        id: map['id'] as String,
-        pubkey: map['pubkey'] as String,
-        createdAt: map['created_at'] as int,
-        kind: EventKind.fromValue(map['kind'] as int),
-        ref: map['ref'] as String?,
-        content: _toUint8List(map['content']),
-        media: (map['media'] as List<dynamic>)
-            .map(
-              (item) => MediaRef.fromMap(item as Map<dynamic, dynamic>),
-            )
-            .toList(),
-        extensions: _extensionsFromMap(map['extensions']),
-        sig: _toUint8List(map['sig']),
-      );
+    version: map['version'] as String,
+    id: map['id'] as String,
+    pubkey: map['pubkey'] as String,
+    createdAt: map['created_at'] as int,
+    kind: EventKind.fromValue(map['kind'] as int),
+    ref: map['ref'] as String?,
+    content: _toUint8List(map['content']),
+    media: (map['media'] as List<dynamic>)
+        .map((item) => MediaRef.fromMap(item as Map<dynamic, dynamic>))
+        .toList(),
+    extensions: _extensionsFromMap(map['extensions']),
+    sig: _toUint8List(map['sig']),
+  );
 
   static Event fromBytes(Uint8List bytes) =>
       fromMap(cbor.decode(bytes) as Map<dynamic, dynamic>);
@@ -120,20 +118,19 @@ class Event {
     Map<String, Uint8List>? extensions,
     Uint8List? sig,
     int? msgSeq,
-  }) =>
-      Event(
-        version: version ?? this.version,
-        id: id ?? this.id,
-        pubkey: pubkey ?? this.pubkey,
-        createdAt: createdAt ?? this.createdAt,
-        kind: kind ?? this.kind,
-        ref: ref ?? this.ref,
-        content: content ?? this.content,
-        media: media ?? this.media,
-        extensions: extensions ?? this.extensions,
-        sig: sig ?? this.sig,
-        msgSeq: msgSeq ?? this.msgSeq,
-      );
+  }) => Event(
+    version: version ?? this.version,
+    id: id ?? this.id,
+    pubkey: pubkey ?? this.pubkey,
+    createdAt: createdAt ?? this.createdAt,
+    kind: kind ?? this.kind,
+    ref: ref ?? this.ref,
+    content: content ?? this.content,
+    media: media ?? this.media,
+    extensions: extensions ?? this.extensions,
+    sig: sig ?? this.sig,
+    msgSeq: msgSeq ?? this.msgSeq,
+  );
 }
 
 // CBOR decode may return List<int> instead of Uint8List for byte strings.
@@ -157,10 +154,7 @@ Map<String, dynamic> _extensionsToSerializable(Map<String, Uint8List> ext) {
   return Map<String, dynamic>.from(ext);
 }
 
-bool _extensionsEqual(
-  Map<String, Uint8List> a,
-  Map<String, Uint8List> b,
-) {
+bool _extensionsEqual(Map<String, Uint8List> a, Map<String, Uint8List> b) {
   if (a.length != b.length) return false;
   const listEq = ListEquality<int>();
   for (final key in a.keys) {

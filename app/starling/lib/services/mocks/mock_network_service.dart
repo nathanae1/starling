@@ -33,25 +33,16 @@ class MockNetworkService implements NetworkService {
     int? ackRotationAt,
     int? cardSeenAt,
     Uint8List? ackSig,
-  }) async =>
-      Manifest(
-        pubkey: connection.pubkey,
-        events: [],
-        hasOlder: false,
-      );
+  }) async => Manifest(pubkey: connection.pubkey, events: [], hasOlder: false);
 
   @override
   Future<List<EncryptedEvent>> fetchEvents(
     PeerConnection connection, {
     int? since,
-  }) async =>
-      [];
+  }) async => [];
 
   @override
-  Future<Uint8List> fetchMedia(
-    PeerConnection connection,
-    String hash,
-  ) async =>
+  Future<Uint8List> fetchMedia(PeerConnection connection, String hash) async =>
       Uint8List(0);
 
   @override

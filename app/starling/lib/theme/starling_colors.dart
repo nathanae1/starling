@@ -34,6 +34,9 @@ class StarlingColors {
   final Color clayDeep;
 
   final Color success;
+  // Pick by intent, not interchangeably: [warning] (clay) for caution /
+  // attention states (e.g. "Probing"), [danger] (deeper clay) for destructive
+  // or error states (e.g. failed sends, delete/clear actions).
   final Color warning;
   final Color danger;
 
@@ -58,18 +61,18 @@ class StarlingColors {
   );
 
   List<BoxShadow> get shadowSoft => [
-        BoxShadow(
-          color: shadowInk.withValues(alpha: 0.08),
-          blurRadius: 12,
-          offset: const Offset(0, 2),
-        ),
-      ];
+    BoxShadow(
+      color: shadowInk.withValues(alpha: 0.08),
+      blurRadius: 12,
+      offset: const Offset(0, 2),
+    ),
+  ];
 
   List<BoxShadow> get shadowLift => [
-        BoxShadow(
-          color: shadowInk.withValues(alpha: 0.10),
-          blurRadius: 24,
-          offset: const Offset(0, 4),
-        ),
-      ];
+    BoxShadow(
+      color: shadowInk.withValues(alpha: 0.10),
+      blurRadius: 24,
+      offset: const Offset(0, 4),
+    ),
+  ];
 }

@@ -74,12 +74,16 @@ class _RestoreScreenState extends ConsumerState<RestoreScreen> {
             children: [
               StarlingIconButton(
                 onPressed: () => context.go('/onboarding/welcome'),
+                semanticLabel: 'Back',
                 child: const Icon(LucideIcons.arrowLeft, size: 20),
               ),
               const SizedBox(height: 18),
               Text(
                 'Restore from\nrecovery phrase',
-                style: starling.typography.h1.copyWith(fontSize: 28, height: 1.15),
+                style: starling.typography.h1.copyWith(
+                  fontSize: 28,
+                  height: 1.15,
+                ),
               ),
               const SizedBox(height: 6),
               Text(
@@ -96,7 +100,9 @@ class _RestoreScreenState extends ConsumerState<RestoreScreen> {
                   maxLines: null,
                   expands: true,
                   textAlignVertical: TextAlignVertical.top,
-                  onChanged: (_) => setState(() {}),
+                  // Clear a stale validation error as soon as the user edits,
+                  // so the word-count progress takes the slot back while typing.
+                  onChanged: (_) => setState(() => _error = null),
                   style: starling.typography.mono,
                   cursorColor: starling.colors.sage,
                   decoration: InputDecoration(
@@ -104,17 +110,23 @@ class _RestoreScreenState extends ConsumerState<RestoreScreen> {
                     fillColor: starling.colors.linen,
                     hintText:
                         'river candle slow paper linen starling morning kettle ...',
-                    hintStyle: starling.typography.mono
-                        .copyWith(color: starling.colors.stone),
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    hintStyle: starling.typography.mono.copyWith(
+                      color: starling.colors.stone,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 14,
+                    ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
                       borderSide: BorderSide(color: starling.colors.hairline),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide(color: starling.colors.sage, width: 2),
+                      borderSide: BorderSide(
+                        color: starling.colors.sage,
+                        width: 2,
+                      ),
                     ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
@@ -124,19 +136,51 @@ class _RestoreScreenState extends ConsumerState<RestoreScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              if (_error != null) ...[
-                Text(
-                  _error!,
-                  style: starling.typography.small.copyWith(color: starling.colors.danger),
-                ),
-                const SizedBox(height: 12),
-              ] else ...[
+              // Validation error and word-count progress are kept in separate
+              // visual treatments so they don't compete: the error is a
+              // danger-tinted pill, shown only when a restore attempt failed;
+              // otherwise the quiet progress caption holds the slot.
+              if (_error != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: starling.colors.danger.withValues(alpha: 0.10),
+                    border: Border.all(
+                      color: starling.colors.danger.withValues(alpha: 0.45),
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        LucideIcons.triangleAlert,
+                        size: 16,
+                        color: starling.colors.danger,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _error!,
+                          style: starling.typography.small.copyWith(
+                            color: starling.colors.danger,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
                 Text(
                   '${_words.length} / 24 words',
-                  style: starling.typography.caption.copyWith(color: starling.colors.stone),
+                  style: starling.typography.caption.copyWith(
+                    color: starling.colors.stone,
+                  ),
                 ),
-                const SizedBox(height: 12),
-              ],
+              const SizedBox(height: 12),
               PrimaryButton(
                 label: _restoring ? 'Restoring…' : 'Restore',
                 block: true,

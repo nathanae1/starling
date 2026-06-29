@@ -8,8 +8,7 @@ import '../tables/identity_table.dart';
 part 'events_dao.g.dart';
 
 @DriftAccessor(tables: [EventEntries, FollowEntries, IdentityEntries])
-class EventsDao extends DatabaseAccessor<AppDatabase>
-    with _$EventsDaoMixin {
+class EventsDao extends DatabaseAccessor<AppDatabase> with _$EventsDaoMixin {
   EventsDao(super.db);
 
   /// Ordered `(created_at DESC, id DESC)`. With [untilId], `(until,
@@ -37,7 +36,8 @@ class EventsDao extends DatabaseAccessor<AppDatabase>
         }
         if (until != null) {
           if (untilId != null) {
-            condition = condition &
+            condition =
+                condition &
                 (e.createdAt.isSmallerThanValue(until) |
                     (e.createdAt.equals(until) &
                         e.id.isSmallerThanValue(untilId)));
@@ -59,8 +59,21 @@ class EventsDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<EventEntry?> getEvent(String id) =>
-      (select(eventEntries)..where((e) => e.id.equals(id)))
-          .getSingleOrNull();
+      (select(eventEntries)..where((e) => e.id.equals(id))).getSingleOrNull();
+
+  /// The most recent kind=2 (profile) event authored by [pubkey], or null.
+  /// Profiles are latest-`created_at`-wins; this returns the authoritative
+  /// row without loading every event for that author.
+  Future<EventEntry?> getLatestProfile(String pubkey) {
+    final q = select(eventEntries)
+      ..where((e) => e.pubkey.equals(pubkey) & e.kind.equals(2))
+      ..orderBy([
+        (e) => OrderingTerm.desc(e.createdAt),
+        (e) => OrderingTerm.desc(e.id),
+      ])
+      ..limit(1);
+    return q.getSingleOrNull();
+  }
 
   Future<void> upsertEvent(EventEntriesCompanion entry) =>
       into(eventEntries).insertOnConflictUpdate(entry);
@@ -69,10 +82,11 @@ class EventsDao extends DatabaseAccessor<AppDatabase>
   /// Set at author time on own posts; null for received events and for
   /// own posts authored before the schema v2 migration.
   Future<Uint8List?> getEncryptedPayload(String id) async {
-    final row = await (selectOnly(eventEntries)
-          ..addColumns([eventEntries.encryptedPayload])
-          ..where(eventEntries.id.equals(id)))
-        .getSingleOrNull();
+    final row =
+        await (selectOnly(eventEntries)
+              ..addColumns([eventEntries.encryptedPayload])
+              ..where(eventEntries.id.equals(id)))
+            .getSingleOrNull();
     return row?.read(eventEntries.encryptedPayload);
   }
 
@@ -82,11 +96,12 @@ class EventsDao extends DatabaseAccessor<AppDatabase>
   /// Feed events: kind=1 posts from own identity + active follows, with
   /// per-author kind=6 tombstones excluded. Newest first.
   Future<List<EventEntry>> getFeedEvents({int? since, int? limit}) async {
-    final identity =
-        await (select(identityEntries)..limit(1)).getSingleOrNull();
-    final follows = await (select(followEntries)
-          ..where((f) => f.status.equals('active')))
-        .get();
+    final identity = await (select(
+      identityEntries,
+    )..limit(1)).getSingleOrNull();
+    final follows = await (select(
+      followEntries,
+    )..where((f) => f.status.equals('active'))).get();
 
     final allPubkeys = <String>{
       if (identity != null) identity.pubkey,
@@ -113,13 +128,11 @@ class EventsDao extends DatabaseAccessor<AppDatabase>
 
   /// Posts authored by [pubkey] for grid display: kind=1 only, deletes
   /// (kind=6 with matching ref_id) excluded. Newest first.
-  Future<List<EventEntry>> getProfilePosts(
-    String pubkey, {
-    int? limit,
-  }) {
+  Future<List<EventEntry>> getProfilePosts(String pubkey, {int? limit}) {
     final q = select(eventEntries);
-    q.where((e) =>
-        e.pubkey.equals(pubkey) & e.kind.equals(1) & _notTombstoned(e));
+    q.where(
+      (e) => e.pubkey.equals(pubkey) & e.kind.equals(1) & _notTombstoned(e),
+    );
     q.orderBy([(e) => OrderingTerm.desc(e.createdAt)]);
     if (limit != null) {
       q.limit(limit);
@@ -172,8 +185,9 @@ class EventsDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<bool> isEventSaved(String id) async {
-    final row = await (select(eventEntries)..where((e) => e.id.equals(id)))
-        .getSingleOrNull();
+    final row = await (select(
+      eventEntries,
+    )..where((e) => e.id.equals(id))).getSingleOrNull();
     return row != null && row.isSaved == 1;
   }
 
@@ -195,15 +209,14 @@ class EventsDao extends DatabaseAccessor<AppDatabase>
     final cutoff = now - maxAgeSeconds;
     final graceCutoff = now - graceLastViewedSeconds;
 
-    return (delete(eventEntries)
-          ..where(
-            (e) =>
-                e.isOwn.equals(0) &
-                e.isSaved.equals(0) &
-                e.createdAt.isSmallerThanValue(cutoff) &
-                (e.lastViewed.isNull() |
-                    e.lastViewed.isSmallerThanValue(graceCutoff)),
-          ))
+    return (delete(eventEntries)..where(
+          (e) =>
+              e.isOwn.equals(0) &
+              e.isSaved.equals(0) &
+              e.createdAt.isSmallerThanValue(cutoff) &
+              (e.lastViewed.isNull() |
+                  e.lastViewed.isSmallerThanValue(graceCutoff)),
+        ))
         .go();
   }
 
@@ -211,11 +224,13 @@ class EventsDao extends DatabaseAccessor<AppDatabase>
   /// or is_own=1. Used by retention to compute the pin set — media hashes
   /// referenced from saved/own events must survive cache eviction.
   Future<List<String>> getPinnedMediaRefsJson() async {
-    final rows = await (select(eventEntries)
-          ..where((e) =>
-              (e.isSaved.equals(1) | e.isOwn.equals(1)) &
-              e.mediaRefs.isNotNull()))
-        .get();
+    final rows =
+        await (select(eventEntries)..where(
+              (e) =>
+                  (e.isSaved.equals(1) | e.isOwn.equals(1)) &
+                  e.mediaRefs.isNotNull(),
+            ))
+            .get();
     return [
       for (final r in rows)
         if (r.mediaRefs != null && r.mediaRefs!.isNotEmpty) r.mediaRefs!,

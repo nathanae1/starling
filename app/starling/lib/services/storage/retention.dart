@@ -59,9 +59,9 @@ class RetentionService {
     required StorageService storage,
     required Directory mediaRoot,
     RetentionPolicy policy = const RetentionPolicy(),
-  })  : _storage = storage,
-        _mediaRoot = mediaRoot,
-        _policy = policy;
+  }) : _storage = storage,
+       _mediaRoot = mediaRoot,
+       _policy = policy;
 
   final StorageService _storage;
   final Directory _mediaRoot;
@@ -83,8 +83,9 @@ class RetentionService {
       await _deleteMediaFile(entry.hash);
     }
 
-    final voiceRooms =
-        await _storage.evictOldVoiceRooms(_policy.maxVoiceRoomAgeSeconds);
+    final voiceRooms = await _storage.evictOldVoiceRooms(
+      _policy.maxVoiceRoomAgeSeconds,
+    );
 
     return RetentionResult(
       eventsEvicted: events,

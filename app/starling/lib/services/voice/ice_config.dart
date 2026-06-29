@@ -18,12 +18,12 @@ class IceConfig {
   /// relay` (that would force a TURN we don't run by default), and never
   /// disable IPv6 — the v6 host candidate is the WAN workhorse.
   Map<String, dynamic> toRtcConfiguration() => {
-        'iceServers': customServers,
-        'sdpSemantics': 'unified-plan',
-        'iceTransportPolicy': 'all',
-        'bundlePolicy': 'max-bundle',
-        'rtcpMuxPolicy': 'require',
-      };
+    'iceServers': customServers,
+    'sdpSemantics': 'unified-plan',
+    'iceTransportPolicy': 'all',
+    'bundlePolicy': 'max-bundle',
+    'rtcpMuxPolicy': 'require',
+  };
 
   /// Parse a user-pasted block into `iceServers` entries. One server per
   /// line; blank lines and `#` comments ignored. Accepted forms:

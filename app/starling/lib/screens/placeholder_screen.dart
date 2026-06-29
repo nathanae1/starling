@@ -29,7 +29,9 @@ class PlaceholderScreen extends StatelessWidget {
                 Text(
                   planHint,
                   textAlign: TextAlign.center,
-                  style: starling.typography.small.copyWith(color: starling.colors.stone),
+                  style: starling.typography.small.copyWith(
+                    color: starling.colors.stone,
+                  ),
                 ),
               ],
             ),

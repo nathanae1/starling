@@ -24,7 +24,9 @@ class IosBackgroundHandler {
 
   static final IosBackgroundHandler instance = IosBackgroundHandler._();
 
-  static const MethodChannel _channel = MethodChannel('dev.starling.app/background_sync');
+  static const MethodChannel _channel = MethodChannel(
+    'dev.starling.app/background_sync',
+  );
 
   bool _installed = false;
 

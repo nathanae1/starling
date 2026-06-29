@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../models/voice_room.dart';
+import '../../providers/follows_provider.dart';
 import '../../providers/voice_provider.dart';
 import '../../theme/starling_theme.dart';
 import '../../widgets/avatar.dart';
@@ -37,14 +38,18 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
     final router = GoRouter.of(context);
     final status = await Permission.microphone.request();
     if (!status.isGranted) {
-      messenger.showSnackBar(const SnackBar(
-        content: Text('Microphone permission is needed for voice calls.'),
-      ));
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Microphone permission is needed for voice calls.'),
+        ),
+      );
       return;
     }
     setState(() => _starting = true);
     try {
-      await ref.read(roomManagerProvider).createRoom(
+      await ref
+          .read(roomManagerProvider)
+          .createRoom(
             name: _name.text.trim().isEmpty ? 'Voice room' : _name.text.trim(),
             inviteePubkeys: _selected.toList(),
           );
@@ -53,7 +58,8 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
       if (!mounted) return;
       setState(() => _starting = false);
       messenger.showSnackBar(
-          SnackBar(content: Text('Couldn\'t start the room: $e')));
+        SnackBar(content: Text('Couldn\'t start the room: $e')),
+      );
     }
   }
 
@@ -71,6 +77,7 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
   Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
     final mutuals = ref.watch(mutualFollowsProvider);
+    final friendCount = ref.watch(followsProvider).value?.length ?? 0;
 
     return Scaffold(
       backgroundColor: starling.colors.paper,
@@ -82,6 +89,7 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
               title: 'New room',
               left: StarlingIconButton(
                 onPressed: () => context.pop(),
+                semanticLabel: 'Back',
                 child: const Icon(LucideIcons.arrowLeft, size: 20),
               ),
             ),
@@ -94,20 +102,28 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
                   StarlingInput(controller: _name, placeholder: 'Voice room'),
                   const SizedBox(height: 24),
                   StarlingFieldLabel(
-                      'Invite friends (${_selected.length}/$kMaxRoomInvitees)'),
+                    'Invite friends (${_selected.length}/$kMaxRoomInvitees)',
+                  ),
                   const SizedBox(height: 8),
                   mutuals.when(
                     loading: () => const Padding(
                       padding: EdgeInsets.all(16),
                       child: Center(child: CircularProgressIndicator()),
                     ),
-                    error: (_, _) => Text('Couldn\'t load friends',
-                        style: starling.typography.small),
+                    error: (_, _) => Text(
+                      'Couldn\'t load friends',
+                      style: starling.typography.small,
+                    ),
                     data: (follows) {
                       if (follows.isEmpty) {
                         return Text(
-                          'You can only invite friends who follow you back. '
-                          'No mutual friends yet.',
+                          friendCount > 0
+                              ? 'None of your friends follow you back yet. Open '
+                                    'Friends to finish connecting — anyone marked '
+                                    '"Finishing connection…" just needs a moment '
+                                    '(or tap Retry there).'
+                              : 'You can only invite friends who follow you '
+                                    'back. No mutual friends yet.',
                           style: starling.typography.small,
                         );
                       }
@@ -117,7 +133,8 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
                             _ContactRow(
                               name: f.displayName ?? f.pubkey.substring(0, 8),
                               selected: _selected.contains(f.pubkey),
-                              disabled: !_selected.contains(f.pubkey) &&
+                              disabled:
+                                  !_selected.contains(f.pubkey) &&
                                   _selected.length >= kMaxRoomInvitees,
                               onTap: () => _toggle(f.pubkey),
                             ),
@@ -133,8 +150,7 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
               child: PrimaryButton(
                 label: _starting ? 'Starting…' : 'Start room',
                 block: true,
-                onPressed:
-                    (_starting || _selected.isEmpty) ? null : _start,
+                onPressed: (_starting || _selected.isEmpty) ? null : _start,
               ),
             ),
           ],
@@ -167,16 +183,13 @@ class _ContactRow extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            border:
-                Border(bottom: BorderSide(color: starling.colors.hairline)),
+            border: Border(bottom: BorderSide(color: starling.colors.hairline)),
           ),
           child: Row(
             children: [
               Avatar(name: name, size: AvatarSize.sm),
               const SizedBox(width: 12),
-              Expanded(
-                child: Text(name, style: starling.typography.body),
-              ),
+              Expanded(child: Text(name, style: starling.typography.body)),
               Icon(
                 selected ? LucideIcons.circleCheck : LucideIcons.circle,
                 size: 20,

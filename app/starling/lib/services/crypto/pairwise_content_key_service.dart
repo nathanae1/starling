@@ -25,10 +25,10 @@ class PairwiseContentKeyService implements ContentKeyService {
     required FeedKeyCache cache,
     required String ownPubkey,
     required Uint8List ownSecretKey,
-  })  : _crypto = crypto,
-        _cache = cache,
-        _ownPubkey = ownPubkey,
-        _ownSecretKey = ownSecretKey;
+  }) : _crypto = crypto,
+       _cache = cache,
+       _ownPubkey = ownPubkey,
+       _ownSecretKey = ownSecretKey;
 
   final CryptoService _crypto;
   final FeedKeyCache _cache;
@@ -69,8 +69,7 @@ class PairwiseContentKeyService implements ContentKeyService {
 
   @override
   Event decryptEvent(EncryptedEvent encryptedEvent, Uint8List chainRoot) {
-    final msgKey =
-        deriveMsgKey(chainRoot, encryptedEvent.msgSeq, _crypto);
+    final msgKey = deriveMsgKey(chainRoot, encryptedEvent.msgSeq, _crypto);
     final serialized = _crypto.decrypt(
       encryptedEvent.payload,
       encryptedEvent.nonce,
@@ -134,8 +133,7 @@ class PairwiseContentKeyService implements ContentKeyService {
     Event event,
     Audience audience, {
     required int msgSeq,
-  }) =>
-      signAndEncryptForAudience(event, audience, msgSeq: msgSeq).encrypted;
+  }) => signAndEncryptForAudience(event, audience, msgSeq: msgSeq).encrypted;
 
   @override
   ({Event signed, EncryptedEvent encrypted}) signAndEncryptForAudience(

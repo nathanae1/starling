@@ -72,21 +72,25 @@ class _VoiceSettingsScreenState extends ConsumerState<VoiceSettingsScreen> {
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
               decoration: BoxDecoration(
                 border: Border(
-                    bottom: BorderSide(color: starling.colors.hairline)),
+                  bottom: BorderSide(color: starling.colors.hairline),
+                ),
               ),
               child: Row(
                 children: [
                   StarlingIconButton(
                     onPressed: () => context.pop(),
+                    semanticLabel: 'Back',
                     child: const Icon(LucideIcons.arrowLeft, size: 20),
                   ),
                   Expanded(
-                    child: Text('Voice',
-                        style: starling.typography.h3.copyWith(
-                          fontFamily: 'Fraunces',
-                          fontSize: 20,
-                          fontWeight: FontWeight.w500,
-                        )),
+                    child: Text(
+                      'Voice',
+                      style: starling.typography.h3.copyWith(
+                        fontFamily: 'Fraunces',
+                        fontSize: 20,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 36),
                 ],
@@ -123,13 +127,133 @@ class _VoiceSettingsScreenState extends ConsumerState<VoiceSettingsScreen> {
                               'stun:stun.example.org:3478\n'
                               'turn:turn.example.org:3478 | user | pass',
                         ),
+                        const SizedBox(height: 12),
+                        const _IceFormatHelp(),
                         const SizedBox(height: 20),
                         PrimaryButton(
-                            label: 'Save', block: true, onPressed: _save),
+                          label: 'Save',
+                          block: true,
+                          onPressed: _save,
+                        ),
                       ],
                     ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Collapsible inline help for the custom ICE-servers field. Mirrors the
+/// syntax accepted by `IceConfig.parseServers` so users aren't guessing at
+/// the format (accepted schemes, one server per line, pipe-separated
+/// credentials).
+class _IceFormatHelp extends StatefulWidget {
+  const _IceFormatHelp();
+
+  @override
+  State<_IceFormatHelp> createState() => _IceFormatHelpState();
+}
+
+class _IceFormatHelpState extends State<_IceFormatHelp> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final starling = StarlingTheme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: starling.colors.linen,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: starling.colors.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _open = !_open),
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    LucideIcons.info,
+                    size: 16,
+                    color: starling.colors.graphite,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Format help',
+                      style: starling.typography.small.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: starling.colors.ink,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    _open ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+                    size: 16,
+                    color: starling.colors.stone,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_open)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'One server per line. Blank lines and lines starting with '
+                    '# are skipped. To authenticate a TURN server, add a '
+                    'username and credential after the URL, each separated by '
+                    'a vertical bar ( | ).',
+                    style: starling.typography.micro.copyWith(
+                      color: starling.colors.graphite,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const _IceExample('stun:stun.example.org:3478'),
+                  const _IceExample('turn:turn.example.org:3478 | user | pass'),
+                  const _IceExample(
+                    'turns:turn.example.org:5349 | user | pass',
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Schemes: stun, stuns, turn, turns.',
+                    style: starling.typography.micro.copyWith(
+                      color: starling.colors.stone,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A single monospace example line inside [_IceFormatHelp].
+class _IceExample extends StatelessWidget {
+  const _IceExample(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final starling = StarlingTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(
+        text,
+        style: starling.typography.monoSmall.copyWith(
+          color: starling.colors.ink,
         ),
       ),
     );

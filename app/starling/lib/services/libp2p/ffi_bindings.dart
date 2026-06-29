@@ -66,18 +66,10 @@ class Libp2pStatusCode {
 ///   bridge stores it process-globally via `allo-isolate::store_dart_post_cobject`
 ///   so the tokio event loop can `Dart_PostCObject(port, msg)` from non-isolate
 ///   threads without re-entering Dart.
-typedef Libp2pInitNative = Pointer<Void> Function(
-  Pointer<Utf8>,
-  Pointer<Uint8>,
-  Size,
-  Pointer<Void>,
-);
-typedef Libp2pInitDart = Pointer<Void> Function(
-  Pointer<Utf8>,
-  Pointer<Uint8>,
-  int,
-  Pointer<Void>,
-);
+typedef Libp2pInitNative =
+    Pointer<Void> Function(Pointer<Utf8>, Pointer<Uint8>, Size, Pointer<Void>);
+typedef Libp2pInitDart =
+    Pointer<Void> Function(Pointer<Utf8>, Pointer<Uint8>, int, Pointer<Void>);
 
 /// `lp_listen(handle) -> c_int` — bind UDP/QUIC listeners and start the
 /// swarm loop. Idempotent.
@@ -89,30 +81,18 @@ typedef Libp2pListenDart = int Function(Pointer<Void>);
 /// Writes a CBOR-encoded list-of-multiaddrs into [outBuf]. Returns the
 /// number of bytes written, or [Libp2pStatusCode.errBufferTooSmall] if the
 /// buffer was too small. Callers typically size the buffer at 4 KiB.
-typedef Libp2pObservedAddrsNative = IntPtr Function(
-  Pointer<Void>,
-  Pointer<Uint8>,
-  Size,
-);
-typedef Libp2pObservedAddrsDart = int Function(
-  Pointer<Void>,
-  Pointer<Uint8>,
-  int,
-);
+typedef Libp2pObservedAddrsNative =
+    IntPtr Function(Pointer<Void>, Pointer<Uint8>, Size);
+typedef Libp2pObservedAddrsDart =
+    int Function(Pointer<Void>, Pointer<Uint8>, int);
 
 /// `lp_add_observed_addr(handle, multiaddr_ptr, len) -> c_int` — inject an
 /// externally observed multiaddr (e.g., the reflexive endpoint returned by
 /// a STUN-like response embedded in a `libp2p-connect-v1` signaling reply).
-typedef Libp2pAddObservedAddrNative = Int32 Function(
-  Pointer<Void>,
-  Pointer<Uint8>,
-  Size,
-);
-typedef Libp2pAddObservedAddrDart = int Function(
-  Pointer<Void>,
-  Pointer<Uint8>,
-  int,
-);
+typedef Libp2pAddObservedAddrNative =
+    Int32 Function(Pointer<Void>, Pointer<Uint8>, Size);
+typedef Libp2pAddObservedAddrDart =
+    int Function(Pointer<Void>, Pointer<Uint8>, int);
 
 /// `lp_dial_direct(handle, peer_id, addrs_cbor, addrs_len, timeout_ms) -> i64`
 ///
@@ -120,52 +100,25 @@ typedef Libp2pAddObservedAddrDart = int Function(
 /// multiaddrs (same encoding [Libp2pObservedAddrsDart] returns). Returns a
 /// positive connection id on success, or a negative [Libp2pStatusCode] on
 /// failure (including hole-punch failure → [Libp2pStatusCode.errDialTimeout]).
-typedef Libp2pDialDirectNative = Int64 Function(
-  Pointer<Void>,
-  Pointer<Utf8>,
-  Pointer<Uint8>,
-  Size,
-  Uint32,
-);
-typedef Libp2pDialDirectDart = int Function(
-  Pointer<Void>,
-  Pointer<Utf8>,
-  Pointer<Uint8>,
-  int,
-  int,
-);
+typedef Libp2pDialDirectNative =
+    Int64 Function(Pointer<Void>, Pointer<Utf8>, Pointer<Uint8>, Size, Uint32);
+typedef Libp2pDialDirectDart =
+    int Function(Pointer<Void>, Pointer<Utf8>, Pointer<Uint8>, int, int);
 
 /// `lp_open_stream(handle, conn_id, protocol_cstr) -> i64` — opens a new
 /// libp2p stream for [protocol] (e.g. `/starling/sync/manifest/1`). Returns
 /// a positive stream id or a negative [Libp2pStatusCode].
-typedef Libp2pOpenStreamNative = Int64 Function(
-  Pointer<Void>,
-  Int64,
-  Pointer<Utf8>,
-);
-typedef Libp2pOpenStreamDart = int Function(
-  Pointer<Void>,
-  int,
-  Pointer<Utf8>,
-);
+typedef Libp2pOpenStreamNative =
+    Int64 Function(Pointer<Void>, Int64, Pointer<Utf8>);
+typedef Libp2pOpenStreamDart = int Function(Pointer<Void>, int, Pointer<Utf8>);
 
 /// `lp_stream_write(handle, stream_id, data_ptr, len, finish) -> c_int` —
 /// writes one length-delimited frame. If [finish] is true, half-closes the
 /// stream after this frame.
-typedef Libp2pStreamWriteNative = Int32 Function(
-  Pointer<Void>,
-  Int64,
-  Pointer<Uint8>,
-  Size,
-  Bool,
-);
-typedef Libp2pStreamWriteDart = int Function(
-  Pointer<Void>,
-  int,
-  Pointer<Uint8>,
-  int,
-  bool,
-);
+typedef Libp2pStreamWriteNative =
+    Int32 Function(Pointer<Void>, Int64, Pointer<Uint8>, Size, Bool);
+typedef Libp2pStreamWriteDart =
+    int Function(Pointer<Void>, int, Pointer<Uint8>, int, bool);
 
 /// `lp_stream_read(handle, stream_id, out_buf, buf_len, timeout_ms) -> isize`
 ///
@@ -174,20 +127,10 @@ typedef Libp2pStreamWriteDart = int Function(
 /// [bufLen] (caller should resize and retry — the frame is preserved in a
 /// peek slot), [Libp2pStatusCode.errStreamClosed] on graceful remote close
 /// before any data, or [Libp2pStatusCode.errDialTimeout] on timeout.
-typedef Libp2pStreamReadNative = IntPtr Function(
-  Pointer<Void>,
-  Int64,
-  Pointer<Uint8>,
-  Size,
-  Uint32,
-);
-typedef Libp2pStreamReadDart = int Function(
-  Pointer<Void>,
-  int,
-  Pointer<Uint8>,
-  int,
-  int,
-);
+typedef Libp2pStreamReadNative =
+    IntPtr Function(Pointer<Void>, Int64, Pointer<Uint8>, Size, Uint32);
+typedef Libp2pStreamReadDart =
+    int Function(Pointer<Void>, int, Pointer<Uint8>, int, int);
 
 /// `lp_stream_close(handle, stream_id) -> c_int` — close (both sides) and
 /// release the stream id.
@@ -203,14 +146,10 @@ typedef Libp2pSetEventPortDart = int Function(Pointer<Void>, int);
 /// `lp_register_inbound_handler(handle, protocol_cstr) -> c_int` — tells
 /// the bridge to accept inbound streams of [protocol] and surface them as
 /// `IncomingStream` events on the native-port channel instead of resetting.
-typedef Libp2pRegisterInboundHandlerNative = Int32 Function(
-  Pointer<Void>,
-  Pointer<Utf8>,
-);
-typedef Libp2pRegisterInboundHandlerDart = int Function(
-  Pointer<Void>,
-  Pointer<Utf8>,
-);
+typedef Libp2pRegisterInboundHandlerNative =
+    Int32 Function(Pointer<Void>, Pointer<Utf8>);
+typedef Libp2pRegisterInboundHandlerDart =
+    int Function(Pointer<Void>, Pointer<Utf8>);
 
 /// `lp_local_peer_id(handle) -> *mut c_char` — base58-encoded local PeerId.
 /// Caller frees with [Libp2pStringFreeDart]. Returns NULL before [init].
@@ -235,39 +174,63 @@ typedef Libp2pStringFreeDart = void Function(Pointer<Utf8>);
 /// Resolved bindings cached after first load.
 class Libp2pBindings {
   Libp2pBindings._(DynamicLibrary lib)
-      : init = lib.lookupFunction<Libp2pInitNative, Libp2pInitDart>('lp_init'),
-        listen =
-            lib.lookupFunction<Libp2pListenNative, Libp2pListenDart>('lp_listen'),
-        observedAddrs = lib.lookupFunction<Libp2pObservedAddrsNative,
-            Libp2pObservedAddrsDart>('lp_observed_addrs'),
-        addObservedAddr = lib.lookupFunction<Libp2pAddObservedAddrNative,
-            Libp2pAddObservedAddrDart>('lp_add_observed_addr'),
-        dialDirect = lib.lookupFunction<Libp2pDialDirectNative,
-            Libp2pDialDirectDart>('lp_dial_direct'),
-        openStream = lib.lookupFunction<Libp2pOpenStreamNative,
-            Libp2pOpenStreamDart>('lp_open_stream'),
-        streamWrite = lib.lookupFunction<Libp2pStreamWriteNative,
-            Libp2pStreamWriteDart>('lp_stream_write'),
-        streamRead = lib.lookupFunction<Libp2pStreamReadNative,
-            Libp2pStreamReadDart>('lp_stream_read'),
-        streamClose = lib.lookupFunction<Libp2pStreamCloseNative,
-            Libp2pStreamCloseDart>('lp_stream_close'),
-        setEventPort = lib.lookupFunction<Libp2pSetEventPortNative,
-            Libp2pSetEventPortDart>('lp_set_event_port'),
-        registerInboundHandler = lib.lookupFunction<
+    : init = lib.lookupFunction<Libp2pInitNative, Libp2pInitDart>('lp_init'),
+      listen = lib.lookupFunction<Libp2pListenNative, Libp2pListenDart>(
+        'lp_listen',
+      ),
+      observedAddrs = lib
+          .lookupFunction<Libp2pObservedAddrsNative, Libp2pObservedAddrsDart>(
+            'lp_observed_addrs',
+          ),
+      addObservedAddr = lib
+          .lookupFunction<
+            Libp2pAddObservedAddrNative,
+            Libp2pAddObservedAddrDart
+          >('lp_add_observed_addr'),
+      dialDirect = lib
+          .lookupFunction<Libp2pDialDirectNative, Libp2pDialDirectDart>(
+            'lp_dial_direct',
+          ),
+      openStream = lib
+          .lookupFunction<Libp2pOpenStreamNative, Libp2pOpenStreamDart>(
+            'lp_open_stream',
+          ),
+      streamWrite = lib
+          .lookupFunction<Libp2pStreamWriteNative, Libp2pStreamWriteDart>(
+            'lp_stream_write',
+          ),
+      streamRead = lib
+          .lookupFunction<Libp2pStreamReadNative, Libp2pStreamReadDart>(
+            'lp_stream_read',
+          ),
+      streamClose = lib
+          .lookupFunction<Libp2pStreamCloseNative, Libp2pStreamCloseDart>(
+            'lp_stream_close',
+          ),
+      setEventPort = lib
+          .lookupFunction<Libp2pSetEventPortNative, Libp2pSetEventPortDart>(
+            'lp_set_event_port',
+          ),
+      registerInboundHandler = lib
+          .lookupFunction<
             Libp2pRegisterInboundHandlerNative,
-            Libp2pRegisterInboundHandlerDart>('lp_register_inbound_handler'),
-        localPeerId = lib.lookupFunction<Libp2pLocalPeerIdNative,
-            Libp2pLocalPeerIdDart>('lp_local_peer_id'),
-        shutdown =
-            lib.lookupFunction<Libp2pShutdownNative, Libp2pShutdownDart>(
-                'lp_shutdown'),
-        lastError =
-            lib.lookupFunction<Libp2pLastErrorNative, Libp2pLastErrorDart>(
-                'lp_last_error'),
-        stringFree =
-            lib.lookupFunction<Libp2pStringFreeNative, Libp2pStringFreeDart>(
-                'lp_string_free');
+            Libp2pRegisterInboundHandlerDart
+          >('lp_register_inbound_handler'),
+      localPeerId = lib
+          .lookupFunction<Libp2pLocalPeerIdNative, Libp2pLocalPeerIdDart>(
+            'lp_local_peer_id',
+          ),
+      shutdown = lib.lookupFunction<Libp2pShutdownNative, Libp2pShutdownDart>(
+        'lp_shutdown',
+      ),
+      lastError = lib
+          .lookupFunction<Libp2pLastErrorNative, Libp2pLastErrorDart>(
+            'lp_last_error',
+          ),
+      stringFree = lib
+          .lookupFunction<Libp2pStringFreeNative, Libp2pStringFreeDart>(
+            'lp_string_free',
+          );
 
   final Libp2pInitDart init;
   final Libp2pListenDart listen;

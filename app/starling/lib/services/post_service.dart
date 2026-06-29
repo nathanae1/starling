@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import '../models/models.dart';
 import '../models/protocol_version.dart';
+import '../utils/debug_log.dart';
 import 'clock.dart';
 import 'content_key_service.dart';
 import 'crypto/feed_key_ratchet.dart';
@@ -45,15 +46,15 @@ class DefaultPostService implements PostService {
     PostFanoutService fanout = PostFanoutService.noop,
     Future<void> Function(Event signed, Uint8List encryptedBytes)? onPublished,
     PublishLock? publishLock,
-  })  : _contentKey = contentKey,
-        _crypto = crypto,
-        _storage = storage,
-        _media = media,
-        _clock = clock,
-        _identityLookup = identityLookup,
-        _fanout = fanout,
-        _onPublished = onPublished,
-        _publishLock = publishLock ?? PublishLock();
+  }) : _contentKey = contentKey,
+       _crypto = crypto,
+       _storage = storage,
+       _media = media,
+       _clock = clock,
+       _identityLookup = identityLookup,
+       _fanout = fanout,
+       _onPublished = onPublished,
+       _publishLock = publishLock ?? PublishLock();
 
   final ContentKeyService _contentKey;
   final CryptoService _crypto;
@@ -65,128 +66,110 @@ class DefaultPostService implements PostService {
   // Plan 15: fired after fanout with the freshly-published event so the
   // relay push coordinator can mirror it to the paired relay (if any).
   final Future<void> Function(Event signed, Uint8List encryptedBytes)?
-      _onPublished;
+  _onPublished;
   final PublishLock _publishLock;
 
   @override
   Future<String> createPost({
     required Uint8List photoBytes,
     required String caption,
-  }) =>
-      _publishLock.synchronized(() async {
-        final identity = await _identityLookup();
-        if (identity == null) {
-          throw StateError('createPost called before identity is loaded');
-        }
+  }) => _publishLock.synchronized(() async {
+    final identity = await _identityLookup();
+    if (identity == null) {
+      throw StateError('createPost called before identity is loaded');
+    }
 
-        // Allocate the next per-message sequence under the publish lock,
-        // derive the AEAD key once, and use it for both the post body
-        // (via signAndEncryptForAudience) and every media blob.
-        final msgSeq = identity.msgSeqCounter;
-        final msgKey = deriveMsgKey(identity.feedKey, msgSeq, _crypto);
-        // ignore: avoid_print
-        print(
-          '[starling.media] pub createPost msgSeq=$msgSeq '
-          'feedKeyFp=${_fpPostSvc(identity.feedKey)} '
-          'msgKeyFp=${_fpPostSvc(msgKey)}',
-        );
+    // Allocate the next per-message sequence under the publish lock,
+    // derive the AEAD key once, and use it for both the post body
+    // (via signAndEncryptForAudience) and every media blob.
+    final msgSeq = identity.msgSeqCounter;
+    final msgKey = deriveMsgKey(identity.feedKey, msgSeq, _crypto);
+    debugLog(
+      'starling.media',
+      'pub createPost msgSeq=$msgSeq '
+          'feedKeyFp=${shortFingerprint(identity.feedKey)} '
+          'msgKeyFp=${shortFingerprint(msgKey)}',
+    );
 
-        final media = await _media.processAndStoreOwnPhoto(
-          photoBytes: photoBytes,
-          msgKey: msgKey,
-        );
+    final media = await _media.processAndStoreOwnPhoto(
+      photoBytes: photoBytes,
+      msgKey: msgKey,
+    );
 
-        final unsigned = Event(
-          version: kStarlingProtocolVersion,
-          id: '',
-          pubkey: identity.pubkey,
-          createdAt: _clock.nowUnixSeconds(),
-          kind: EventKind.post,
-          ref: null,
-          content: Uint8List.fromList(utf8.encode(caption)),
-          media: [
-            MediaRef(
-              hash: media.compressedHash,
-              mimeType: media.compressedMime,
-              size: media.compressedSize,
-            ),
-          ],
-          extensions: const {},
-          sig: Uint8List(0),
-        );
+    final unsigned = Event(
+      version: kStarlingProtocolVersion,
+      id: '',
+      pubkey: identity.pubkey,
+      createdAt: _clock.nowUnixSeconds(),
+      kind: EventKind.post,
+      ref: null,
+      content: Uint8List.fromList(utf8.encode(caption)),
+      media: [
+        MediaRef(
+          hash: media.compressedHash,
+          mimeType: media.compressedMime,
+          size: media.compressedSize,
+        ),
+      ],
+      extensions: const {},
+      sig: Uint8List(0),
+    );
 
-        final result = _contentKey.signAndEncryptForAudience(
-          unsigned,
-          Audience.broadcast,
-          msgSeq: msgSeq,
-        );
-        final encryptedBytes = result.encrypted.toBytes();
-        await _storage.saveOwnEventWithEncrypted(
-          result.signed,
-          encryptedBytes,
-        );
-        // Persist the bumped counter so the next publish allocates a
-        // fresh msg_seq. Cleared/reset to 0 in KeyRotationService when
-        // feedKey rotates.
-        await _storage.saveIdentity(
-          identity.copyWith(msgSeqCounter: msgSeq + 1),
-        );
-        unawaited(_fanout.fanout(encryptedBytes));
-        _notifyPublished(result.signed, encryptedBytes);
-        return result.signed.id;
-      });
+    final result = _contentKey.signAndEncryptForAudience(
+      unsigned,
+      Audience.broadcast,
+      msgSeq: msgSeq,
+    );
+    final encryptedBytes = result.encrypted.toBytes();
+    await _storage.saveOwnEventWithEncrypted(result.signed, encryptedBytes);
+    // Persist the bumped counter so the next publish allocates a
+    // fresh msg_seq. Cleared/reset to 0 in KeyRotationService when
+    // feedKey rotates.
+    await _storage.saveIdentity(identity.copyWith(msgSeqCounter: msgSeq + 1));
+    unawaited(_fanout.fanout(encryptedBytes));
+    _notifyPublished(result.signed, encryptedBytes);
+    return result.signed.id;
+  });
 
   @override
-  Future<String> deletePost(String targetEventId) =>
-      _publishLock.synchronized(() async {
-        final identity = await _identityLookup();
-        if (identity == null) {
-          throw StateError('deletePost called before identity is loaded');
-        }
+  Future<String> deletePost(String targetEventId) => _publishLock.synchronized(
+    () async {
+      final identity = await _identityLookup();
+      if (identity == null) {
+        throw StateError('deletePost called before identity is loaded');
+      }
 
-        final msgSeq = identity.msgSeqCounter;
+      final msgSeq = identity.msgSeqCounter;
 
-        final unsigned = Event(
-          version: kStarlingProtocolVersion,
-          id: '',
-          pubkey: identity.pubkey,
-          createdAt: _clock.nowUnixSeconds(),
-          kind: EventKind.delete,
-          ref: targetEventId,
-          content: Uint8List(0),
-          media: const [],
-          extensions: const {},
-          sig: Uint8List(0),
-        );
+      final unsigned = Event(
+        version: kStarlingProtocolVersion,
+        id: '',
+        pubkey: identity.pubkey,
+        createdAt: _clock.nowUnixSeconds(),
+        kind: EventKind.delete,
+        ref: targetEventId,
+        content: Uint8List(0),
+        media: const [],
+        extensions: const {},
+        sig: Uint8List(0),
+      );
 
-        final result = _contentKey.signAndEncryptForAudience(
-          unsigned,
-          Audience.broadcast,
-          msgSeq: msgSeq,
-        );
-        final encryptedBytes = result.encrypted.toBytes();
-        await _storage.saveOwnEventWithEncrypted(
-          result.signed,
-          encryptedBytes,
-        );
-        await _storage.saveIdentity(
-          identity.copyWith(msgSeqCounter: msgSeq + 1),
-        );
-        unawaited(_fanout.fanout(encryptedBytes));
-        _notifyPublished(result.signed, encryptedBytes);
-        return result.signed.id;
-      });
+      final result = _contentKey.signAndEncryptForAudience(
+        unsigned,
+        Audience.broadcast,
+        msgSeq: msgSeq,
+      );
+      final encryptedBytes = result.encrypted.toBytes();
+      await _storage.saveOwnEventWithEncrypted(result.signed, encryptedBytes);
+      await _storage.saveIdentity(identity.copyWith(msgSeqCounter: msgSeq + 1));
+      unawaited(_fanout.fanout(encryptedBytes));
+      _notifyPublished(result.signed, encryptedBytes);
+      return result.signed.id;
+    },
+  );
 
   void _notifyPublished(Event signed, Uint8List encryptedBytes) {
     final cb = _onPublished;
     if (cb != null) unawaited(cb(signed, encryptedBytes));
   }
-}
-
-String _fpPostSvc(Uint8List bytes) {
-  final hex = bytes
-      .take(4)
-      .map((b) => b.toRadixString(16).padLeft(2, '0'))
-      .join();
-  return '$hex…';
 }

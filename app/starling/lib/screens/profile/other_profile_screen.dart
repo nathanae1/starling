@@ -15,6 +15,7 @@ import '../../theme/starling_theme.dart';
 import '../../utils/time_ago.dart';
 import '../../widgets/avatar.dart';
 import '../../widgets/buttons.dart';
+import '../../widgets/encrypted_avatar.dart';
 import '../../widgets/encrypted_image.dart';
 import '../../widgets/starling_address_row.dart';
 
@@ -52,16 +53,19 @@ class OtherProfileScreen extends ConsumerWidget {
             SliverToBoxAdapter(
               child: profileAsync.when(
                 data: (p) => _IdentityBlock(
-                  displayName: p.displayName,
+                  profile: p,
                   pubkey: pubkey,
                   lastSyncedAt: lastSyncedAt,
                 ),
                 loading: () => const SizedBox(height: 200),
                 error: (e, _) => Padding(
                   padding: const EdgeInsets.all(24),
-                  child: Text('$e',
-                      style: starling.typography.small
-                          .copyWith(color: starling.colors.danger)),
+                  child: Text(
+                    '$e',
+                    style: starling.typography.small.copyWith(
+                      color: starling.colors.danger,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -76,9 +80,12 @@ class OtherProfileScreen extends ConsumerWidget {
               error: (e, _) => SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
-                  child: Text('$e',
-                      style: starling.typography.small
-                          .copyWith(color: starling.colors.danger)),
+                  child: Text(
+                    '$e',
+                    style: starling.typography.small.copyWith(
+                      color: starling.colors.danger,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -98,6 +105,7 @@ class _Header extends StatelessWidget {
         children: [
           StarlingIconButton(
             onPressed: () => Navigator.of(context).maybePop(),
+            semanticLabel: 'Back',
             child: const Icon(LucideIcons.arrowLeft, size: 20),
           ),
         ],
@@ -108,14 +116,16 @@ class _Header extends StatelessWidget {
 
 class _IdentityBlock extends ConsumerWidget {
   const _IdentityBlock({
-    required this.displayName,
+    required this.profile,
     required this.pubkey,
     required this.lastSyncedAt,
   });
 
-  final String displayName;
+  final FollowProfileSnapshot profile;
   final String pubkey;
   final int lastSyncedAt;
+
+  String get displayName => profile.displayName;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -125,23 +135,44 @@ class _IdentityBlock extends ConsumerWidget {
     final statusText = reachable
         ? '● Reachable'
         : lastSyncedAt > 0
-            ? 'Last seen ${timeAgo(lastSyncedAt, nowUnixSeconds: now)}'
-            : 'Not yet synced';
-    final statusColor = reachable ? starling.colors.success : starling.colors.stone;
+        ? 'Last seen ${timeAgo(lastSyncedAt, nowUnixSeconds: now)}'
+        : 'Not yet synced';
+    final statusColor = reachable
+        ? starling.colors.success
+        : starling.colors.stone;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
       child: Column(
         children: [
-          Avatar(name: displayName, size: AvatarSize.lg),
+          EncryptedAvatar(
+            name: displayName,
+            pubkey: pubkey,
+            avatarHash: profile.avatarHash,
+            avatarMsgSeq: profile.avatarMsgSeq,
+            size: AvatarSize.lg,
+          ),
           const SizedBox(height: 14),
           Text(
             displayName,
-            style: starling.typography.h2
-                .copyWith(fontSize: 24, letterSpacing: -0.24),
+            style: starling.typography.h2.copyWith(
+              fontSize: 24,
+              letterSpacing: -0.24,
+            ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 6),
           StarlingAddressRow(pubkey: pubkey),
+          if (profile.bio != null) ...[
+            const SizedBox(height: 6),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 240),
+              child: Text(
+                profile.bio!,
+                textAlign: TextAlign.center,
+                style: starling.typography.small,
+              ),
+            ),
+          ],
           const SizedBox(height: 6),
           Text(
             statusText,
@@ -171,7 +202,7 @@ class _IdentityBlock extends ConsumerWidget {
     if (!context.mounted) return;
     final body = isAlsoFollower
         ? 'You will stop receiving posts from $displayName, and they '
-            'will no longer receive your future posts.'
+              'will no longer receive your future posts.'
         : 'You will stop receiving posts from $displayName.';
     final confirm = await showDialog<bool>(
       context: context,
@@ -214,24 +245,20 @@ class _PostGrid extends StatelessWidget {
           mainAxisSpacing: 3,
           crossAxisSpacing: 3,
         ),
-        delegate: SliverChildBuilderDelegate(
-          (context, index) {
-            final event = events[index];
-            final hash =
-                event.media.isNotEmpty ? event.media.first.hash : null;
-            return GestureDetector(
-              onTap: () => context.push('/feed/post/${event.id}'),
-              child: hash == null
-                  ? const ColoredBox(color: Colors.transparent)
-                  : EncryptedImage(
-                      hash: hash,
-                      pubkey: event.pubkey,
-                      msgSeq: event.msgSeq,
-                    ),
-            );
-          },
-          childCount: events.length,
-        ),
+        delegate: SliverChildBuilderDelegate((context, index) {
+          final event = events[index];
+          final hash = event.media.isNotEmpty ? event.media.first.hash : null;
+          return GestureDetector(
+            onTap: () => context.push('/feed/post/${event.id}'),
+            child: hash == null
+                ? const ColoredBox(color: Colors.transparent)
+                : EncryptedImage(
+                    hash: hash,
+                    pubkey: event.pubkey,
+                    msgSeq: event.msgSeq,
+                  ),
+          );
+        }, childCount: events.length),
       ),
     );
   }

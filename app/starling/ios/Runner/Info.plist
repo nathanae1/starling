@@ -12,6 +12,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>starling</string>
+				<string>starling-relay</string>
 			</array>
 		</dict>
 	</array>

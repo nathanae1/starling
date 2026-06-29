@@ -1,8 +1,9 @@
 import 'dart:convert';
-import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+import '../../utils/debug_log.dart';
 
 /// Centralized OS keychain access for secrets that must persist across app
 /// launches but never leave the device. Two values live here:
@@ -25,7 +26,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 /// rides on the AES key minted in the Android Keystore.
 class KeychainManager {
   KeychainManager({FlutterSecureStorage? storage})
-      : _storage = storage ?? _defaultStorage();
+    : _storage = storage ?? _defaultStorage();
 
   final FlutterSecureStorage _storage;
 
@@ -33,12 +34,12 @@ class KeychainManager {
   static const String identitySecretKeyName = 'starling_secret_key';
 
   static FlutterSecureStorage _defaultStorage() => const FlutterSecureStorage(
-        iOptions: IOSOptions(
-          accessibility: KeychainAccessibility.first_unlock_this_device,
-          synchronizable: false,
-        ),
-        aOptions: AndroidOptions(),
-      );
+    iOptions: IOSOptions(
+      accessibility: KeychainAccessibility.first_unlock_this_device,
+      synchronizable: false,
+    ),
+    aOptions: AndroidOptions(),
+  );
 
   Future<String?> read(String key) async {
     final value = await _storage.read(key: key);
@@ -68,11 +69,7 @@ class KeychainManager {
   }
 
   void _log(String op, String key, {required bool present, int? len}) {
-    if (!kDebugMode) return;
     final lenPart = len == null ? '' : ' len=$len';
-    final msg = 'op=$op name=$key present=$present$lenPart';
-    developer.log(msg, name: 'starling.keychain');
-    // ignore: avoid_print
-    print('[starling.keychain] $msg');
+    debugLog('starling.keychain', 'op=$op name=$key present=$present$lenPart');
   }
 }

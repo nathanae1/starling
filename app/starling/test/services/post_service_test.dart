@@ -37,6 +37,8 @@ class _StubMediaService implements MediaService {
   Future<MediaProcessingResult> processAndStoreOwnPhoto({
     required Uint8List photoBytes,
     required Uint8List msgKey,
+    int maxDimension = 1080,
+    bool square = false,
   }) async {
     calls++;
     lastPhoto = photoBytes;

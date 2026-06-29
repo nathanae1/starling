@@ -105,7 +105,8 @@ SignalingMessage unwrapSignalingMessage({
 
   // The inner.timestamp is in seconds (matches signaling_handler's wire
   // contract). Reject anything outside the ±30s window.
-  final nowSeconds = (now ?? DateTime.now).call().millisecondsSinceEpoch ~/ 1000;
+  final nowSeconds =
+      (now ?? DateTime.now).call().millisecondsSinceEpoch ~/ 1000;
   if ((nowSeconds - inner.timestamp).abs() > _replayWindowSeconds) {
     throw SignalingEnvelopeException(
       'timestamp ${inner.timestamp} outside ±${_replayWindowSeconds}s '

@@ -52,11 +52,11 @@ class ExportService {
     required Future<Directory> exportRoot,
     required Future<Directory> mediaRoot,
     KeychainManager? keychain,
-  })  : _storage = storage,
-        _crypto = crypto,
-        _exportRoot = exportRoot,
-        _mediaRoot = mediaRoot,
-        _keychain = keychain ?? KeychainManager();
+  }) : _storage = storage,
+       _crypto = crypto,
+       _exportRoot = exportRoot,
+       _mediaRoot = mediaRoot,
+       _keychain = keychain ?? KeychainManager();
 
   final StorageService _storage;
   final CryptoService _crypto;
@@ -71,8 +71,9 @@ class ExportService {
     if (identity == null) {
       throw StateError('No identity to export');
     }
-    final secretKeyB64 =
-        await _keychain.read(KeychainManager.identitySecretKeyName);
+    final secretKeyB64 = await _keychain.read(
+      KeychainManager.identitySecretKeyName,
+    );
     if (secretKeyB64 == null) {
       throw StateError('Identity secret key missing from keychain');
     }

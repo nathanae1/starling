@@ -49,10 +49,7 @@ Future<List<Event>> ownPosts(Ref ref) async {
 
 /// Posts authored by a given pubkey, for other-profile grid.
 @riverpod
-Future<List<Event>> profilePosts(
-  Ref ref,
-  String pubkey,
-) async {
+Future<List<Event>> profilePosts(Ref ref, String pubkey) async {
   final storage = ref.watch(storageServiceProvider);
   return storage.getProfilePosts(pubkey);
 }

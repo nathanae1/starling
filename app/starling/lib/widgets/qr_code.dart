@@ -4,11 +4,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../theme/starling_theme.dart';
 
 class StarlingQRCode extends StatelessWidget {
-  const StarlingQRCode({
-    super.key,
-    required this.data,
-    this.size = 180,
-  });
+  const StarlingQRCode({super.key, required this.data, this.size = 180});
 
   final String data;
   final double size;

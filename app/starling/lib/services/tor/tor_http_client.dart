@@ -95,8 +95,9 @@ class TorHttpClient extends http.BaseClient {
       if (statusCode == null) {
         throw _TorHttpException('non-numeric status: $statusLine');
       }
-      final reasonPhrase =
-          statusParts.length > 2 ? statusParts.sublist(2).join(' ') : null;
+      final reasonPhrase = statusParts.length > 2
+          ? statusParts.sublist(2).join(' ')
+          : null;
 
       final headers = <String, String>{};
       for (final line in lines) {
@@ -112,7 +113,8 @@ class TorHttpClient extends http.BaseClient {
       }
 
       final transferEncoding = headers['transfer-encoding']?.toLowerCase();
-      final isChunked = transferEncoding != null &&
+      final isChunked =
+          transferEncoding != null &&
           transferEncoding.split(',').any((t) => t.trim() == 'chunked');
       final contentLength = int.tryParse(headers['content-length'] ?? '');
 
@@ -156,7 +158,7 @@ class TorHttpClient extends http.BaseClient {
 /// keyed off a single subscription.
 class _ResponseReader {
   _ResponseReader(Stream<Uint8List> source)
-      : _source = StreamIterator<Uint8List>(source);
+    : _source = StreamIterator<Uint8List>(source);
 
   final StreamIterator<Uint8List> _source;
   final BytesBuilder _buf = BytesBuilder(copy: false);

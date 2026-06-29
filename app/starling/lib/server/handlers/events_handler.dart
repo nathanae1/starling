@@ -96,12 +96,7 @@ Future<Envelope> buildEventsEnvelope({
     items.add(EnvelopeItem(type: 'event', payload: encrypted.toBytes()));
   }
   if (nextSeq != identity.msgSeqCounter) {
-    await storage.saveIdentity(
-      identity.copyWith(msgSeqCounter: nextSeq),
-    );
+    await storage.saveIdentity(identity.copyWith(msgSeqCounter: nextSeq));
   }
-  return Envelope(
-    version: kStarlingProtocolVersion,
-    items: items,
-  );
+  return Envelope(version: kStarlingProtocolVersion, items: items);
 }

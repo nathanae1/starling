@@ -30,15 +30,15 @@ class RelayPairingService {
     required Future<Uint8List?> Function() ownSecretKeyLookup,
     required List<Endpoint> Function() ownEndpointsLookup,
     required Future<void> Function() reloadPairedRelay,
-  })  : _initiator = initiator,
-        _pushCoordinator = pushCoordinator,
-        _crypto = crypto,
-        _storage = storage,
-        _clock = clock,
-        _identityLookup = identityLookup,
-        _ownSecretKeyLookup = ownSecretKeyLookup,
-        _ownEndpointsLookup = ownEndpointsLookup,
-        _reloadPairedRelay = reloadPairedRelay;
+  }) : _initiator = initiator,
+       _pushCoordinator = pushCoordinator,
+       _crypto = crypto,
+       _storage = storage,
+       _clock = clock,
+       _identityLookup = identityLookup,
+       _ownSecretKeyLookup = ownSecretKeyLookup,
+       _ownEndpointsLookup = ownEndpointsLookup,
+       _reloadPairedRelay = reloadPairedRelay;
 
   final RelayPairingInitiator _initiator;
   final RelayPushCoordinator _pushCoordinator;

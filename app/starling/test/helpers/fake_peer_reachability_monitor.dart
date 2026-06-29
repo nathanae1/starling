@@ -13,6 +13,12 @@ class FakePeerReachabilityMonitor implements PeerReachabilityMonitor {
   final List<({String pubkey, PeerTransport transport, Object reason})>
       markedUnreachable = [];
 
+  /// When true, [probeCard] resolves to `null` regardless of the reachable
+  /// map — models a frozen request card whose onion can't be reached over
+  /// Tor (e.g. it wasn't published at request time), while the live monitor
+  /// ([bestConnectionFor]) still has a validated transport for the peer.
+  bool failProbeCard = false;
+
   // Backs [stateStream]/[state] so consumers (e.g. FollowRetryPump,
   // ReconnectPusher) that diff reachability transitions can be driven
   // deterministically via [emitReachable].
@@ -77,8 +83,8 @@ class FakePeerReachabilityMonitor implements PeerReachabilityMonitor {
   }
 
   @override
-  Future<PeerConnection?> probeCard(ConnectionCard card) =>
-      bestConnectionFor(card.pubkey);
+  Future<PeerConnection?> probeCard(ConnectionCard card) async =>
+      failProbeCard ? null : bestConnectionFor(card.pubkey);
 
   @override
   void markUnreachable(String pubkey, PeerTransport transport, Object reason) {

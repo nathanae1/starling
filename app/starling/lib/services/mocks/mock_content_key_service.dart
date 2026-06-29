@@ -80,8 +80,7 @@ class MockContentKeyService implements ContentKeyService {
     Event event,
     Audience audience, {
     required int msgSeq,
-  }) =>
-      signAndEncryptForAudience(event, audience, msgSeq: msgSeq).encrypted;
+  }) => signAndEncryptForAudience(event, audience, msgSeq: msgSeq).encrypted;
 
   @override
   ({Event signed, EncryptedEvent encrypted}) signAndEncryptForAudience(

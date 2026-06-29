@@ -96,9 +96,11 @@ class ComposeController extends _$ComposeController {
     try {
       final file = await _picker.pickImage(source: source, imageQuality: 100);
       if (file == null) {
-        state = state.copyWith(phase: state.photoBytes == null
-            ? ComposePhase.idle
-            : ComposePhase.ready);
+        state = state.copyWith(
+          phase: state.photoBytes == null
+              ? ComposePhase.idle
+              : ComposePhase.ready,
+        );
         return;
       }
       final bytes = await file.readAsBytes();
@@ -110,7 +112,9 @@ class ComposeController extends _$ComposeController {
       );
     } on Object catch (e) {
       state = state.copyWith(
-        phase: state.photoBytes == null ? ComposePhase.idle : ComposePhase.ready,
+        phase: state.photoBytes == null
+            ? ComposePhase.idle
+            : ComposePhase.ready,
         errorMessage: 'Couldn\'t open photo: $e',
       );
     }
@@ -133,9 +137,6 @@ class ComposeController extends _$ComposeController {
   }
 
   void markPublishFailed(String message) {
-    state = state.copyWith(
-      phase: ComposePhase.ready,
-      errorMessage: message,
-    );
+    state = state.copyWith(phase: ComposePhase.ready, errorMessage: message);
   }
 }

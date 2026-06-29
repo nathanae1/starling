@@ -9,11 +9,7 @@ import 'buttons.dart';
 /// Bookmark/save toggle for an event row. Outline graphite when unsaved,
 /// sage-deep filled when saved. Pure local — no event produced, no sync.
 class BookmarkButton extends ConsumerWidget {
-  const BookmarkButton({
-    super.key,
-    required this.eventId,
-    this.iconSize = 22,
-  });
+  const BookmarkButton({super.key, required this.eventId, this.iconSize = 22});
 
   final String eventId;
   final double iconSize;
@@ -27,10 +23,9 @@ class BookmarkButton extends ConsumerWidget {
     return StarlingIconButton(
       onPressed: () =>
           ref.read(bookmarkControllerProvider(eventId).notifier).toggle(),
+      semanticLabel: isSaved ? 'Remove bookmark' : 'Bookmark',
       child: Icon(
-        isSaved
-            ? LucideIcons.bookmarkCheck
-            : LucideIcons.bookmark,
+        isSaved ? LucideIcons.bookmarkCheck : LucideIcons.bookmark,
         size: iconSize,
         color: isSaved ? starling.colors.sageDeep : starling.colors.graphite,
       ),

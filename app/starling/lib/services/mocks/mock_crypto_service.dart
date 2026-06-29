@@ -10,9 +10,9 @@ import '../types.dart';
 class MockCryptoService implements CryptoService {
   @override
   Future<KeyPair> generateKeyPair() async => KeyPair(
-        publicKey: Uint8List.fromList(List.filled(32, 0x01)),
-        secretKey: Uint8List.fromList(List.filled(64, 0x02)),
-      );
+    publicKey: Uint8List.fromList(List.filled(32, 0x01)),
+    secretKey: Uint8List.fromList(List.filled(64, 0x02)),
+  );
 
   @override
   Future<List<String>> deriveRecoveryPhrase(Uint8List seed) async =>
@@ -74,31 +74,27 @@ class MockCryptoService implements CryptoService {
     Uint8List requesterPubkey,
     Uint8List responderPubkey,
     int timestamp,
-  ) =>
-      Uint8List.fromList(List.filled(32, 0xBB));
+  ) => Uint8List.fromList(List.filled(32, 0xBB));
 
   @override
   Uint8List deriveSignalingKey({
     required Uint8List mySecretKey,
     required Uint8List theirPubkey,
-  }) =>
-      Uint8List.fromList(List.filled(32, 0xAA));
+  }) => Uint8List.fromList(List.filled(32, 0xAA));
 
   @override
   Uint8List encryptEphemeral({
     required Uint8List key,
     required Uint8List nonce,
     required Uint8List plaintext,
-  }) =>
-      Uint8List.fromList(plaintext);
+  }) => Uint8List.fromList(plaintext);
 
   @override
   Uint8List decryptEphemeral({
     required Uint8List key,
     required Uint8List nonce,
     required Uint8List ciphertext,
-  }) =>
-      Uint8List.fromList(ciphertext);
+  }) => Uint8List.fromList(ciphertext);
 
   @override
   Uint8List blake2b256(Uint8List data) {

@@ -7,6 +7,8 @@ Plan 01 (project scaffolding), Plan 02 (storage, for the tab-shell's identity-ga
 
 Land the visual foundation — typography, color tokens, icon library, shared components — and the app shell that hosts every screen. Every UI plan from here on (04, 05, 06, 08, 10, 15) depends on this.
 
+> **Post-audit revision (2026-06-28).** A design/UX audit changed two things this plan specifies: (1) the bottom tab bar is now **Feed · Friends · Rooms · You** with compose as a **floating action button** (not a "Post" tab/modal) — see App shell; (2) the shared-component set grew (see Shared components). Original text is kept for history with inline notes where the spec changed. (Also: the app shipped with **Lucide** icons via `StarlingIcon`, not Phosphor as written below — see `.design-sync/NOTES.md`.)
+
 ### Typography
 Ship three typefaces, matching the Claude Design handoff:
 
@@ -79,7 +81,7 @@ Build these first; every subsequent plan consumes them.
 - **`StarlingIcon`** — thin wrapper around `phosphor_flutter`. Props: `name`, `size`, `color`, `weight` (Regular / Bold / Fill). Default weight is Regular.
 - **`Avatar`** — circle with initial fallback or image source. Sizes: xs (20), sm (28), md (36), lg (72), xl (96). Accepts `name`, `color` (background if no image), `imageProvider`. Font is Fraunces display at size/2.6 matching the design.
 - **`TopBar`** — optional left slot, centered-or-left title in Fraunces, optional right slot, optional subtitle row. Used by every screen that has a header (Setup, Recovery, Settings, Post detail, Friends, etc.). Feed and Profile deliberately do not use `TopBar` — they have custom in-screen headers per Plan 06.
-- **`TabBar`** (bottom) — four tabs: **Feed** (house icon), **Friends** (users-three), **Post** (plus-circle), **You** (user). Active tab shows brand color and semi-bold label. "Post" is special: tapping it does not switch tabs — it pushes the Compose screen as a full-screen modal (see App shell below).
+- **`TabBar`** (bottom) — four tabs: **Feed** (house), **Friends** (users), **Rooms** (radio), **You** (user). Active tab shows brand color and semi-bold label. _(Post-audit: the old "Post" tab was replaced by **Rooms**; compose moved to a FAB — see App shell below.)_
 - **`Sheet`** — bottom-sheet modal with a drag handle, scrim, slide-up animation (280ms, eased), rounded top corners (20). Max height 85% of viewport. Used by `QrInviteSheet` (Plan 08) and anything future that needs a focused action.
 - **`PrimaryButton` / `SecondaryButton` / `GhostButton`** — sage-fill / paper-with-hairline / text-only sage-deep. Primary is the default CTA; Secondary for alternative actions in the same flow; Ghost for muted actions (e.g. "Post" in the compose header). All support `block` layout (full-width, taller padding).
 - **`IconButton`** — 36×36 hit target, 10px radius, linen hover. Used for top-bar affordances.
@@ -87,6 +89,14 @@ Build these first; every subsequent plan consumes them.
 - **`Textarea`** — multi-line variant, min-height 96, no resize handle.
 - **`QRCode`** — deterministic QR rendering. Props: `data` (string), `size` (px), foreground/background colors. For v1, use a Dart QR generator (e.g. `qr` package) rather than the design's fake-grid component — we need real scannable codes, not a visual stand-in. Wrap in a fixed-size paper card with `shadowSoft`.
 - **`SyncDot`** — small (8px) colored dot with optional pulse animation. Used by the feed's sync/search bar (Plan 06). Four states: synced (success), syncing (sage, pulsing), waiting (clay), offline (stone).
+
+**Post-audit additions (2026-06-28):**
+- **`StarlingCard`** — titled surface (paper, hairline border, 14 radius, optional `shadowSoft`). Replaces the ad-hoc section-card pattern in settings/profile.
+- **`StarlingBadge`** — tinted status pill (leading dot or glyph + label). Consolidates the inline status chips in network/connection settings + friend reachability.
+- **`StarlingAlertDialog`** / `showStarlingConfirm(...)` — themed confirmation dialog replacing the default Material `AlertDialog`; `destructive: true` renders the confirm in clay.
+- **`StickyActionBar`** — bottom-pinned action bar (paper, hairline top, bottom-safe). Shared by Compose + Preview.
+- **`AccentButton`** — clay-fill button (public counterpart to the existing accent variant); used for destructive confirms.
+- **`StarlingIconButton`** gained `semanticLabel`/`tooltip` and a 44px min tap target (accessibility).
 
 **Naming**: all components live under `lib/widgets/` and share the `Starling` prefix only where needed to avoid clashing with Flutter built-ins (e.g. `StarlingIcon`). Prefer unprefixed names (`Avatar`, `Sheet`, `TopBar`) when there's no clash.
 
@@ -97,7 +107,7 @@ The shell is a single `ShellRoute` in `go_router` that renders:
 
 Each tab owns its own `Navigator` stack so pushing Settings from Profile doesn't pop Feed. Going back via hardware/gesture within a tab stays inside that tab; tapping a tab a second time pops its stack to root.
 
-**Compose as modal**: the "Post" tab does not host a persistent navigator — tapping it pushes `/compose` as a full-screen modal route above the shell. Dismissing Compose (X or Post) returns the user to whichever tab they were on. This mirrors the design's intent: posting is an action, not a place.
+**Compose as a FAB** _(post-audit 2026-06-28; originally the "Post" tab)_: compose is launched from a **floating action button** (bottom-right, hidden while a voice call is active), which pushes `/compose` as a full-screen modal above the shell. Compose's actions (Cancel / Next) live in a bottom `StickyActionBar`. Dismissing returns the user to whichever tab they were on. Posting is an action, not a place — now expressed as a FAB so all four bottom slots are real destinations (Feed · Friends · Rooms · You).
 
 **Safe areas**: the shell wraps content in `SafeArea` with `top: true` + custom bottom handling so the `TabBar` sits above the home-indicator inset. Onboarding and Restore do not use the shell — they render full-screen with their own padding.
 

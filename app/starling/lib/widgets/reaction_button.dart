@@ -67,15 +67,16 @@ class _ReactionButtonState extends State<ReactionButton>
   @override
   Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
-    final color = widget.liked ? starling.colors.clay : starling.colors.graphite;
-    final iconData = widget.liked
-        ? LucideIcons.heart
-        : LucideIcons.heart;
+    final color = widget.liked
+        ? starling.colors.clay
+        : starling.colors.graphite;
+    final iconData = widget.liked ? LucideIcons.heart : LucideIcons.heart;
 
     final scaled = ScaleTransition(
-      scale: Tween<double>(begin: 1, end: 1.25).animate(
-        CurvedAnimation(parent: _ctrl, curve: Curves.elasticOut),
-      ),
+      scale: Tween<double>(
+        begin: 1,
+        end: 1.25,
+      ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.elasticOut)),
       child: Icon(iconData, size: widget.iconSize, color: color),
     );
 
@@ -85,28 +86,29 @@ class _ReactionButtonState extends State<ReactionButton>
         scaled,
         if (widget.showCount && widget.count > 0) ...[
           const SizedBox(width: 6),
-          Text(
-            '${widget.count}',
-            style: starling.typography.small,
-          ),
+          Text('${widget.count}', style: starling.typography.small),
         ],
       ],
     );
 
     if (widget.compact) {
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _handleTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: body,
+      return Semantics(
+        button: true,
+        label: widget.liked ? 'Unlike' : 'Like',
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _handleTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: body,
+          ),
         ),
       );
     }
     return StarlingIconButton(
       onPressed: _handleTap,
+      semanticLabel: widget.liked ? 'Unlike' : 'Like',
       child: body,
     );
   }
 }
-

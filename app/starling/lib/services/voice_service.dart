@@ -43,10 +43,7 @@ abstract class VoiceService {
   );
 
   /// Apply the remote [answer] to the offer we previously sent [peerPubkey].
-  Future<void> setRemoteAnswer(
-    String peerPubkey,
-    Map<String, dynamic> answer,
-  );
+  Future<void> setRemoteAnswer(String peerPubkey, Map<String, dynamic> answer);
 
   /// Add a remote ICE [candidate] received over signaling.
   Future<void> addRemoteIceCandidate(

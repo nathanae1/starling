@@ -117,9 +117,9 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
     final parsed = parseInvite(result);
     if (parsed is InvalidInvite) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(parsed.reason)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(parsed.reason)));
       return;
     }
     if (!mounted) return;
@@ -211,10 +211,16 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
       return Container(color: Colors.black);
     }
     return defaultTargetPlatform == TargetPlatform.iOS
-        ? UiKitView(viewType: viewType, creationParams: const <String, dynamic>{},
-            creationParamsCodec: const StandardMessageCodec())
-        : AndroidView(viewType: viewType, creationParams: const <String, dynamic>{},
-            creationParamsCodec: const StandardMessageCodec());
+        ? UiKitView(
+            viewType: viewType,
+            creationParams: const <String, dynamic>{},
+            creationParamsCodec: const StandardMessageCodec(),
+          )
+        : AndroidView(
+            viewType: viewType,
+            creationParams: const <String, dynamic>{},
+            creationParamsCodec: const StandardMessageCodec(),
+          );
   }
 }
 

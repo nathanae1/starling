@@ -15,6 +15,7 @@ import '../../theme/starling_theme.dart';
 import '../../utils/starling_address.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/sheet.dart';
+import '../../widgets/starling_badge.dart';
 import '../friends/scan_screen.dart';
 
 /// Surfaces the per-peer reachability state maintained by
@@ -39,8 +40,7 @@ class ConnectionSettingsScreen extends ConsumerWidget {
             const _RelaySection(),
             Expanded(
               child: followsAsync.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => _ErrorView(message: '$e'),
                 data: (follows) {
                   if (follows.isEmpty) {
@@ -48,8 +48,7 @@ class ConnectionSettingsScreen extends ConsumerWidget {
                   }
                   final state = stateAsync.maybeWhen(
                     data: (s) => s,
-                    orElse: () =>
-                        const <String, PeerReachability>{},
+                    orElse: () => const <String, PeerReachability>{},
                   );
                   return RefreshIndicator(
                     onRefresh: () => _refreshAll(ref, follows),
@@ -76,22 +75,40 @@ class ConnectionSettingsScreen extends ConsumerWidget {
   }
 }
 
-class _Header extends ConsumerWidget {
+class _Header extends ConsumerStatefulWidget {
   const _Header();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_Header> createState() => _HeaderState();
+}
+
+class _HeaderState extends ConsumerState<_Header> {
+  bool _refreshing = false;
+
+  Future<void> _refresh() async {
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+    try {
+      final follows = await ref.read(storageServiceProvider).getFollows();
+      await _refreshAll(ref, follows);
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
       decoration: BoxDecoration(
-        border:
-            Border(bottom: BorderSide(color: starling.colors.hairline)),
+        border: Border(bottom: BorderSide(color: starling.colors.hairline)),
       ),
       child: Row(
         children: [
           StarlingIconButton(
             onPressed: () => context.pop(),
+            semanticLabel: 'Back',
             child: const Icon(LucideIcons.arrowLeft, size: 20),
           ),
           Expanded(
@@ -102,15 +119,41 @@ class _Header extends ConsumerWidget {
                 fontSize: 20,
                 fontWeight: FontWeight.w500,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-          StarlingIconButton(
-            onPressed: () async {
-              final follows = await ref.read(storageServiceProvider).getFollows();
-              await _refreshAll(ref, follows);
-            },
-            child: const Icon(LucideIcons.refreshCw, size: 20),
-          ),
+          // While a refresh runs, swap the icon button for an explicit
+          // spinner + label so the action's progress is obvious (the probe
+          // can take a few seconds over Tor).
+          if (_refreshing)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        starling.colors.sage,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text('Refreshing…', style: starling.typography.micro),
+                ],
+              ),
+            )
+          else
+            StarlingIconButton(
+              onPressed: _refresh,
+              semanticLabel: 'Refresh all',
+              tooltip: 'Refresh all',
+              child: const Icon(LucideIcons.refreshCw, size: 20),
+            ),
         ],
       ),
     );
@@ -133,8 +176,7 @@ class _RelaySectionState extends ConsumerState<_RelaySection> {
   Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
     final relay = ref.watch(pairedRelayControllerProvider).value;
-    final serviceReady =
-        ref.watch(relayPairingServiceProvider).value != null;
+    final serviceReady = ref.watch(relayPairingServiceProvider).value != null;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
@@ -156,10 +198,7 @@ class _RelaySectionState extends ConsumerState<_RelaySection> {
                 ),
               ),
               if (relay == null)
-                SecondaryButton(
-                  label: 'Pair a relay',
-                  onPressed: _openScanner,
-                )
+                SecondaryButton(label: 'Pair a relay', onPressed: _openScanner)
               else
                 SecondaryButton(
                   label: _busy ? 'Unpairing…' : 'Unpair',
@@ -171,9 +210,9 @@ class _RelaySectionState extends ConsumerState<_RelaySection> {
           Text(
             relay == null
                 ? 'No relay paired — friends only reach you while your phone '
-                    'is online.'
+                      'is online.'
                 : '${_shortOnion(relay.relayOnion)} · '
-                    '${relay.backfillComplete ? 'synced' : 'syncing…'}',
+                      '${relay.backfillComplete ? 'synced' : 'syncing…'}',
             style: starling.typography.micro.copyWith(
               color: starling.colors.stone,
             ),
@@ -186,9 +225,9 @@ class _RelaySectionState extends ConsumerState<_RelaySection> {
   }
 
   Future<void> _openScanner() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const ScanScreen()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const ScanScreen()));
   }
 
   Future<void> _unpair() async {
@@ -272,10 +311,9 @@ class _PeerTile extends ConsumerWidget {
     final profileAsync = ref.watch(followProfileProvider(follow.pubkey));
     final name = profileAsync.maybeWhen(
       data: (p) => p.displayName,
-      orElse: () =>
-          follow.displayName?.trim().isNotEmpty == true
-              ? follow.displayName!.trim()
-              : shortStarlingAddress(follow.pubkey),
+      orElse: () => follow.displayName?.trim().isNotEmpty == true
+          ? follow.displayName!.trim()
+          : shortStarlingAddress(follow.pubkey),
     );
 
     final lan = reachability?.transports[PeerTransport.lan];
@@ -334,22 +372,11 @@ class _KeyHealthRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
     final health = _classify(follow);
-    final (label, fg, bg) = switch (health) {
-      _KeyHealth.ok => (
-          'Fresh',
-          starling.colors.sageDeep,
-          starling.colors.sageSoft,
-        ),
-      _KeyHealth.stale => (
-          'Stale',
-          starling.colors.danger,
-          starling.colors.linen,
-        ),
-      _KeyHealth.unknown => (
-          'Unknown',
-          starling.colors.stone,
-          starling.colors.linen,
-        ),
+    // Same success/danger/stone vocabulary as the transport chips above.
+    final (label, color) = switch (health) {
+      _KeyHealth.ok => ('Fresh', starling.colors.success),
+      _KeyHealth.stale => ('Stale', starling.colors.danger),
+      _KeyHealth.unknown => ('Unknown', starling.colors.stone),
     };
     final detail = _detail(follow, health);
     return Row(
@@ -365,20 +392,7 @@ class _KeyHealthRow extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            label,
-            style: starling.typography.micro.copyWith(
-              color: fg,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
+        StarlingBadge(label: label, color: color),
         const SizedBox(width: 8),
         Expanded(
           child: detail == null
@@ -410,9 +424,7 @@ class _KeyHealthRow extends StatelessWidget {
       return 'decrypt failed ${_relativeTime(t)} — re-pair if not recovered';
     }
     if (health == _KeyHealth.ok && follow.lastSyncedAt > 0) {
-      final t = DateTime.fromMillisecondsSinceEpoch(
-        follow.lastSyncedAt * 1000,
-      );
+      final t = DateTime.fromMillisecondsSinceEpoch(follow.lastSyncedAt * 1000);
       return 'verified ${_relativeTime(t)}';
     }
     return null;
@@ -508,43 +520,17 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final starling = StarlingTheme.of(context);
-    final (label, fg, bg) = switch (state) {
-      TransportState.reachable => (
-          'Reachable',
-          starling.colors.sageDeep,
-          starling.colors.sageSoft,
-        ),
-      TransportState.probing => (
-          'Probing…',
-          starling.colors.graphite,
-          starling.colors.linen,
-        ),
-      TransportState.unreachable => (
-          'Unreachable',
-          starling.colors.danger,
-          starling.colors.linen,
-        ),
-      TransportState.unknown => (
-          'Unknown',
-          starling.colors.stone,
-          starling.colors.linen,
-        ),
+    final colors = StarlingTheme.of(context).colors;
+    // Shared status vocabulary/colors with the network screen's quick-status
+    // badges: success = reachable, warning = probing/in-progress, danger =
+    // unreachable, stone = unknown.
+    final (label, color) = switch (state) {
+      TransportState.reachable => ('Reachable', colors.success),
+      TransportState.probing => ('Probing…', colors.warning),
+      TransportState.unreachable => ('Unreachable', colors.danger),
+      TransportState.unknown => ('Unknown', colors.stone),
     };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        label,
-        style: starling.typography.micro.copyWith(
-          color: fg,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-    );
+    return StarlingBadge(label: label, color: color);
   }
 }
 
@@ -560,7 +546,9 @@ class _EmptyView extends StatelessWidget {
         child: Text(
           'Add friends to see their connection status here.',
           textAlign: TextAlign.center,
-          style: starling.typography.small.copyWith(color: starling.colors.graphite),
+          style: starling.typography.small.copyWith(
+            color: starling.colors.graphite,
+          ),
         ),
       ),
     );
@@ -580,8 +568,9 @@ class _ErrorView extends StatelessWidget {
         padding: const EdgeInsets.all(24),
         child: Text(
           message,
-          style:
-              starling.typography.small.copyWith(color: starling.colors.danger),
+          style: starling.typography.small.copyWith(
+            color: starling.colors.danger,
+          ),
         ),
       ),
     );

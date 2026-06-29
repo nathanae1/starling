@@ -4,23 +4,15 @@ import 'package:cbor/simple.dart';
 import 'package:collection/collection.dart';
 
 class Endpoint {
-  const Endpoint({
-    required this.type,
-    required this.address,
-  });
+  const Endpoint({required this.type, required this.address});
 
   final String type; // "onion" or "relay"
   final String address;
 
-  Map<String, dynamic> toMap() => {
-        'type': type,
-        'address': address,
-      };
+  Map<String, dynamic> toMap() => {'type': type, 'address': address};
 
-  static Endpoint fromMap(Map<dynamic, dynamic> map) => Endpoint(
-        type: map['type'] as String,
-        address: map['address'] as String,
-      );
+  static Endpoint fromMap(Map<dynamic, dynamic> map) =>
+      Endpoint(type: map['type'] as String, address: map['address'] as String);
 
   @override
   bool operator ==(Object other) =>
@@ -46,25 +38,24 @@ class ConnectionCard {
   final List<String> capabilities;
 
   Map<String, dynamic> toMap() => {
-        'pubkey': pubkey,
-        'endpoints': endpoints.map((e) => e.toMap()).toList(),
-        'capabilities': capabilities,
-      };
+    'pubkey': pubkey,
+    'endpoints': endpoints.map((e) => e.toMap()).toList(),
+    'capabilities': capabilities,
+  };
 
   Uint8List toBytes() => Uint8List.fromList(cbor.encode(toMap()));
 
   static ConnectionCard fromMap(Map<dynamic, dynamic> map) => ConnectionCard(
-        pubkey: map['pubkey'] as String,
-        endpoints: (map['endpoints'] as List<dynamic>)
-            .map(
-              (item) => Endpoint.fromMap(item as Map<dynamic, dynamic>),
-            )
-            .toList(),
-        capabilities: (map['capabilities'] as List<dynamic>?)
-                ?.map((e) => e.toString())
-                .toList() ??
-            const ['pairwise-v1'],
-      );
+    pubkey: map['pubkey'] as String,
+    endpoints: (map['endpoints'] as List<dynamic>)
+        .map((item) => Endpoint.fromMap(item as Map<dynamic, dynamic>))
+        .toList(),
+    capabilities:
+        (map['capabilities'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        const ['pairwise-v1'],
+  );
 
   static ConnectionCard fromBytes(Uint8List bytes) =>
       fromMap(cbor.decode(bytes) as Map<dynamic, dynamic>);
@@ -75,11 +66,11 @@ class ConnectionCard {
       other is ConnectionCard &&
           pubkey == other.pubkey &&
           const ListEquality<Endpoint>().equals(endpoints, other.endpoints) &&
-          const ListEquality<String>()
-              .equals(capabilities, other.capabilities);
+          const ListEquality<String>().equals(capabilities, other.capabilities);
 
   @override
-  int get hashCode => Object.hash(pubkey, endpoints.length, capabilities.length);
+  int get hashCode =>
+      Object.hash(pubkey, endpoints.length, capabilities.length);
 
   @override
   String toString() =>
@@ -90,10 +81,9 @@ class ConnectionCard {
     String? pubkey,
     List<Endpoint>? endpoints,
     List<String>? capabilities,
-  }) =>
-      ConnectionCard(
-        pubkey: pubkey ?? this.pubkey,
-        endpoints: endpoints ?? this.endpoints,
-        capabilities: capabilities ?? this.capabilities,
-      );
+  }) => ConnectionCard(
+    pubkey: pubkey ?? this.pubkey,
+    endpoints: endpoints ?? this.endpoints,
+    capabilities: capabilities ?? this.capabilities,
+  );
 }

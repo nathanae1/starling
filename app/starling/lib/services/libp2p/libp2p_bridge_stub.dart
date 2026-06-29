@@ -23,9 +23,9 @@ class Libp2pBridgeStub implements Libp2pService {
   Stream<Libp2pEvent> get events => _eventCtrl.stream;
 
   Never _unavailable() => throw const Libp2pUnavailableException(
-        'libp2p bridge not built — kLibp2pEnabled is false or the native '
-        'crate has not been cross-compiled for this target.',
-      );
+    'libp2p bridge not built — kLibp2pEnabled is false or the native '
+    'crate has not been cross-compiled for this target.',
+  );
 
   @override
   Future<void> init(String dataDir, Uint8List ed25519Seed) async {
@@ -49,8 +49,7 @@ class Libp2pBridgeStub implements Libp2pService {
     String remotePeerId,
     List<Uint8List> remoteAddrs, {
     Duration timeout = const Duration(seconds: 8),
-  }) async =>
-      _unavailable();
+  }) async => _unavailable();
 
   @override
   Future<Libp2pStream> openStream(String remotePeerId, String protocol) async =>

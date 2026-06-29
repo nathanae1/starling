@@ -31,14 +31,15 @@ Future<ReactionSummary> reactions(Ref ref, String postId) async {
   final storage = ref.watch(storageServiceProvider);
   final identity = await ref.watch(identityControllerProvider.future);
 
-  final likes =
-      await storage.getEventsByRef(postId, kind: EventKind.like);
+  final likes = await storage.getEventsByRef(postId, kind: EventKind.like);
 
   // Per-author latest like with no tombstone wins.
   final activeByAuthor = <String, Event>{};
   for (final like in likes) {
-    final tombstones =
-        await storage.getEventsByRef(like.id, kind: EventKind.delete);
+    final tombstones = await storage.getEventsByRef(
+      like.id,
+      kind: EventKind.delete,
+    );
     final tombstoned = tombstones.any((t) => t.pubkey == like.pubkey);
     if (tombstoned) continue;
     final prior = activeByAuthor[like.pubkey];

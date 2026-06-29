@@ -75,11 +75,7 @@ class Libp2pBridge implements Libp2pService {
   ) async {
     final worker = await _ensureWorker();
     final reply = ReceivePort();
-    worker.send({
-      'cmd': cmd,
-      'args': args,
-      'reply': reply.sendPort,
-    });
+    worker.send({'cmd': cmd, 'args': args, 'reply': reply.sendPort});
     final result = await reply.first;
     reply.close();
     return (result as Map).cast<String, dynamic>();
@@ -168,10 +164,7 @@ class Libp2pBridge implements Libp2pService {
   }
 
   @override
-  Future<Libp2pStream> openStream(
-    String remotePeerId,
-    String protocol,
-  ) async {
+  Future<Libp2pStream> openStream(String remotePeerId, String protocol) async {
     if (_workerSendPort == null) {
       throw const Libp2pStreamException('bridge not initialized');
     }
@@ -262,8 +255,13 @@ class Libp2pBridge implements Libp2pService {
         final listen = (decoded['listen_addrs'] as List? ?? const [])
             .map(_asBytes)
             .toList(growable: false);
-        _eventCtrl.add(Libp2pIdentifyReceived(
-            peerId: peerId, observedAddr: observed, listenAddrs: listen));
+        _eventCtrl.add(
+          Libp2pIdentifyReceived(
+            peerId: peerId,
+            observedAddr: observed,
+            listenAddrs: listen,
+          ),
+        );
         break;
       case 'observed_addr_changed':
         final ma = _asBytes(decoded['multiaddr']);

@@ -27,10 +27,10 @@ class ReconnectPusher {
     this.window = const Duration(days: 7),
     this.maxEvents = 50,
     this.cooldown = const Duration(minutes: 5),
-  })  : _storage = storage,
-        _transport = transport,
-        _reachability = reachability,
-        _clock = clock;
+  }) : _storage = storage,
+       _transport = transport,
+       _reachability = reachability,
+       _clock = clock;
 
   final StorageService _storage;
   final SyncTransport _transport;
@@ -103,8 +103,10 @@ class ReconnectPusher {
     try {
       followers = (await _storage.getAcceptedFollowerPubkeys()).toSet();
     } catch (e) {
-      developer.log('reconnect: follower lookup failed: $e',
-          name: 'reconnect_pusher');
+      developer.log(
+        'reconnect: follower lookup failed: $e',
+        name: 'reconnect_pusher',
+      );
       return;
     }
     final identity = await _storage.getIdentity();
@@ -142,8 +144,10 @@ class ReconnectPusher {
         limit: maxEvents,
       );
     } catch (e) {
-      developer.log('reconnect: event lookup failed: $e',
-          name: 'reconnect_pusher');
+      developer.log(
+        'reconnect: event lookup failed: $e',
+        name: 'reconnect_pusher',
+      );
       return null;
     }
     final items = <EnvelopeItem>[];
@@ -168,8 +172,10 @@ class ReconnectPusher {
         name: 'reconnect_pusher',
       );
     } catch (e) {
-      developer.log('reconnect: push to $pubkey failed: $e',
-          name: 'reconnect_pusher');
+      developer.log(
+        'reconnect: push to $pubkey failed: $e',
+        name: 'reconnect_pusher',
+      );
     }
   }
 }

@@ -9,11 +9,16 @@ class CompressRequest {
     required this.sourceBytes,
     this.maxDimension = 1080,
     this.quality = 80,
+    this.square = false,
   });
 
   final Uint8List sourceBytes;
   final int maxDimension;
   final int quality;
+
+  /// When true, center-crop the source to a square before resizing — used
+  /// for avatars so they fill a circular frame without distortion.
+  final bool square;
 }
 
 /// Output of [compressImageIsolate]. Only bytes/primitives — isolate-safe.
@@ -45,16 +50,28 @@ CompressResult compressImageIsolate(CompressRequest req) {
     throw const FormatException('unable to decode image');
   }
 
+  // Optional square center-crop (avatars). Done before the resize so the
+  // longest-edge cap then yields an exact maxDimension square.
+  img.Image source = decoded;
+  if (req.square && decoded.width != decoded.height) {
+    final side = decoded.width < decoded.height
+        ? decoded.width
+        : decoded.height;
+    final x = (decoded.width - side) ~/ 2;
+    final y = (decoded.height - side) ~/ 2;
+    source = img.copyCrop(decoded, x: x, y: y, width: side, height: side);
+  }
+
   img.Image resized;
-  final longest = decoded.width >= decoded.height ? decoded.width : decoded.height;
+  final longest = source.width >= source.height ? source.width : source.height;
   if (longest > req.maxDimension) {
-    if (decoded.width >= decoded.height) {
-      resized = img.copyResize(decoded, width: req.maxDimension);
+    if (source.width >= source.height) {
+      resized = img.copyResize(source, width: req.maxDimension);
     } else {
-      resized = img.copyResize(decoded, height: req.maxDimension);
+      resized = img.copyResize(source, height: req.maxDimension);
     }
   } else {
-    resized = decoded;
+    resized = source;
   }
 
   final encoded = img.encodeJpg(resized, quality: req.quality);

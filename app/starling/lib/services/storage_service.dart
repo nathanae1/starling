@@ -3,7 +3,6 @@ import 'dart:typed_data';
 import '../models/models.dart';
 import 'types.dart';
 
-
 /// Abstract interface for all persistent storage operations.
 ///
 /// Default implementation uses SQLCipher via Drift (Plan 02).
@@ -56,6 +55,11 @@ abstract class StorageService {
   });
 
   Future<Event?> getEvent(String id);
+
+  /// The most recent kind=2 (profile) event authored by [pubkey], or null.
+  /// Profiles are latest-`created_at`-wins; this returns the authoritative
+  /// row that own/follow profile reads decode.
+  Future<Event?> getLatestProfile(String pubkey);
 
   Future<void> saveEvent(Event event);
 
@@ -284,9 +288,7 @@ abstract class StorageService {
   /// consumer; this is purely receive-and-store.
   Future<void> saveUnknownEnvelopeItem(UnknownEnvelopeItem item);
 
-  Future<List<UnknownEnvelopeItem>> getUnknownEnvelopeItemsByType(
-    String type,
-  );
+  Future<List<UnknownEnvelopeItem>> getUnknownEnvelopeItemsByType(String type);
 
   // --- Outbound queue ---
 

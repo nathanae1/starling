@@ -15,7 +15,7 @@ class SyncStatus {
     required this.state,
     this.lastSyncedAtSeconds,
     this.reachableFriends = 0,
-    this.waitingForName,
+    this.totalFriends = 0,
   });
 
   final SyncState state;
@@ -25,9 +25,9 @@ class SyncStatus {
 
   final int reachableFriends;
 
-  /// Display name shown in `waiting` state ("Waiting for {name}'s device…").
-  /// Null when not in `waiting`.
-  final String? waitingForName;
+  /// Total accepted follows — the denominator for the "N/M friends
+  /// reachable" status label.
+  final int totalFriends;
 }
 
 @riverpod
@@ -43,6 +43,7 @@ SyncStatus syncStatus(Ref ref) {
       state: SyncState.syncing,
       lastSyncedAtSeconds: engineState.lastSyncAt,
       reachableFriends: reachable,
+      totalFriends: follows.length,
     );
   }
   if (follows.isEmpty) {
@@ -50,6 +51,7 @@ SyncStatus syncStatus(Ref ref) {
       state: SyncState.synced,
       lastSyncedAtSeconds: engineState.lastSyncAt,
       reachableFriends: 0,
+      totalFriends: 0,
     );
   }
   if (reachable == 0) {
@@ -57,11 +59,13 @@ SyncStatus syncStatus(Ref ref) {
       state: SyncState.offline,
       lastSyncedAtSeconds: engineState.lastSyncAt,
       reachableFriends: 0,
+      totalFriends: follows.length,
     );
   }
   return SyncStatus(
     state: SyncState.synced,
     lastSyncedAtSeconds: engineState.lastSyncAt,
     reachableFriends: reachable,
+    totalFriends: follows.length,
   );
 }

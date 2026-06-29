@@ -24,24 +24,24 @@ class EncryptedEvent {
   final Uint8List payload;
 
   Map<String, dynamic> toMap() => {
-        'pubkey': pubkey,
-        'created_at': createdAt,
-        'epoch': epoch,
-        'msg_seq': msgSeq,
-        'nonce': nonce,
-        'payload': payload,
-      };
+    'pubkey': pubkey,
+    'created_at': createdAt,
+    'epoch': epoch,
+    'msg_seq': msgSeq,
+    'nonce': nonce,
+    'payload': payload,
+  };
 
   Uint8List toBytes() => Uint8List.fromList(cbor.encode(toMap()));
 
   static EncryptedEvent fromMap(Map<dynamic, dynamic> map) => EncryptedEvent(
-        pubkey: map['pubkey'] as String,
-        createdAt: map['created_at'] as int,
-        epoch: map['epoch'] as int,
-        msgSeq: map['msg_seq'] as int,
-        nonce: _toUint8List(map['nonce']),
-        payload: _toUint8List(map['payload']),
-      );
+    pubkey: map['pubkey'] as String,
+    createdAt: map['created_at'] as int,
+    epoch: map['epoch'] as int,
+    msgSeq: map['msg_seq'] as int,
+    nonce: _toUint8List(map['nonce']),
+    payload: _toUint8List(map['payload']),
+  );
 
   static EncryptedEvent fromBytes(Uint8List bytes) =>
       fromMap(cbor.decode(bytes) as Map<dynamic, dynamic>);

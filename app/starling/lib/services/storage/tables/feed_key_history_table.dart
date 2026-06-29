@@ -15,8 +15,7 @@ import 'package:drift/drift.dart';
 class FeedKeyHistoryEntries extends Table {
   IntColumn get id => integer().autoIncrement()();
   BlobColumn get feedKey => blob()();
-  IntColumn get feedKeyEpoch =>
-      integer().withDefault(const Constant(0))();
+  IntColumn get feedKeyEpoch => integer().withDefault(const Constant(0))();
   IntColumn get validFrom => integer()();
   IntColumn get validUntil => integer()();
 }

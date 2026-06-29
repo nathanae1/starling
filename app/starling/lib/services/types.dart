@@ -20,11 +20,7 @@ class TorStatus {
 }
 
 class LanPeer {
-  const LanPeer({
-    required this.pubkey,
-    required this.host,
-    required this.port,
-  });
+  const LanPeer({required this.pubkey, required this.host, required this.port});
   final String pubkey;
   final String host;
   final int port;
@@ -135,16 +131,15 @@ class Identity {
     int? feedKeyEpoch,
     int? feedKeyValidFrom,
     int? msgSeqCounter,
-  }) =>
-      Identity(
-        pubkey: pubkey,
-        feedKey: feedKey ?? this.feedKey,
-        feedKeyEpoch: feedKeyEpoch ?? this.feedKeyEpoch,
-        feedKeyValidFrom: feedKeyValidFrom ?? this.feedKeyValidFrom,
-        msgSeqCounter: msgSeqCounter ?? this.msgSeqCounter,
-        recoveryPhrase: recoveryPhrase,
-        createdAt: createdAt,
-      );
+  }) => Identity(
+    pubkey: pubkey,
+    feedKey: feedKey ?? this.feedKey,
+    feedKeyEpoch: feedKeyEpoch ?? this.feedKeyEpoch,
+    feedKeyValidFrom: feedKeyValidFrom ?? this.feedKeyValidFrom,
+    msgSeqCounter: msgSeqCounter ?? this.msgSeqCounter,
+    recoveryPhrase: recoveryPhrase,
+    createdAt: createdAt,
+  );
 }
 
 /// A retired feed key (Plan 13). `feedKey` was the current key during the
@@ -230,6 +225,11 @@ class Follow {
     this.status = 'active',
   });
   final String pubkey;
+  // Vestigial: never populated. A friend's live name + avatar come from their
+  // latest kind=2 profile event, resolved via `followProfileProvider` — the
+  // `follows` row carries no name/avatar. `ingestFollowAccept` builds a Follow
+  // without these and `copyWith` can't set them, so both are always null. Kept
+  // only to avoid a schema migration; do not read them in UI.
   final String? displayName;
   final String? avatarHash;
   final String connectionCard; // serialized JSON
@@ -267,24 +267,23 @@ class Follow {
     int? lastDecryptFailureAt,
     bool clearLastDecryptFailureAt = false,
     String? status,
-  }) =>
-      Follow(
-        pubkey: pubkey,
-        displayName: displayName,
-        avatarHash: avatarHash,
-        connectionCard: connectionCard ?? this.connectionCard,
-        feedKey: feedKey ?? this.feedKey,
-        feedKeyEpoch: feedKeyEpoch ?? this.feedKeyEpoch,
-        lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
-        lastFullSyncAt: lastFullSyncAt ?? this.lastFullSyncAt,
-        lastReceivedRotationAt:
-            lastReceivedRotationAt ?? this.lastReceivedRotationAt,
-        lastReceivedCardAt: lastReceivedCardAt ?? this.lastReceivedCardAt,
-        lastDecryptFailureAt: clearLastDecryptFailureAt
-            ? null
-            : (lastDecryptFailureAt ?? this.lastDecryptFailureAt),
-        status: status ?? this.status,
-      );
+  }) => Follow(
+    pubkey: pubkey,
+    displayName: displayName,
+    avatarHash: avatarHash,
+    connectionCard: connectionCard ?? this.connectionCard,
+    feedKey: feedKey ?? this.feedKey,
+    feedKeyEpoch: feedKeyEpoch ?? this.feedKeyEpoch,
+    lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
+    lastFullSyncAt: lastFullSyncAt ?? this.lastFullSyncAt,
+    lastReceivedRotationAt:
+        lastReceivedRotationAt ?? this.lastReceivedRotationAt,
+    lastReceivedCardAt: lastReceivedCardAt ?? this.lastReceivedCardAt,
+    lastDecryptFailureAt: clearLastDecryptFailureAt
+        ? null
+        : (lastDecryptFailureAt ?? this.lastDecryptFailureAt),
+    status: status ?? this.status,
+  );
 }
 
 class FollowRequest {

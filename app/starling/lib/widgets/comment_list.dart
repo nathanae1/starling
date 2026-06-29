@@ -32,9 +32,12 @@ class CommentList extends ConsumerWidget {
       ),
       error: (e, _) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        child: Text('$e',
-            style:
-                starling.typography.small.copyWith(color: starling.colors.danger)),
+        child: Text(
+          '$e',
+          style: starling.typography.small.copyWith(
+            color: starling.colors.danger,
+          ),
+        ),
       ),
       data: (comments) {
         if (comments.isEmpty) {
@@ -43,8 +46,9 @@ class CommentList extends ConsumerWidget {
             child: Center(
               child: Text(
                 'No comments yet.',
-                style: starling.typography.small
-                    .copyWith(color: starling.colors.stone),
+                style: starling.typography.small.copyWith(
+                  color: starling.colors.stone,
+                ),
               ),
             ),
           );
@@ -52,8 +56,7 @@ class CommentList extends ConsumerWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final comment in comments)
-              _CommentRow(comment: comment),
+            for (final comment in comments) _CommentRow(comment: comment),
           ],
         );
       },
@@ -100,8 +103,10 @@ class _CommentRow extends ConsumerWidget {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      timeAgo(comment.createdAt,
-                          nowUnixSeconds: clock.nowUnixSeconds()),
+                      timeAgo(
+                        comment.createdAt,
+                        nowUnixSeconds: clock.nowUnixSeconds(),
+                      ),
                       style: starling.typography.micro,
                     ),
                   ],

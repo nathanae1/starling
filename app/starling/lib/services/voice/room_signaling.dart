@@ -45,12 +45,12 @@ class RoomSignaling {
     required Clock clock,
     required Future<String?> Function() localPubkeyLookup,
     required Future<Uint8List?> Function() localSecretKeyLookup,
-  })  : _signaling = signaling,
-        _dispatcher = dispatcher,
-        _crypto = crypto,
-        _clock = clock,
-        _localPubkeyLookup = localPubkeyLookup,
-        _localSecretKeyLookup = localSecretKeyLookup;
+  }) : _signaling = signaling,
+       _dispatcher = dispatcher,
+       _crypto = crypto,
+       _clock = clock,
+       _localPubkeyLookup = localPubkeyLookup,
+       _localSecretKeyLookup = localSecretKeyLookup;
 
   final SignalingService _signaling;
   final SignalingDispatcher _dispatcher;
@@ -110,21 +110,25 @@ class RoomSignaling {
     Map<String, dynamic>? payload,
     Map<String, dynamic> Function(String pubkey)? payloadFor,
   }) async {
-    assert(payload != null || payloadFor != null,
-        'fanOut needs either payload or payloadFor');
+    assert(
+      payload != null || payloadFor != null,
+      'fanOut needs either payload or payloadFor',
+    );
     final failures = <String, Object>{};
-    await Future.wait(recipientPubkeys.map((pubkey) async {
-      try {
-        await sendTo(
-          pubkey,
-          type: type,
-          roomId: roomId,
-          payload: payloadFor?.call(pubkey) ?? payload!,
-        );
-      } catch (e) {
-        failures[pubkey] = e;
-      }
-    }));
+    await Future.wait(
+      recipientPubkeys.map((pubkey) async {
+        try {
+          await sendTo(
+            pubkey,
+            type: type,
+            roomId: roomId,
+            payload: payloadFor?.call(pubkey) ?? payload!,
+          );
+        } catch (e) {
+          failures[pubkey] = e;
+        }
+      }),
+    );
     if (failures.isNotEmpty) {
       throw FanOutException(failures);
     }
@@ -143,13 +147,13 @@ class RoomSignaling {
   // --- internals ---
 
   ConnectionCard _cardFor(String pubkey) => ConnectionCard.fromMap({
-        // `connect` only needs the pubkey: a pooled open channel short-circuits
-        // before endpoint resolution, and otherwise the reachability monitor
-        // (not these endpoints) resolves a transport. Mirrors Libp2pUpgrader.
-        'pubkey': pubkey,
-        'endpoints': const [],
-        'capabilities': const [],
-      });
+    // `connect` only needs the pubkey: a pooled open channel short-circuits
+    // before endpoint resolution, and otherwise the reachability monitor
+    // (not these endpoints) resolves a transport. Mirrors Libp2pUpgrader.
+    'pubkey': pubkey,
+    'endpoints': const [],
+    'capabilities': const [],
+  });
 
   Future<void> _sealAndSend(
     SignalingChannel channel,
@@ -221,7 +225,8 @@ class RoomSignaling {
 
   void _emit(SignalingChannel channel, SignalingMessage msg) {
     if (msg.type == SignalingMessageType.libp2pConnect) return;
-    final key = '${msg.type.value}|${msg.roomId}|${msg.senderPubkey}'
+    final key =
+        '${msg.type.value}|${msg.roomId}|${msg.senderPubkey}'
         '|${msg.timestamp}';
     if (!_markSeen(key)) return;
     if (_controller.isClosed) return;

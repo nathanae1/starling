@@ -19,8 +19,7 @@ class PendingCardDistributionEntries extends Table {
   BlobColumn get encryptedCard => blob()();
   BlobColumn get nonce => blob()();
   IntColumn get createdAt => integer()();
-  IntColumn get distributed =>
-      integer().withDefault(const Constant(0))();
+  IntColumn get distributed => integer().withDefault(const Constant(0))();
 
   @override
   Set<Column> get primaryKey => {targetPubkey, createdAt};

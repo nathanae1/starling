@@ -100,6 +100,12 @@ class DriftStorageService implements StorageService {
   }
 
   @override
+  Future<Event?> getLatestProfile(String pubkey) async {
+    final row = await _db.eventsDao.getLatestProfile(pubkey);
+    return row == null ? null : eventFromRow(row);
+  }
+
+  @override
   Future<void> saveEvent(Event event) async {
     final identity = await _db.identityDao.getIdentity();
     final isOwn = identity != null && identity.pubkey == event.pubkey;
@@ -132,8 +138,7 @@ class DriftStorageService implements StorageService {
 
   @override
   Future<List<Event>> getFeedEvents({int? since, int? limit}) async {
-    final rows =
-        await _db.eventsDao.getFeedEvents(since: since, limit: limit);
+    final rows = await _db.eventsDao.getFeedEvents(since: since, limit: limit);
     return rows.map(eventFromRow).toList();
   }
 
@@ -145,8 +150,7 @@ class DriftStorageService implements StorageService {
 
   @override
   Future<List<Event>> getEventsByRef(String refId, {EventKind? kind}) async {
-    final rows =
-        await _db.eventsDao.getEventsByRef(refId, kind: kind?.value);
+    final rows = await _db.eventsDao.getEventsByRef(refId, kind: kind?.value);
     return rows.map(eventFromRow).toList();
   }
 
@@ -165,8 +169,7 @@ class DriftStorageService implements StorageService {
   }
 
   @override
-  Future<bool> isEventSaved(String id) =>
-      _db.eventsDao.isEventSaved(id);
+  Future<bool> isEventSaved(String id) => _db.eventsDao.isEventSaved(id);
 
   @override
   Future<void> setEventSaved(String id, bool saved) =>
@@ -189,8 +192,7 @@ class DriftStorageService implements StorageService {
       _db.mediaCacheDao.upsertMedia(cachedMediaToCompanion(media));
 
   @override
-  Future<void> deleteMedia(String hash) =>
-      _db.mediaCacheDao.deleteMedia(hash);
+  Future<void> deleteMedia(String hash) => _db.mediaCacheDao.deleteMedia(hash);
 
   @override
   Future<int> getMediaCacheSize() => _db.mediaCacheDao.getTotalSize();
@@ -203,8 +205,7 @@ class DriftStorageService implements StorageService {
 
   @override
   Future<List<String>> getAcceptedFollowerPubkeys() async {
-    final rows =
-        await _db.followRequestsDao.getInboundByStatus('accepted');
+    final rows = await _db.followRequestsDao.getInboundByStatus('accepted');
     return rows.map((r) => r.pubkey).toList();
   }
 
@@ -226,15 +227,14 @@ class DriftStorageService implements StorageService {
     required int feedKeyEpoch,
     required int validFrom,
     required int validUntil,
-  }) =>
-      _db.keyRotationDao.appendFeedKeyHistory(
-        FeedKeyHistoryEntriesCompanion.insert(
-          feedKey: feedKey,
-          feedKeyEpoch: Value(feedKeyEpoch),
-          validFrom: validFrom,
-          validUntil: validUntil,
-        ),
-      );
+  }) => _db.keyRotationDao.appendFeedKeyHistory(
+    FeedKeyHistoryEntriesCompanion.insert(
+      feedKey: feedKey,
+      feedKeyEpoch: Value(feedKeyEpoch),
+      validFrom: validFrom,
+      validUntil: validUntil,
+    ),
+  );
 
   @override
   Future<RetiredFeedKey?> retiredFeedKeyAt(int timestamp) async {
@@ -257,23 +257,21 @@ class DriftStorageService implements StorageService {
     required int feedKeyEpoch,
     required int validFrom,
     required int validUntil,
-  }) =>
-      _db.keyRotationDao.appendFollowFeedKeyHistory(
-        FollowFeedKeyHistoryEntriesCompanion.insert(
-          followPubkey: followPubkey,
-          feedKey: feedKey,
-          feedKeyEpoch: Value(feedKeyEpoch),
-          validFrom: validFrom,
-          validUntil: validUntil,
-        ),
-      );
+  }) => _db.keyRotationDao.appendFollowFeedKeyHistory(
+    FollowFeedKeyHistoryEntriesCompanion.insert(
+      followPubkey: followPubkey,
+      feedKey: feedKey,
+      feedKeyEpoch: Value(feedKeyEpoch),
+      validFrom: validFrom,
+      validUntil: validUntil,
+    ),
+  );
 
   @override
   Future<List<RetiredFeedKey>> getFollowFeedKeyHistory(
     String followPubkey,
   ) async {
-    final rows =
-        await _db.keyRotationDao.getFollowFeedKeyHistory(followPubkey);
+    final rows = await _db.keyRotationDao.getFollowFeedKeyHistory(followPubkey);
     return rows.map(retiredFeedKeyFromFollowRow).toList();
   }
 
@@ -285,15 +283,14 @@ class DriftStorageService implements StorageService {
     required Uint8List encryptedFeedKey,
     required Uint8List nonce,
     required int createdAt,
-  }) =>
-      _db.keyRotationDao.addPendingDistribution(
-        PendingKeyDistributionEntriesCompanion.insert(
-          targetPubkey: targetPubkey,
-          encryptedFeedKey: encryptedFeedKey,
-          nonce: nonce,
-          createdAt: createdAt,
-        ),
-      );
+  }) => _db.keyRotationDao.addPendingDistribution(
+    PendingKeyDistributionEntriesCompanion.insert(
+      targetPubkey: targetPubkey,
+      encryptedFeedKey: encryptedFeedKey,
+      nonce: nonce,
+      createdAt: createdAt,
+    ),
+  );
 
   @override
   Future<PendingKeyDistribution?> latestPendingDistributionFor(
@@ -304,10 +301,7 @@ class DriftStorageService implements StorageService {
   }
 
   @override
-  Future<void> markDistributionsDelivered(
-    String targetPubkey,
-    int upTo,
-  ) =>
+  Future<void> markDistributionsDelivered(String targetPubkey, int upTo) =>
       _db.keyRotationDao.markDistributionsDelivered(targetPubkey, upTo);
 
   @override
@@ -327,12 +321,11 @@ class DriftStorageService implements StorageService {
     required String relayId,
     required String relayOnion,
     required int pairedAt,
-  }) =>
-      _db.pairedRelayDao.setPairedRelay(
-        relayId: relayId,
-        relayOnion: relayOnion,
-        pairedAt: pairedAt,
-      );
+  }) => _db.pairedRelayDao.setPairedRelay(
+    relayId: relayId,
+    relayOnion: relayOnion,
+    pairedAt: pairedAt,
+  );
 
   @override
   Future<void> markRelayBackfillComplete(String relayId) =>
@@ -347,15 +340,14 @@ class DriftStorageService implements StorageService {
     required Uint8List encryptedCard,
     required Uint8List nonce,
     required int createdAt,
-  }) =>
-      _db.pairedRelayDao.queueCardDistribution(
-        PendingCardDistributionEntriesCompanion.insert(
-          targetPubkey: targetPubkey,
-          encryptedCard: encryptedCard,
-          nonce: nonce,
-          createdAt: createdAt,
-        ),
-      );
+  }) => _db.pairedRelayDao.queueCardDistribution(
+    PendingCardDistributionEntriesCompanion.insert(
+      targetPubkey: targetPubkey,
+      encryptedCard: encryptedCard,
+      nonce: nonce,
+      createdAt: createdAt,
+    ),
+  );
 
   @override
   Future<PendingCardDistribution?> latestPendingCardFor(
@@ -366,10 +358,7 @@ class DriftStorageService implements StorageService {
   }
 
   @override
-  Future<void> markCardDistributionsDelivered(
-    String targetPubkey,
-    int upTo,
-  ) =>
+  Future<void> markCardDistributionsDelivered(String targetPubkey, int upTo) =>
       _db.pairedRelayDao.markCardDistributionsDelivered(targetPubkey, upTo);
 
   @override
@@ -379,19 +368,18 @@ class DriftStorageService implements StorageService {
   // --- Voice rooms (Plan 16) ---
 
   @override
-  Future<void> saveVoiceRoom(VoiceRoom room) =>
-      _db.voiceRoomsDao.upsertRoom(
-        VoiceRoomEntriesCompanion.insert(
-          id: room.id,
-          name: room.name,
-          creatorPubkey: room.creatorPubkey,
-          createdAt: room.createdAt,
-          endedAt: Value(room.endedAt),
-          participantCount: Value(
-            room.participants.isEmpty ? 1 : room.participants.length,
-          ),
-        ),
-      );
+  Future<void> saveVoiceRoom(VoiceRoom room) => _db.voiceRoomsDao.upsertRoom(
+    VoiceRoomEntriesCompanion.insert(
+      id: room.id,
+      name: room.name,
+      creatorPubkey: room.creatorPubkey,
+      createdAt: room.createdAt,
+      endedAt: Value(room.endedAt),
+      participantCount: Value(
+        room.participants.isEmpty ? 1 : room.participants.length,
+      ),
+    ),
+  );
 
   @override
   Future<void> updateVoiceRoomEnded(String roomId, int endedAt) =>
@@ -403,15 +391,14 @@ class DriftStorageService implements StorageService {
     String pubkey, {
     String? displayName,
     required int joinedAt,
-  }) =>
-      _db.voiceRoomsDao.upsertParticipant(
-        VoiceRoomParticipantEntriesCompanion.insert(
-          roomId: roomId,
-          pubkey: pubkey,
-          joinedAt: joinedAt,
-          displayName: Value(displayName),
-        ),
-      );
+  }) => _db.voiceRoomsDao.upsertParticipant(
+    VoiceRoomParticipantEntriesCompanion.insert(
+      roomId: roomId,
+      pubkey: pubkey,
+      joinedAt: joinedAt,
+      displayName: Value(displayName),
+    ),
+  );
 
   @override
   Future<List<VoiceRoom>> getRecentVoiceRooms({int limit = 10}) async {
@@ -427,11 +414,13 @@ class DriftStorageService implements StorageService {
           createdAt: r.createdAt,
           endedAt: r.endedAt,
           participants: parts
-              .map((p) => VoiceParticipant(
-                    pubkey: p.pubkey,
-                    displayName: p.displayName,
-                    connectionState: ParticipantConnectionState.disconnected,
-                  ))
+              .map(
+                (p) => VoiceParticipant(
+                  pubkey: p.pubkey,
+                  displayName: p.displayName,
+                  connectionState: ParticipantConnectionState.disconnected,
+                ),
+              )
               .toList(),
         ),
       );
@@ -455,14 +444,12 @@ class DriftStorageService implements StorageService {
   }
 
   @override
-  Stream<List<FollowRequest>> watchInboundRequests() => _db
-      .followRequestsDao
+  Stream<List<FollowRequest>> watchInboundRequests() => _db.followRequestsDao
       .watchInboundPending()
       .map((rows) => rows.map(inboundRequestFromRow).toList());
 
   @override
-  Stream<List<FollowRequest>> watchInboundFollowers() => _db
-      .followRequestsDao
+  Stream<List<FollowRequest>> watchInboundFollowers() => _db.followRequestsDao
       .watchInboundActioned()
       .map((rows) => rows.map(inboundRequestFromRow).toList());
 
@@ -505,8 +492,7 @@ class DriftStorageService implements StorageService {
   }
 
   @override
-  Stream<List<FollowRequest>> watchOutboundRequests() => _db
-      .followRequestsDao
+  Stream<List<FollowRequest>> watchOutboundRequests() => _db.followRequestsDao
       .watchOutbound()
       .map((rows) => rows.map(outboundRequestFromRow).toList());
 
@@ -559,14 +545,16 @@ class DriftStorageService implements StorageService {
   ) async {
     final rows = await _db.unknownItemsDao.getByType(type);
     return rows
-        .map((r) => UnknownEnvelopeItem(
-              sourcePubkey: r.sourcePubkey,
-              envelopeVersion: r.envelopeVersion,
-              type: r.type,
-              payload: r.payload,
-              extensions: r.extensions,
-              receivedAt: r.receivedAt,
-            ))
+        .map(
+          (r) => UnknownEnvelopeItem(
+            sourcePubkey: r.sourcePubkey,
+            envelopeVersion: r.envelopeVersion,
+            type: r.type,
+            payload: r.payload,
+            extensions: r.extensions,
+            receivedAt: r.receivedAt,
+          ),
+        )
         .toList();
   }
 
@@ -599,10 +587,7 @@ class DriftStorageService implements StorageService {
   // --- Retention ---
 
   @override
-  Future<int> evictOldEvents(
-    int maxAgeSeconds,
-    int graceLastViewedSeconds,
-  ) =>
+  Future<int> evictOldEvents(int maxAgeSeconds, int graceLastViewedSeconds) =>
       _db.eventsDao.evictOldEvents(
         maxAgeSeconds,
         graceLastViewedSeconds,
@@ -651,8 +636,10 @@ class DriftStorageService implements StorageService {
     int maxBytes,
     Set<String> pinned,
   ) async {
-    final removed =
-        await _db.mediaCacheDao.evictOverLimitExcluding(maxBytes, pinned);
+    final removed = await _db.mediaCacheDao.evictOverLimitExcluding(
+      maxBytes,
+      pinned,
+    );
     return removed.map(cachedMediaFromRow).toList();
   }
 

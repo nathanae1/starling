@@ -7,9 +7,7 @@ part 'follow_requests_provider.g.dart';
 
 /// Live pending inbound follow requests for the Friends tab banner.
 @riverpod
-Stream<List<FollowRequest>> inboundRequestsStream(
-  Ref ref,
-) {
+Stream<List<FollowRequest>> inboundRequestsStream(Ref ref) {
   final storage = ref.watch(storageServiceProvider);
   return storage.watchInboundRequests();
 }
@@ -19,9 +17,7 @@ Stream<List<FollowRequest>> inboundRequestsStream(
 /// the accept to). The friends list shows these as "Follows you" rows
 /// when we don't follow them back yet.
 @riverpod
-Stream<List<FollowRequest>> inboundFollowersStream(
-  Ref ref,
-) {
+Stream<List<FollowRequest>> inboundFollowersStream(Ref ref) {
   final storage = ref.watch(storageServiceProvider);
   return storage.watchInboundFollowers();
 }
@@ -29,9 +25,7 @@ Stream<List<FollowRequest>> inboundFollowersStream(
 /// Live outbound follow requests (any status) for the Friends tab "Pending"
 /// rows.
 @riverpod
-Stream<List<FollowRequest>> outboundRequestsStream(
-  Ref ref,
-) {
+Stream<List<FollowRequest>> outboundRequestsStream(Ref ref) {
   final storage = ref.watch(storageServiceProvider);
   return storage.watchOutboundRequests();
 }

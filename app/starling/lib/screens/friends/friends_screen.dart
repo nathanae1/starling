@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../providers/follow_profile_provider.dart';
 import '../../providers/follow_provider.dart';
 import '../../providers/follow_requests_provider.dart';
 import '../../providers/follows_provider.dart';
@@ -10,10 +10,11 @@ import '../../providers/service_providers.dart';
 import '../../services/follow_service.dart';
 import '../../services/types.dart';
 import '../../theme/starling_theme.dart';
-import '../../utils/feature_flags.dart';
+import '../../utils/pubkey_format.dart';
 import '../../utils/time_ago.dart';
 import '../../widgets/avatar.dart';
 import '../../widgets/buttons.dart';
+import '../../widgets/encrypted_avatar.dart';
 import '../../widgets/qr_invite_sheet.dart';
 import '../../widgets/sheet.dart';
 import '../../widgets/top_bar.dart';
@@ -41,6 +42,12 @@ class FriendsScreen extends ConsumerWidget {
     final followersOnly = inboundFollowers
         .where((r) => !mutualPubkeys.contains(r.pubkey))
         .toList();
+    // Inbound follower status keyed by pubkey, so a friend row can surface
+    // when our follow-back accept to them is still in flight (otherwise the
+    // dedup above hides the half-finished connection entirely).
+    final inboundByPubkey = <String, FollowRequest>{
+      for (final r in inboundFollowers) r.pubkey: r,
+    };
 
     return Scaffold(
       backgroundColor: starling.colors.paper,
@@ -50,19 +57,10 @@ class FriendsScreen extends ConsumerWidget {
           children: [
             StarlingTopBar(
               title: 'Friends',
-              right: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (kVoiceEnabled)
-                    StarlingIconButton(
-                      onPressed: () => context.push('/voice'),
-                      child: const Icon(LucideIcons.phone, size: 20),
-                    ),
-                  StarlingIconButton(
-                    onPressed: () => _showInvite(context),
-                    child: const Icon(LucideIcons.plus, size: 20),
-                  ),
-                ],
+              right: StarlingIconButton(
+                onPressed: () => _showInvite(context),
+                semanticLabel: 'Add a friend',
+                child: const Icon(LucideIcons.plus, size: 20),
               ),
             ),
             Expanded(
@@ -85,7 +83,13 @@ class FriendsScreen extends ConsumerWidget {
                       followersOnly.isEmpty)
                     _EmptyHint()
                   else ...[
-                    for (final follow in follows) _FriendRow(follow: follow),
+                    for (final follow in follows)
+                      _FriendRow(
+                        follow: follow,
+                        acceptPending: _acceptPending(
+                          inboundByPubkey[follow.pubkey]?.status,
+                        ),
+                      ),
                     for (final pending in outbound)
                       _OutboundPendingRow(request: pending),
                     if (followersOnly.isNotEmpty) ...[
@@ -111,10 +115,7 @@ class FriendsScreen extends ConsumerWidget {
   }
 
   void _showInvite(BuildContext context) {
-    showStarlingSheet(
-      context: context,
-      builder: (_) => const QrInviteSheet(),
-    );
+    showStarlingSheet(context: context, builder: (_) => const QrInviteSheet());
   }
 }
 
@@ -125,9 +126,7 @@ class _InboundBanner extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final starling = StarlingTheme.of(context);
-    final shortPubkey = request.pubkey.length > 8
-        ? request.pubkey.substring(0, 8)
-        : request.pubkey;
+    final shortKey = shortPubkey(request.pubkey);
     return Container(
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -141,15 +140,17 @@ class _InboundBanner extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Avatar(name: shortPubkey, color: starling.colors.sage),
+              Avatar(name: shortKey, color: starling.colors.sage),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(shortPubkey, style: starling.typography.body),
-                    Text('wants to follow you',
-                        style: starling.typography.micro),
+                    Text(shortKey, style: starling.typography.body),
+                    Text(
+                      'wants to follow you',
+                      style: starling.typography.micro,
+                    ),
                   ],
                 ),
               ),
@@ -187,18 +188,21 @@ class _InboundBanner extends ConsumerWidget {
           .acceptFollowRequest(request.pubkey);
       if (!context.mounted) return;
       final messenger = ScaffoldMessenger.of(context);
-      messenger.showSnackBar(SnackBar(
-        content: Text(switch (delivery) {
-          AcceptDelivery.delivered => 'Accepted',
-          AcceptDelivery.queued => 'Accepted — queued for retry',
-          AcceptDelivery.failed => 'Accept failed',
-        }),
-        duration: const Duration(seconds: 2),
-      ));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(switch (delivery) {
+            AcceptDelivery.delivered => 'Accepted',
+            AcceptDelivery.queued => 'Accepted — queued for retry',
+            AcceptDelivery.failed => 'Accept failed',
+          }),
+          duration: const Duration(seconds: 2),
+        ),
+      );
     } on FollowFailure catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Accept failed: ${e.message}')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Accept failed: ${e.message}')));
     }
   }
 
@@ -266,35 +270,106 @@ class _AddFriendCard extends StatelessWidget {
   }
 }
 
-class _FriendRow extends ConsumerWidget {
-  const _FriendRow({required this.follow});
+/// True when our follow-back accept to this peer is queued but undelivered —
+/// i.e. we follow them and they follow us, but our `/follow-accept` hasn't
+/// landed yet, so the mutual (and voice) isn't finalized. Driven off the
+/// inbound-follower row status.
+bool _acceptPending(String? status) =>
+    status == 'pending-send' || status == 'send-failed';
+
+class _FriendRow extends ConsumerStatefulWidget {
+  const _FriendRow({required this.follow, this.acceptPending = false});
   final Follow follow;
 
+  /// When true, our accept to this friend is still in flight — show a
+  /// "Finishing connection…" sub-status + a manual Retry so a stalled
+  /// handshake is never silently stuck behind the dedup.
+  final bool acceptPending;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_FriendRow> createState() => _FriendRowState();
+}
+
+class _FriendRowState extends ConsumerState<_FriendRow> {
+  bool _retrying = false;
+
+  Future<void> _retry() async {
+    setState(() => _retrying = true);
+    try {
+      await ref
+          .read(followServiceProvider)
+          .retryQueuedAccepts(
+            onlyPubkey: widget.follow.pubkey,
+            ignoreBackoff: true,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Retrying connection…'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } catch (_) {
+      // Best-effort — the inbound-follower stream reflects the real outcome.
+    } finally {
+      if (mounted) setState(() => _retrying = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final follow = widget.follow;
     final starling = StarlingTheme.of(context);
     final clock = ref.watch(clockProvider);
     final now = clock.nowUnixSeconds();
-    final reachable = follow.lastSyncedAt > 0 &&
-        now - follow.lastSyncedAt < 60;
-    final statusText = reachable
-        ? '● Reachable'
-        : follow.lastSyncedAt > 0
-            ? 'Last seen ${timeAgo(follow.lastSyncedAt, nowUnixSeconds: now)}'
-            : 'Not yet synced';
-    final statusColor =
-        reachable ? starling.colors.success : starling.colors.stone;
+    final reachable = follow.lastSyncedAt > 0 && now - follow.lastSyncedAt < 60;
+    // A friend's name + avatar live in their latest kind=2 profile event, not
+    // the `follows` row — resolve them the same way the feed and profile
+    // screens do. Fall back to a short pubkey while the profile is loading.
+    final profile = ref.watch(followProfileProvider(follow.pubkey));
+    final displayName = profile.maybeWhen(
+      data: (p) => p.displayName,
+      orElse: () => shortPubkey(follow.pubkey),
+    );
+    final avatarHash = profile.maybeWhen(
+      data: (p) => p.avatarHash,
+      orElse: () => null,
+    );
+    final avatarMsgSeq = profile.maybeWhen(
+      data: (p) => p.avatarMsgSeq,
+      orElse: () => null,
+    );
+
+    final String statusText;
+    final Color statusColor;
+    if (widget.acceptPending) {
+      statusText = 'Finishing connection…';
+      statusColor = starling.colors.clay;
+    } else if (reachable) {
+      statusText = '● Reachable';
+      statusColor = starling.colors.success;
+    } else if (follow.lastSyncedAt > 0) {
+      statusText =
+          'Last seen ${timeAgo(follow.lastSyncedAt, nowUnixSeconds: now)}';
+      statusColor = starling.colors.stone;
+    } else {
+      statusText = 'Not yet synced';
+      statusColor = starling.colors.stone;
+    }
+
     return Container(
       decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: starling.colors.hairline),
-        ),
+        border: Border(top: BorderSide(color: starling.colors.hairline)),
       ),
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
         children: [
-          Avatar(
-            name: follow.displayName ?? follow.pubkey,
+          EncryptedAvatar(
+            name: displayName,
+            pubkey: follow.pubkey,
+            avatarHash: avatarHash,
+            avatarMsgSeq: avatarMsgSeq,
+            color: avatarColorFor(follow.pubkey, starling.colors),
             size: AvatarSize.md,
           ),
           const SizedBox(width: 12),
@@ -302,13 +377,7 @@ class _FriendRow extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  follow.displayName ??
-                      (follow.pubkey.length > 8
-                          ? follow.pubkey.substring(0, 8)
-                          : follow.pubkey),
-                  style: starling.typography.body,
-                ),
+                Text(displayName, style: starling.typography.body),
                 const SizedBox(height: 2),
                 Text(
                   statusText,
@@ -317,11 +386,20 @@ class _FriendRow extends ConsumerWidget {
               ],
             ),
           ),
+          if (widget.acceptPending) ...[
+            SecondaryButton(
+              label: _retrying ? 'Retrying…' : 'Retry',
+              onPressed: _retrying ? null : _retry,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            const SizedBox(width: 4),
+          ],
           StarlingIconButton(
             onPressed: () => showStarlingSheet(
               context: context,
               builder: (_) => FriendActionsSheet(follow: follow),
             ),
+            semanticLabel: 'Friend options',
             child: const Icon(LucideIcons.ellipsis, size: 20),
           ),
         ],
@@ -347,47 +425,44 @@ class _FollowerOnlyRowState extends ConsumerState<_FollowerOnlyRow> {
   @override
   Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
-    final shortPubkey = widget.request.pubkey.length > 8
-        ? widget.request.pubkey.substring(0, 8)
-        : widget.request.pubkey;
+    final shortKey = shortPubkey(widget.request.pubkey);
     final ourOnionReady = ref
         .watch(ownEndpointsProvider)
         .any((e) => e.type == 'onion');
     final statusText = switch (widget.request.status) {
-      'accepted' => ourOnionReady ? 'Follows you' : 'Follows you — Tor starting…',
+      'accepted' =>
+        ourOnionReady ? 'Follows you' : 'Follows you — Tor starting…',
       'pending-send' => 'Follows you — accept queued',
       'send-failed' => 'Follows you — accept undelivered, still retrying',
       _ => 'Follows you',
     };
     return Container(
       decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: starling.colors.hairline),
-        ),
+        border: Border(top: BorderSide(color: starling.colors.hairline)),
       ),
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
         children: [
-          Avatar(name: shortPubkey, size: AvatarSize.md),
+          Avatar(name: shortKey, size: AvatarSize.md),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(shortPubkey, style: starling.typography.body),
+                Text(shortKey, style: starling.typography.body),
                 const SizedBox(height: 2),
                 Text(
                   statusText,
-                  style: starling.typography.micro
-                      .copyWith(color: starling.colors.stone),
+                  style: starling.typography.micro.copyWith(
+                    color: starling.colors.stone,
+                  ),
                 ),
               ],
             ),
           ),
           PrimaryButton(
             label: _sending ? 'Sending…' : 'Follow back',
-            onPressed:
-                (_sending || !ourOnionReady) ? null : _followBack,
+            onPressed: (_sending || !ourOnionReady) ? null : _followBack,
           ),
         ],
       ),
@@ -401,20 +476,22 @@ class _FollowerOnlyRowState extends ConsumerState<_FollowerOnlyRow> {
       // inside FollowService now — no caller-side endpoint juggling.
       await ref.read(followServiceProvider).followBack(widget.request.pubkey);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Follow request sent'),
-        duration: Duration(seconds: 2),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Follow request sent'),
+          duration: Duration(seconds: 2),
+        ),
+      );
     } on FollowFailure catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Follow back failed: ${e.message}'),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Follow back failed: ${e.message}')),
+      );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Follow back failed: $e'),
-      ));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Follow back failed: $e')));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -428,9 +505,7 @@ class _OutboundPendingRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
-    final shortPubkey = request.pubkey.length > 8
-        ? request.pubkey.substring(0, 8)
-        : request.pubkey;
+    final shortKey = shortPubkey(request.pubkey);
     final statusLabel = switch (request.status) {
       'pending' => 'Pending',
       'pending-send' => 'Pending — retrying',
@@ -442,25 +517,24 @@ class _OutboundPendingRow extends StatelessWidget {
       opacity: 0.65,
       child: Container(
         decoration: BoxDecoration(
-          border: Border(
-            top: BorderSide(color: starling.colors.hairline),
-          ),
+          border: Border(top: BorderSide(color: starling.colors.hairline)),
         ),
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: Row(
           children: [
-            Avatar(name: shortPubkey, size: AvatarSize.md),
+            Avatar(name: shortKey, size: AvatarSize.md),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(shortPubkey, style: starling.typography.body),
+                  Text(shortKey, style: starling.typography.body),
                   const SizedBox(height: 2),
                   Text(
                     statusLabel,
-                    style: starling.typography.micro
-                        .copyWith(color: starling.colors.stone),
+                    style: starling.typography.micro.copyWith(
+                      color: starling.colors.stone,
+                    ),
                   ),
                 ],
               ),
@@ -480,11 +554,7 @@ class _EmptyHint extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 32),
       child: Column(
         children: [
-          Icon(
-            LucideIcons.users,
-            size: 32,
-            color: starling.colors.stone,
-          ),
+          Icon(LucideIcons.users, size: 32, color: starling.colors.stone),
           const SizedBox(height: 8),
           Text(
             'No friends yet',

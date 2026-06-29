@@ -13,6 +13,8 @@ import '../../providers/sync_provider.dart';
 import '../../providers/sync_status_provider.dart';
 import '../../theme/starling_theme.dart';
 import '../../widgets/buttons.dart';
+import '../../widgets/starling_badge.dart';
+import '../../widgets/starling_card.dart';
 import '../../widgets/sync_dot.dart';
 
 /// Plan 14 Phase E — single screen that aggregates the four moving parts of
@@ -32,6 +34,7 @@ class NetworkSettingsScreen extends ConsumerWidget {
     final syncStatus = ref.watch(syncStatusProvider);
     final engineState = ref.watch(syncControllerProvider);
     final tor = ref.watch(torServiceProvider);
+    final torStatus = tor.getStatus();
     final onion = ref.watch(onionAddressProvider);
     final port = ref.watch(httpServerControllerProvider).value;
 
@@ -47,8 +50,18 @@ class NetworkSettingsScreen extends ConsumerWidget {
             ),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 12,
+                  horizontal: 16,
+                ),
                 children: [
+                  _QuickStatus(
+                    syncState: syncStatus.state,
+                    reachableFriends: syncStatus.reachableFriends,
+                    torBootstrapPercent: torStatus.bootstrapPercent,
+                    torReady: torStatus.isReady,
+                  ),
+                  const SizedBox(height: 12),
                   _SyncCard(
                     state: syncStatus.state,
                     lastSyncedAtSeconds: syncStatus.lastSyncedAtSeconds,
@@ -57,9 +70,9 @@ class NetworkSettingsScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 12),
                   _TorCard(
-                    bootstrapPercent: tor.getStatus().bootstrapPercent,
-                    circuitCount: tor.getStatus().circuitCount,
-                    isReady: tor.getStatus().isReady,
+                    bootstrapPercent: torStatus.bootstrapPercent,
+                    circuitCount: torStatus.circuitCount,
+                    isReady: torStatus.isReady,
                     onionAddress: onion,
                   ),
                   const SizedBox(height: 12),
@@ -103,6 +116,7 @@ class _Header extends StatelessWidget {
         children: [
           StarlingIconButton(
             onPressed: () => context.pop(),
+            semanticLabel: 'Back',
             child: const Icon(LucideIcons.arrowLeft, size: 20),
           ),
           Expanded(
@@ -117,6 +131,8 @@ class _Header extends StatelessWidget {
           ),
           StarlingIconButton(
             onPressed: syncing ? null : onRefresh,
+            semanticLabel: 'Sync now',
+            tooltip: 'Sync now',
             child: Icon(
               LucideIcons.refreshCw,
               size: 20,
@@ -129,43 +145,51 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.title, required this.icon, required this.children});
+/// One-line status summary pinned to the top of the screen: overall sync
+/// state · reachable-friend count · Tor readiness. Lets the user read "how
+/// am I reachable right now" at a glance without scrolling the detail cards.
+/// Uses [StarlingBadge] so the status vocabulary/colors match the per-peer
+/// chips on the Connection screen.
+class _QuickStatus extends StatelessWidget {
+  const _QuickStatus({
+    required this.syncState,
+    required this.reachableFriends,
+    required this.torBootstrapPercent,
+    required this.torReady,
+  });
 
-  final String title;
-  final IconData icon;
-  final List<Widget> children;
+  final SyncState syncState;
+  final int reachableFriends;
+  final int torBootstrapPercent;
+  final bool torReady;
 
   @override
   Widget build(BuildContext context) {
-    final starling = StarlingTheme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: starling.colors.paper,
-        border: Border.all(color: starling.colors.hairline),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 18, color: starling.colors.graphite),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: starling.typography.body.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: starling.colors.ink,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ...children,
-        ],
-      ),
+    final colors = StarlingTheme.of(context).colors;
+    final (syncLabel, syncColor) = switch (syncState) {
+      SyncState.synced => ('Up to date', colors.success),
+      SyncState.syncing => ('Syncing…', colors.warning),
+      SyncState.offline => ('Offline', colors.stone),
+    };
+    final torColor = torReady
+        ? colors.success
+        : (torBootstrapPercent > 0 ? colors.warning : colors.stone);
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        StarlingBadge(label: syncLabel, color: syncColor),
+        StarlingBadge(
+          label: '$reachableFriends reachable',
+          color: reachableFriends > 0 ? colors.success : colors.stone,
+          icon: LucideIcons.users,
+        ),
+        StarlingBadge(
+          label: torReady ? 'Tor 100%' : 'Tor $torBootstrapPercent%',
+          color: torColor,
+          icon: LucideIcons.shield,
+        ),
+      ],
     );
   }
 }
@@ -189,14 +213,19 @@ class _KeyValue extends StatelessWidget {
             width: 96,
             child: Text(
               label,
-              style: starling.typography.small.copyWith(color: starling.colors.graphite),
+              style: starling.typography.small.copyWith(
+                color: starling.colors.graphite,
+              ),
             ),
           ),
           Expanded(
-            child: valueWidget ??
+            child:
+                valueWidget ??
                 Text(
                   value,
-                  style: starling.typography.small.copyWith(color: starling.colors.ink),
+                  style: starling.typography.small.copyWith(
+                    color: starling.colors.ink,
+                  ),
                 ),
           ),
         ],
@@ -221,48 +250,62 @@ class _SyncCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
-    return _SectionCard(
+    return StarlingCard(
       title: 'Sync',
       icon: LucideIcons.refreshCw,
-      children: [
-        _KeyValue(
-          label: 'Status',
-          value: '',
-          valueWidget: Row(
-            children: [
-              SyncDot(state: state),
-              const SizedBox(width: 8),
-              Text(_syncLabel(state), style: starling.typography.small),
-            ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _KeyValue(
+            label: 'Status',
+            value: '',
+            valueWidget: Row(
+              children: [
+                SyncDot(state: state),
+                const SizedBox(width: 8),
+                Text(_syncLabel(state), style: starling.typography.small),
+              ],
+            ),
           ),
-        ),
-        _KeyValue(
-          label: 'Last sync',
-          value: _formatTimestamp(lastSyncedAtSeconds),
-        ),
-        _KeyValue(
-          label: 'Reachable',
-          value: '$reachableFriends friend${reachableFriends == 1 ? '' : 's'}',
-        ),
-        if (lastError != null)
+          _KeyValue(
+            label: 'Last sync',
+            value: _formatTimestamp(lastSyncedAtSeconds),
+          ),
+          _KeyValue(
+            label: 'Reachable',
+            value:
+                '$reachableFriends friend${reachableFriends == 1 ? '' : 's'}',
+          ),
+          // Always rendered — a grayed em-dash stands in for "no error" so
+          // the card height stays stable instead of jumping when an error
+          // appears or clears.
           _KeyValue(
             label: 'Last error',
             value: '',
-            valueWidget: Text(
-              lastError!,
-              style: starling.typography.small.copyWith(color: starling.colors.danger),
-            ),
+            valueWidget: lastError == null
+                ? Text(
+                    '—',
+                    style: starling.typography.small.copyWith(
+                      color: starling.colors.stone,
+                    ),
+                  )
+                : Text(
+                    lastError!,
+                    style: starling.typography.small.copyWith(
+                      color: starling.colors.danger,
+                    ),
+                  ),
           ),
-      ],
+        ],
+      ),
     );
   }
 
   static String _syncLabel(SyncState s) => switch (s) {
-        SyncState.synced => 'Up to date',
-        SyncState.syncing => 'Syncing…',
-        SyncState.waiting => 'Waiting',
-        SyncState.offline => 'Offline',
-      };
+    SyncState.synced => 'Up to date',
+    SyncState.syncing => 'Syncing…',
+    SyncState.offline => 'Offline',
+  };
 }
 
 class _TorCard extends StatelessWidget {
@@ -281,55 +324,64 @@ class _TorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
-    return _SectionCard(
+    return StarlingCard(
       title: 'Tor',
       icon: LucideIcons.shield,
-      children: [
-        _KeyValue(
-          label: 'Bootstrap',
-          value: isReady ? '100% (ready)' : '$bootstrapPercent%',
-        ),
-        _KeyValue(label: 'Circuits', value: '$circuitCount'),
-        _KeyValue(
-          label: 'Onion',
-          value: '',
-          valueWidget: onionAddress == null
-              ? Text(
-                  'Not published yet',
-                  style:
-                      starling.typography.small.copyWith(color: starling.colors.stone),
-                )
-              : InkWell(
-                  onTap: () async {
-                    await Clipboard.setData(ClipboardData(text: onionAddress!));
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Onion address copied'),
-                        duration: Duration(seconds: 1),
-                      ),
-                    );
-                  },
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          onionAddress!,
-                          style: starling.typography.small.copyWith(
-                            fontFamily: 'IBMPlexMono',
-                            color: starling.colors.ink,
-                          ),
-                          overflow: TextOverflow.ellipsis,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _KeyValue(
+            label: 'Bootstrap',
+            value: isReady ? '100% (ready)' : '$bootstrapPercent%',
+          ),
+          _KeyValue(label: 'Circuits', value: '$circuitCount'),
+          _KeyValue(
+            label: 'Onion',
+            value: '',
+            valueWidget: onionAddress == null
+                ? Text(
+                    'Not published yet',
+                    style: starling.typography.small.copyWith(
+                      color: starling.colors.stone,
+                    ),
+                  )
+                : InkWell(
+                    onTap: () async {
+                      await Clipboard.setData(
+                        ClipboardData(text: onionAddress!),
+                      );
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Onion address copied'),
+                          duration: Duration(seconds: 1),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(LucideIcons.copy,
-                          size: 14, color: starling.colors.graphite),
-                    ],
+                      );
+                    },
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            onionAddress!,
+                            style: starling.typography.small.copyWith(
+                              fontFamily: 'IBMPlexMono',
+                              color: starling.colors.ink,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          LucideIcons.copy,
+                          size: 14,
+                          color: starling.colors.graphite,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-        ),
-      ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -341,16 +393,23 @@ class _LanCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _SectionCard(
+    return StarlingCard(
       title: 'Local Wi-Fi',
       icon: LucideIcons.wifi,
-      children: [
-        _KeyValue(
-          label: 'Reachable',
-          value: '$reachableFriends friend${reachableFriends == 1 ? '' : 's'} on this network',
-        ),
-        const _KeyValue(label: 'Service', value: '_starling._tcp (mDNS/Bonjour)'),
-      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _KeyValue(
+            label: 'Reachable',
+            value:
+                '$reachableFriends friend${reachableFriends == 1 ? '' : 's'} on this network',
+          ),
+          const _KeyValue(
+            label: 'Service',
+            value: '_starling._tcp (mDNS/Bonjour)',
+          ),
+        ],
+      ),
     );
   }
 }
@@ -362,16 +421,16 @@ class _ServerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _SectionCard(
+    return StarlingCard(
       title: 'Local server',
       icon: LucideIcons.server,
-      children: [
-        _KeyValue(
-          label: 'Port',
-          value: port == null ? 'Not bound' : '$port',
-        ),
-        const _KeyValue(label: 'Binding', value: '0.0.0.0 (LAN + Tor onion)'),
-      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _KeyValue(label: 'Port', value: port == null ? 'Not bound' : '$port'),
+          const _KeyValue(label: 'Binding', value: '0.0.0.0 (LAN + Tor onion)'),
+        ],
+      ),
     );
   }
 }
@@ -384,65 +443,71 @@ class _AndroidBackgroundCard extends ConsumerWidget {
     final starling = StarlingTheme.of(context);
     final runningAsync = ref.watch(foregroundServiceStateProvider);
     final running = runningAsync.value ?? false;
-    return _SectionCard(
+    return StarlingCard(
       title: 'Background mode',
       icon: LucideIcons.batteryCharging,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Keep Starling running',
-                    style: starling.typography.body.copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: starling.colors.ink,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Keep Starling running',
+                      style: starling.typography.body.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: starling.colors.ink,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Your phone stays reachable to friends in the background. '
-                    'Uses more battery.',
-                    style: starling.typography.small
-                        .copyWith(color: starling.colors.graphite),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Text(
+                      'Your phone stays reachable to friends in the background. '
+                      'Uses more battery.',
+                      style: starling.typography.small.copyWith(
+                        color: starling.colors.graphite,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Switch.adaptive(
-              value: running,
-              onChanged: runningAsync.isLoading
-                  ? null
-                  : (v) async {
-                      final notifier =
-                          ref.read(foregroundServiceStateProvider.notifier);
-                      final ok = await notifier.setEnabled(v);
-                      if (!context.mounted) return;
-                      if (v && !ok) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Notification permission required for background mode.',
-                            ),
-                          ),
+              const SizedBox(width: 12),
+              Switch.adaptive(
+                value: running,
+                onChanged: runningAsync.isLoading
+                    ? null
+                    : (v) async {
+                        final notifier = ref.read(
+                          foregroundServiceStateProvider.notifier,
                         );
-                      }
-                    },
+                        final ok = await notifier.setEnabled(v);
+                        if (!context.mounted) return;
+                        if (v && !ok) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Notification permission required for background mode.',
+                              ),
+                            ),
+                          );
+                        }
+                      },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            running
+                ? 'Background sync also runs every 15 min via WorkManager.'
+                : 'Background sync runs every 15 min via WorkManager when possible.',
+            style: starling.typography.micro.copyWith(
+              color: StarlingTheme.of(context).colors.stone,
             ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Text(
-          running
-              ? 'Background sync also runs every 15 min via WorkManager.'
-              : 'Background sync runs every 15 min via WorkManager when possible.',
-          style: starling.typography.micro
-              .copyWith(color: StarlingTheme.of(context).colors.stone),
-        ),
-      ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -453,18 +518,18 @@ class _IosBackgroundCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
-    return _SectionCard(
+    return StarlingCard(
       title: 'Background mode',
       icon: LucideIcons.batteryCharging,
-      children: [
-        Text(
-          'iOS controls background sync timing. Starling checks when iOS '
-          'grants permission, usually less often than once per hour. '
-          'When your phone is plugged in and idle, longer background '
-          'sessions can use Tor.',
-          style: starling.typography.small.copyWith(color: starling.colors.graphite),
+      child: Text(
+        'iOS controls background sync timing. Starling checks when iOS '
+        'grants permission, usually less often than once per hour. '
+        'When your phone is plugged in and idle, longer background '
+        'sessions can use Tor.',
+        style: starling.typography.small.copyWith(
+          color: starling.colors.graphite,
         ),
-      ],
+      ),
     );
   }
 }
@@ -509,7 +574,11 @@ class _PerPeerLink extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(LucideIcons.chevronRight, size: 16, color: starling.colors.stone),
+            Icon(
+              LucideIcons.chevronRight,
+              size: 16,
+              color: starling.colors.stone,
+            ),
           ],
         ),
       ),

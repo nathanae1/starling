@@ -71,7 +71,7 @@ bool isFollowAcceptQueueEntry(Uint8List blob) {
 /// covers the entire admin path.
 class HandshakeTransport {
   HandshakeTransport(this._defaultClient, {http.Client? Function()? torClient})
-      : _torClientLookup = torClient;
+    : _torClientLookup = torClient;
 
   final http.Client _defaultClient;
   final http.Client? Function()? _torClientLookup;
@@ -148,16 +148,16 @@ class FollowService {
     required Future<List<Endpoint>> Function() ownEndpointsLookup,
     FeedKeyCache? feedKeyCache,
     KeyRotationService? keyRotationService,
-  })  : _crypto = crypto,
-        _storage = storage,
-        _clock = clock,
-        _transport = transport,
-        _reachability = reachabilityMonitor,
-        _identityLookup = identityLookup,
-        _ownSecretKeyLookup = ownSecretKeyLookup,
-        _ownEndpointsLookup = ownEndpointsLookup,
-        _feedKeyCache = feedKeyCache,
-        _keyRotationService = keyRotationService;
+  }) : _crypto = crypto,
+       _storage = storage,
+       _clock = clock,
+       _transport = transport,
+       _reachability = reachabilityMonitor,
+       _identityLookup = identityLookup,
+       _ownSecretKeyLookup = ownSecretKeyLookup,
+       _ownEndpointsLookup = ownEndpointsLookup,
+       _feedKeyCache = feedKeyCache,
+       _keyRotationService = keyRotationService;
 
   final CryptoService _crypto;
   final StorageService _storage;
@@ -236,26 +236,27 @@ class FollowService {
       pubkey: identity.pubkey,
       endpoints: ownEndpoints,
     );
-    final innerCbor = Uint8List.fromList(cbor.encode(<String, dynamic>{
-      'connection_card': ownCard.toMap(),
-      'feed_key_epoch': identity.feedKeyEpoch,
-    }));
+    final innerCbor = Uint8List.fromList(
+      cbor.encode(<String, dynamic>{
+        'connection_card': ownCard.toMap(),
+        'feed_key_epoch': identity.feedKeyEpoch,
+      }),
+    );
     final nonce = _crypto.randomBytes(24);
     final ciphertext = _crypto.encrypt(innerCbor, nonce, sharedKey);
 
-    final body = Uint8List.fromList(cbor.encode(<String, dynamic>{
-      'requester_pubkey': identity.pubkey,
-      'encrypted_return_endpoints': ciphertext,
-      'nonce': nonce,
-      'timestamp': timestamp,
-    }));
+    final body = Uint8List.fromList(
+      cbor.encode(<String, dynamic>{
+        'requester_pubkey': identity.pubkey,
+        'encrypted_return_endpoints': ciphertext,
+        'nonce': nonce,
+        'timestamp': timestamp,
+      }),
+    );
 
     final int status;
     try {
-      status = await _transport.postFollowRequest(
-        connection.baseUrl,
-        body,
-      );
+      status = await _transport.postFollowRequest(connection.baseUrl, body);
     } catch (e) {
       throw FollowFailure(FollowFailureKind.network, 'send failed: $e');
     }
@@ -291,8 +292,12 @@ class FollowService {
       );
     }
     final outer = _decodeMap(inbound.payload);
-    final inner =
-        _decryptInner(outer, identity, secretKey, inbound.requestTimestamp);
+    final inner = _decryptInner(
+      outer,
+      identity,
+      secretKey,
+      inbound.requestTimestamp,
+    );
 
     final requesterCard = ConnectionCard.fromMap(
       inner['connection_card'] as Map<dynamic, dynamic>,
@@ -328,8 +333,8 @@ class FollowService {
       // address that's stable enough to retry against later. If the
       // requester's card has no onion, fall back to whatever the probe
       // found, or the card's first endpoint as a last-resort hint.
-      final fallbackUrl = connection?.baseUrl ??
-          _firstQueueableUrl(requesterCard);
+      final fallbackUrl =
+          connection?.baseUrl ?? _firstQueueableUrl(requesterCard);
       await _storage.enqueue(
         requesterPubkey,
         _wrapQueueEntry('$fallbackUrl/follow-accept', acceptBody),
@@ -339,19 +344,14 @@ class FollowService {
         'pending-send',
       );
     } else {
-      await _storage.updateInboundRequestStatus(
-        requesterPubkey,
-        'accepted',
-      );
+      await _storage.updateInboundRequestStatus(requesterPubkey, 'accepted');
     }
     return delivery;
   }
 
-  Uint8List _wrapQueueEntry(String url, Uint8List body) =>
-      Uint8List.fromList(cbor.encode(<String, dynamic>{
-        'url': url,
-        'body': body,
-      }));
+  Uint8List _wrapQueueEntry(String url, Uint8List body) => Uint8List.fromList(
+    cbor.encode(<String, dynamic>{'url': url, 'body': body}),
+  );
 
   // --- Inbound: reject a pending request ---
 
@@ -377,8 +377,12 @@ class FollowService {
     final identity = await _requireIdentity();
     final secretKey = await _requireSecretKey();
     final outer = _decodeMap(inbound.payload);
-    final inner =
-        _decryptInner(outer, identity, secretKey, inbound.requestTimestamp);
+    final inner = _decryptInner(
+      outer,
+      identity,
+      secretKey,
+      inbound.requestTimestamp,
+    );
     final card = ConnectionCard.fromMap(
       inner['connection_card'] as Map<dynamic, dynamic>,
     );
@@ -399,6 +403,15 @@ class FollowService {
 
     final outbound = await _storage.getOutboundRequest(ownerPubkey);
     if (outbound == null) {
+      // Idempotent re-ack: a prior delivery of this accept already created
+      // the follow and deleted the outbound row, but its 202 never reached
+      // the responder (flaky onion reverse path) so they keep re-POSTing.
+      // Returning success lets their retry pump clear the queue and flip the
+      // inbound row to 'accepted' instead of looping on a 404 forever.
+      final existing = await _storage.getFollow(ownerPubkey);
+      if (existing != null) {
+        return IngestAcceptResult(follow: existing);
+      }
       throw FollowFailure(
         FollowFailureKind.unknownRequester,
         'no outbound request to $ownerPubkey',
@@ -535,6 +548,17 @@ class FollowService {
     for (final inbound in rows) {
       if (onlyPubkey != null && inbound.pubkey != onlyPubkey) continue;
       final entries = await _storage.dequeue(inbound.pubkey);
+      // Re-resolve the requester's CURRENT reachable endpoint once per row.
+      // The URL baked into the queue entry at accept time goes stale — most
+      // commonly an ephemeral LAN port that changes when the requester
+      // relaunches, or an onion that wasn't published yet when we queued.
+      // Without this, a delivered-but-lost-202 accept retries forever against
+      // a dead address and the mutual-follow handshake never finalizes.
+      // Best-effort; falls back to the stored URL.
+      final freshBaseUrl =
+          entries.any((e) => isFollowAcceptQueueEntry(e.eventBlob))
+          ? await _resolveRequesterBaseUrl(inbound)
+          : null;
       for (final entry in entries) {
         seenIds.add(entry.id);
         // The outbound queue is shared with encrypted comment/reaction
@@ -552,7 +576,7 @@ class FollowService {
         final int status;
         try {
           status = await _transport.postFollowAccept(
-            _stripAcceptSuffix(url),
+            freshBaseUrl ?? _stripAcceptSuffix(url),
             body,
           );
         } on HandshakeTransportException catch (e) {
@@ -560,7 +584,9 @@ class FollowService {
           // spend a retry on it; clear the attempt stamp so the first pass
           // after Tor recovers fires immediately.
           _acceptLastAttemptSec.remove(entry.id);
-          _log('retry skip ${inbound.pubkey} transport-not-ready: ${e.message}');
+          _log(
+            'retry skip ${inbound.pubkey} transport-not-ready: ${e.message}',
+          );
           continue;
         } catch (e) {
           await _onAcceptFailure(inbound, entry, failedStatusThreshold, e);
@@ -611,14 +637,55 @@ class FollowService {
     Object reason,
   ) async {
     await _storage.incrementRetry(entry.id);
-    _log('retry failed ${inbound.pubkey} '
-        'attempt=${entry.retryCount + 1} reason=$reason');
+    _log(
+      'retry failed ${inbound.pubkey} '
+      'attempt=${entry.retryCount + 1} reason=$reason',
+    );
     // Flip to 'send-failed' once, only from 'pending-send' — re-writing the
     // same status would re-emit `watchInboundFollowers` needlessly, and we
     // must not stomp an 'accepted' row a concurrent path may have set.
     if (entry.retryCount + 1 >= failedStatusThreshold &&
         inbound.status == 'pending-send') {
       await _storage.updateInboundRequestStatus(inbound.pubkey, 'send-failed');
+    }
+  }
+
+  /// Re-derive the requester's current reachable base URL from their stored
+  /// (encrypted) inbound payload, so a stale queued URL — ephemeral LAN port
+  /// that rotated on the peer's relaunch, or an onion that wasn't published
+  /// when we queued — doesn't permanently strand the accept. Returns null on
+  /// any failure so the caller falls back to the queued URL.
+  Future<String?> _resolveRequesterBaseUrl(FollowRequest inbound) async {
+    try {
+      // Mutual follow: reuse the reachability monitor's validated transport —
+      // the same path feed sync already dials successfully. It tracks the
+      // peer's CURRENT onion and live LAN port, where the frozen request card
+      // may carry a stale ephemeral port or an onion that wasn't published at
+      // request time. No new address leak vs. probeCard's Tor-only stance: we
+      // already follow them, so feed sync dials them over LAN regardless.
+      if (await _storage.getFollow(inbound.pubkey) != null) {
+        final conn = await _reachability.bestConnectionFor(inbound.pubkey);
+        if (conn != null) return conn.baseUrl;
+      }
+      // Non-mutual (or the monitor hasn't validated a transport yet): fall back
+      // to a Tor-only probe of the requester's frozen card, as before.
+      final identity = await _identityLookup();
+      final sk = await _ownSecretKeyLookup();
+      if (identity == null || sk == null) return null;
+      final outer = _decodeMap(inbound.payload);
+      final inner = _decryptInner(
+        outer,
+        identity,
+        sk,
+        inbound.requestTimestamp,
+      );
+      final card = ConnectionCard.fromMap(
+        inner['connection_card'] as Map<dynamic, dynamic>,
+      );
+      final connection = await _reachability.probeCard(card);
+      return connection?.baseUrl;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -640,7 +707,8 @@ class FollowService {
 
   String _stripAcceptSuffix(String url) {
     const suffix = '/follow-accept';
-    if (url.endsWith(suffix)) return url.substring(0, url.length - suffix.length);
+    if (url.endsWith(suffix))
+      return url.substring(0, url.length - suffix.length);
     return url;
   }
 
@@ -751,13 +819,15 @@ class FollowService {
     );
     final nonce = _crypto.randomBytes(24);
     final ct = _crypto.encrypt(identity.feedKey, nonce, sharedKey);
-    return Uint8List.fromList(cbor.encode(<String, dynamic>{
-      'owner_pubkey': identity.pubkey,
-      'encrypted_feed_key': ct,
-      'nonce': nonce,
-      'epoch': identity.feedKeyEpoch,
-      'timestamp': timestamp,
-    }));
+    return Uint8List.fromList(
+      cbor.encode(<String, dynamic>{
+        'owner_pubkey': identity.pubkey,
+        'encrypted_feed_key': ct,
+        'nonce': nonce,
+        'epoch': identity.feedKeyEpoch,
+        'timestamp': timestamp,
+      }),
+    );
   }
 
   Uint8List _asBytes(dynamic value) {

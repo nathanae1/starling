@@ -13,13 +13,11 @@ class UnknownItemsDao extends DatabaseAccessor<AppDatabase>
   Future<int> insert(UnknownEnvelopeItemEntriesCompanion entry) =>
       into(unknownEnvelopeItemEntries).insert(entry);
 
-  Future<List<UnknownEnvelopeItemEntry>> getByType(String type) =>
-      (select(unknownEnvelopeItemEntries)
-            ..where((e) => e.type.equals(type)))
-          .get();
+  Future<List<UnknownEnvelopeItemEntry>> getByType(String type) => (select(
+    unknownEnvelopeItemEntries,
+  )..where((e) => e.type.equals(type))).get();
 
-  Future<int> deleteOlderThan(int cutoffSeconds) =>
-      (delete(unknownEnvelopeItemEntries)
-            ..where((e) => e.receivedAt.isSmallerThanValue(cutoffSeconds)))
-          .go();
+  Future<int> deleteOlderThan(int cutoffSeconds) => (delete(
+    unknownEnvelopeItemEntries,
+  )..where((e) => e.receivedAt.isSmallerThanValue(cutoffSeconds))).go();
 }

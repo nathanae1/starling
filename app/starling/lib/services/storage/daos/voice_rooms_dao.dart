@@ -8,9 +8,7 @@ part 'voice_rooms_dao.g.dart';
 
 /// Local-only voice-room history (Plan 16). No feed events involved; rows are
 /// purely for the "recent rooms" UI and are pruned after 7 days.
-@DriftAccessor(
-  tables: [VoiceRoomEntries, VoiceRoomParticipantEntries],
-)
+@DriftAccessor(tables: [VoiceRoomEntries, VoiceRoomParticipantEntries])
 class VoiceRoomsDao extends DatabaseAccessor<AppDatabase>
     with _$VoiceRoomsDaoMixin {
   VoiceRoomsDao(super.db);
@@ -23,11 +21,10 @@ class VoiceRoomsDao extends DatabaseAccessor<AppDatabase>
         VoiceRoomEntriesCompanion(endedAt: Value(endedAt)),
       );
 
-  Future<void> upsertParticipant(
-    VoiceRoomParticipantEntriesCompanion entry,
-  ) =>
-      into(voiceRoomParticipantEntries)
-          .insert(entry, mode: InsertMode.insertOrReplace);
+  Future<void> upsertParticipant(VoiceRoomParticipantEntriesCompanion entry) =>
+      into(
+        voiceRoomParticipantEntries,
+      ).insert(entry, mode: InsertMode.insertOrReplace);
 
   Future<List<VoiceRoomEntry>> recentRooms(int limit) =>
       (select(voiceRoomEntries)
@@ -44,17 +41,17 @@ class VoiceRoomsDao extends DatabaseAccessor<AppDatabase>
   /// Delete rooms (and their participants) created before [cutoff]. Returns
   /// the number of rooms removed.
   Future<int> evictOlderThan(int cutoff) async {
-    final stale = await (select(voiceRoomEntries)
-          ..where((r) => r.createdAt.isSmallerThanValue(cutoff)))
-        .get();
+    final stale = await (select(
+      voiceRoomEntries,
+    )..where((r) => r.createdAt.isSmallerThanValue(cutoff))).get();
     if (stale.isEmpty) return 0;
     final ids = stale.map((r) => r.id).toList();
-    await (delete(voiceRoomParticipantEntries)
-          ..where((p) => p.roomId.isIn(ids)))
-        .go();
-    await (delete(voiceRoomEntries)
-          ..where((r) => r.createdAt.isSmallerThanValue(cutoff)))
-        .go();
+    await (delete(
+      voiceRoomParticipantEntries,
+    )..where((p) => p.roomId.isIn(ids))).go();
+    await (delete(
+      voiceRoomEntries,
+    )..where((r) => r.createdAt.isSmallerThanValue(cutoff))).go();
     return stale.length;
   }
 }

@@ -25,9 +25,9 @@ class LanNetworkService implements NetworkService, SyncTransport {
     required MdnsService mdns,
     http.Client? httpClient,
     Duration timeout = const Duration(seconds: 10),
-  })  : _mdns = mdns,
-        _http = httpClient ?? http.Client(),
-        _timeout = timeout;
+  }) : _mdns = mdns,
+       _http = httpClient ?? http.Client(),
+       _timeout = timeout;
 
   final MdnsService _mdns;
   final http.Client _http;
@@ -97,8 +97,9 @@ class LanNetworkService implements NetworkService, SyncTransport {
         query['ack_sig'] = hexEncodeAckSig(ackSig);
       }
     }
-    final uri = Uri.parse('${connection.baseUrl}/manifest')
-        .replace(queryParameters: query.isEmpty ? null : query);
+    final uri = Uri.parse(
+      '${connection.baseUrl}/manifest',
+    ).replace(queryParameters: query.isEmpty ? null : query);
     final res = await _http.get(uri).timeout(_timeout);
     if (res.statusCode != 200) {
       throw NetworkException(
@@ -130,8 +131,9 @@ class LanNetworkService implements NetworkService, SyncTransport {
   }) async {
     final query = <String, String>{};
     if (since != null) query['since'] = since.toString();
-    final uri = Uri.parse('${connection.baseUrl}/events')
-        .replace(queryParameters: query.isEmpty ? null : query);
+    final uri = Uri.parse(
+      '${connection.baseUrl}/events',
+    ).replace(queryParameters: query.isEmpty ? null : query);
     final res = await _http.get(uri).timeout(_timeout);
     if (res.statusCode != 200) {
       throw NetworkException(
@@ -162,8 +164,9 @@ class LanNetworkService implements NetworkService, SyncTransport {
   }) async {
     final query = <String, String>{};
     if (since != null) query['since'] = since.toString();
-    final uri = Uri.parse('${connection.baseUrl}/events')
-        .replace(queryParameters: query.isEmpty ? null : query);
+    final uri = Uri.parse(
+      '${connection.baseUrl}/events',
+    ).replace(queryParameters: query.isEmpty ? null : query);
     final res = await _http.get(uri).timeout(_timeout);
     if (res.statusCode != 200) {
       throw NetworkException(
@@ -199,8 +202,11 @@ class LanNetworkService implements NetworkService, SyncTransport {
   ) async {
     final uri = Uri.parse('${connection.baseUrl}/follow-request');
     final res = await _http
-        .post(uri, headers: const {'content-type': 'application/cbor'},
-            body: requestPayload)
+        .post(
+          uri,
+          headers: const {'content-type': 'application/cbor'},
+          body: requestPayload,
+        )
         .timeout(_timeout);
     if (res.statusCode != 202) {
       throw NetworkException(
@@ -218,8 +224,11 @@ class LanNetworkService implements NetworkService, SyncTransport {
   ) async {
     final uri = Uri.parse('${connection.baseUrl}/follow-accept');
     final res = await _http
-        .post(uri, headers: const {'content-type': 'application/cbor'},
-            body: acceptPayload)
+        .post(
+          uri,
+          headers: const {'content-type': 'application/cbor'},
+          body: acceptPayload,
+        )
         .timeout(_timeout);
     if (res.statusCode != 202) {
       throw NetworkException(

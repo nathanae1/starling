@@ -160,8 +160,7 @@ Libp2pUpgrader libp2pUpgrader(Ref ref) {
     clock: ref.watch(clockProvider),
     crypto: ref.watch(cryptoServiceProvider),
     localPubkeyLookup: () async {
-      final identity =
-          await ref.read(storageServiceProvider).getIdentity();
+      final identity = await ref.read(storageServiceProvider).getIdentity();
       return identity?.pubkey;
     },
     localSecretKeyLookup: () => KeychainManager().loadIdentitySecretKey(),
@@ -179,8 +178,7 @@ SignalingDispatcher signalingDispatcher(Ref ref) {
     upgrader: ref.watch(libp2pUpgraderProvider),
     crypto: ref.watch(cryptoServiceProvider),
     localPubkeyLookup: () async {
-      final identity =
-          await ref.read(storageServiceProvider).getIdentity();
+      final identity = await ref.read(storageServiceProvider).getIdentity();
       return identity?.pubkey;
     },
     localSecretKeyLookup: () => KeychainManager().loadIdentitySecretKey(),
@@ -225,13 +223,12 @@ class SyncEngineState {
     int? lastSyncAt,
     String? lastError,
     bool clearError = false,
-  }) =>
-      SyncEngineState(
-        phase: phase ?? this.phase,
-        lastReport: lastReport ?? this.lastReport,
-        lastSyncAt: lastSyncAt ?? this.lastSyncAt,
-        lastError: clearError ? null : (lastError ?? this.lastError),
-      );
+  }) => SyncEngineState(
+    phase: phase ?? this.phase,
+    lastReport: lastReport ?? this.lastReport,
+    lastSyncAt: lastSyncAt ?? this.lastSyncAt,
+    lastError: clearError ? null : (lastError ?? this.lastError),
+  );
 
   static const idle = SyncEngineState(phase: SyncRunPhase.idle);
 }
@@ -246,11 +243,8 @@ class SyncController extends _$SyncController {
     if (state.phase == SyncRunPhase.syncing) {
       // Coalesce concurrent triggers — the in-flight sync's report is
       // what callers will see when it lands.
-      return state.lastReport ?? const SyncReport(
-        startedAt: 0,
-        finishedAt: 0,
-        peers: [],
-      );
+      return state.lastReport ??
+          const SyncReport(startedAt: 0, finishedAt: 0, peers: []);
     }
     state = state.copyWith(phase: SyncRunPhase.syncing, clearError: true);
     final engine = ref.read(syncEngineProvider);
@@ -267,10 +261,7 @@ class SyncController extends _$SyncController {
       unawaited(_reconcileRelay());
       return report;
     } catch (e) {
-      state = state.copyWith(
-        phase: SyncRunPhase.idle,
-        lastError: e.toString(),
-      );
+      state = state.copyWith(phase: SyncRunPhase.idle, lastError: e.toString());
       rethrow;
     }
   }

@@ -69,7 +69,7 @@ Serverless by default, with an opt-in escape hatch:
 
 ### Phase D — UI
 - **New** `lib/screens/voice/{room_list,create_room,active_room}_screen.dart`, `lib/widgets/voice/{incoming_invite_sheet,call_overlay,participant_avatar}.dart`. Reuse Plan 04a design system (`Avatar`, `Sheet`, buttons, `SyncDot`).
-- **Modify** router + add an entry point (Friends tab / contact action sheet); surface the "voice likely to work" hint.
+- **Modify** router + add an entry point; surface the "voice likely to work" hint. _(Post-audit 2026-06-28: the voice hub `RoomListScreen` was promoted from a Friends app-bar icon to a top-level **Rooms** tab — a 4th `StatefulShellBranch` rooted at `/voice`; the active-call screen stays pinned to the root navigator so it covers the tab bar. Screen title is "Rooms".)_
 
 ### Phase E — Platform config + hardening
 - **Deps** (`pubspec.yaml`): add `flutter_webrtc`, `wakelock_plus`, `permission_handler` (`shelf_web_socket`/`web_socket_channel` already present). No minSdk/iOS-target bumps (Android 26 / iOS 26 clear flutter_webrtc).

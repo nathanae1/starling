@@ -9,14 +9,11 @@ class EventEntries extends Table {
   BlobColumn get content => blob()();
   TextColumn get mediaRefs => text().nullable()();
   BlobColumn get sig => blob()();
-  IntColumn get isOwn =>
-      integer().withDefault(const Constant(0))();
-  IntColumn get isSaved =>
-      integer().withDefault(const Constant(0))();
+  IntColumn get isOwn => integer().withDefault(const Constant(0))();
+  IntColumn get isSaved => integer().withDefault(const Constant(0))();
   IntColumn get fetchedAt => integer()();
   IntColumn get lastViewed => integer().nullable()();
-  TextColumn get version =>
-      text().withDefault(const Constant('2026-03-24'))();
+  TextColumn get version => text().withDefault(const Constant('2026-03-24'))();
   BlobColumn get extensions => blob().nullable()();
   // MegOLM-shaped per-message sequence number persisted at decrypt time.
   // Together with the publisher's chain root for this event's epoch, it

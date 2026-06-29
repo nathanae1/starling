@@ -14,8 +14,7 @@ import '../types.dart';
 /// `PeerConnectionFactory.resolve` in production. Kept as a closure so the
 /// service can be constructed in `main.dart` before the
 /// `ProviderContainer` exists.
-typedef PeerConnectionLookup =
-    Future<PeerConnection?> Function(String pubkey);
+typedef PeerConnectionLookup = Future<PeerConnection?> Function(String pubkey);
 
 /// WebSocket-based [SignalingService] implementation.
 ///
@@ -72,8 +71,8 @@ class WsSignalingService implements SignalingService {
     final wsScheme = httpUri.scheme == 'https' ? 'wss' : 'ws';
     final wsUri = httpUri.replace(scheme: wsScheme, path: '/ws/signal');
 
-    final timestamp =
-        (DateTime.now().millisecondsSinceEpoch ~/ 1000).toString();
+    final timestamp = (DateTime.now().millisecondsSinceEpoch ~/ 1000)
+        .toString();
     final message = 'websocket-upgrade$timestamp';
     final sig = crypto.sign(
       localSecretKey,
@@ -97,17 +96,18 @@ class WsSignalingService implements SignalingService {
     );
 
     _channels[peer.pubkey] = channel;
-    channel.messages.listen(null, onDone: () {
-      _channels.remove(peer.pubkey);
-    });
+    channel.messages.listen(
+      null,
+      onDone: () {
+        _channels.remove(peer.pubkey);
+      },
+    );
 
     return channel;
   }
 
   @override
-  void onInboundConnection(
-    void Function(SignalingChannel channel) handler,
-  ) {
+  void onInboundConnection(void Function(SignalingChannel channel) handler) {
     _inboundHandler = handler;
   }
 
@@ -116,9 +116,12 @@ class WsSignalingService implements SignalingService {
   void handleInbound(SignalingChannel channel) {
     _channels[channel.remotePubkey] = channel;
 
-    channel.messages.listen(null, onDone: () {
-      _channels.remove(channel.remotePubkey);
-    });
+    channel.messages.listen(
+      null,
+      onDone: () {
+        _channels.remove(channel.remotePubkey);
+      },
+    );
 
     _inboundHandler?.call(channel);
   }

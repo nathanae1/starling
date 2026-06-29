@@ -8,6 +8,7 @@ import '../../theme/starling_theme.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/dashed_border.dart';
 import '../../widgets/inputs.dart';
+import '../../widgets/sticky_action_bar.dart';
 
 class ComposeScreen extends ConsumerStatefulWidget {
   const ComposeScreen({super.key});
@@ -22,8 +23,9 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   @override
   void initState() {
     super.initState();
-    _captionCtrl =
-        TextEditingController(text: ref.read(composeControllerProvider).caption);
+    _captionCtrl = TextEditingController(
+      text: ref.read(composeControllerProvider).caption,
+    );
   }
 
   @override
@@ -63,34 +65,21 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     return Scaffold(
       backgroundColor: starling.colors.paper,
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
+            // Slim title bar; the close + advance actions live in the bottom
+            // StickyActionBar so they sit within thumb reach.
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
-              child: Row(
-                children: [
-                  StarlingIconButton(
-                    onPressed: _close,
-                    child: const Icon(LucideIcons.x, size: 20),
-                  ),
-                  Expanded(
-                    child: Text(
-                      'New post',
-                      textAlign: TextAlign.center,
-                      style: starling.typography.h3.copyWith(
-                        fontFamily: 'Fraunces',
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  GhostButton(
-                    label: 'Post',
-                    onPressed: state.canAdvanceToPreview
-                        ? () => context.push('/compose/preview')
-                        : null,
-                  ),
-                ],
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+              child: Text(
+                'New post',
+                textAlign: TextAlign.center,
+                style: starling.typography.h3.copyWith(
+                  fontFamily: 'Fraunces',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
             Expanded(
@@ -116,16 +105,44 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                       maxLines: 8,
                       onChanged: controller.setCaption,
                     ),
+                    if (state.photoBytes == null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        'Add a photo to post.',
+                        textAlign: TextAlign.center,
+                        style: starling.typography.small.copyWith(
+                          color: starling.colors.stone,
+                        ),
+                      ),
+                    ],
                     if (state.errorMessage != null) ...[
                       const SizedBox(height: 12),
                       Text(
                         state.errorMessage!,
-                        style: starling.typography.small
-                            .copyWith(color: starling.colors.danger),
+                        style: starling.typography.small.copyWith(
+                          color: starling.colors.danger,
+                        ),
                       ),
                     ],
                   ],
                 ),
+              ),
+            ),
+            StickyActionBar(
+              child: Row(
+                children: [
+                  GhostButton(label: 'Cancel', onPressed: _close),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: PrimaryButton(
+                      label: 'Next',
+                      block: true,
+                      onPressed: state.canAdvanceToPreview
+                          ? () => context.push('/compose/preview')
+                          : null,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -184,15 +201,13 @@ class _PhotoSlot extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              LucideIcons.camera,
-              size: 32,
-              color: starling.colors.stone,
-            ),
+            Icon(LucideIcons.camera, size: 32, color: starling.colors.stone),
             const SizedBox(height: 8),
             Text(
               'Choose a photo',
-              style: starling.typography.body.copyWith(color: starling.colors.stone),
+              style: starling.typography.body.copyWith(
+                color: starling.colors.stone,
+              ),
             ),
             const SizedBox(height: 20),
             Row(
@@ -200,17 +215,18 @@ class _PhotoSlot extends StatelessWidget {
               children: [
                 SecondaryButton(
                   label: 'Gallery',
-                  leading:
-                      const Icon(LucideIcons.image, size: 16),
-                  onPressed:
-                      state.phase == ComposePhase.picking ? null : onGallery,
+                  leading: const Icon(LucideIcons.image, size: 16),
+                  onPressed: state.phase == ComposePhase.picking
+                      ? null
+                      : onGallery,
                 ),
                 const SizedBox(width: 12),
                 SecondaryButton(
                   label: 'Camera',
                   leading: const Icon(LucideIcons.camera, size: 16),
-                  onPressed:
-                      state.phase == ComposePhase.picking ? null : onCamera,
+                  onPressed: state.phase == ComposePhase.picking
+                      ? null
+                      : onCamera,
                 ),
               ],
             ),
@@ -229,19 +245,19 @@ class _ClearPhotoButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
-    return Material(
-      color: starling.colors.ink.withValues(alpha: 0.6),
-      shape: const CircleBorder(),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onPressed,
-        child: const SizedBox(
-          width: 32,
-          height: 32,
-          child: Icon(
-            LucideIcons.x,
-            size: 16,
-            color: Colors.white,
+    return Semantics(
+      button: true,
+      label: 'Remove photo',
+      child: Material(
+        color: starling.colors.ink.withValues(alpha: 0.6),
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onPressed,
+          child: const SizedBox(
+            width: 32,
+            height: 32,
+            child: Icon(LucideIcons.x, size: 16, color: Colors.white),
           ),
         ),
       ),

@@ -142,10 +142,7 @@ Future<Uint8List> buildManifestResponseBytes({
   final response = <String, dynamic>{
     'pubkey': identity.pubkey,
     'events': events
-        .map((e) => <String, dynamic>{
-              'id': e.id,
-              'created_at': e.createdAt,
-            })
+        .map((e) => <String, dynamic>{'id': e.id, 'created_at': e.createdAt})
         .toList(),
     'has_older': hasOlder,
   };

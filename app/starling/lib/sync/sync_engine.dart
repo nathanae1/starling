@@ -81,17 +81,17 @@ class SyncEngine {
     FeedKeyCache? feedKeyCache,
     Libp2pUpgrader? libp2pUpgrader,
     int maxParallelPeers = 5,
-  })  : _storage = storage,
-        _contentKey = contentKey,
-        _crypto = crypto,
-        _transport = transport,
-        _peerFactory = peerFactory,
-        _reachability = reachabilityMonitor,
-        _clock = clock,
-        _ownSecretKeyLookup = ownSecretKeyLookup,
-        _feedKeyCache = feedKeyCache,
-        _libp2pUpgrader = libp2pUpgrader,
-        _pool = Pool(maxParallelPeers);
+  }) : _storage = storage,
+       _contentKey = contentKey,
+       _crypto = crypto,
+       _transport = transport,
+       _peerFactory = peerFactory,
+       _reachability = reachabilityMonitor,
+       _clock = clock,
+       _ownSecretKeyLookup = ownSecretKeyLookup,
+       _feedKeyCache = feedKeyCache,
+       _libp2pUpgrader = libp2pUpgrader,
+       _pool = Pool(maxParallelPeers);
 
   final StorageService _storage;
   final ContentKeyService _contentKey;
@@ -105,14 +105,25 @@ class SyncEngine {
   final Libp2pUpgrader? _libp2pUpgrader;
   final Pool _pool;
 
+  /// Mirrors the sync decision spine to both `developer.log` (for DevTools)
+  /// and `print` (so the path is visible in a plain `flutter run` console —
+  /// matching `FollowService._log` and the reachability monitor). The
+  /// resolve outcome, manifest/envelope failures, and terminal status are
+  /// what you need to tell "peer unreachable" apart from "manifest fetch
+  /// failed" apart from "synced fine but UI stale" when a follow won't sync.
+  void _log(String msg) {
+    developer.log(msg, name: 'sync_engine');
+    // ignore: avoid_print
+    print('[sync_engine] $msg');
+  }
+
   /// Runs one sync pass. Returns a per-peer report so the UI can surface
   /// "syncing… 3/5 done" or "Bob unreachable."
   Future<SyncReport> syncNow() async {
     final follows = await _storage.getFollows();
-    developer.log(
+    _log(
       'syncNow start: follows=${follows.length} '
       '[${follows.map((f) => f.pubkey).join(",")}]',
-      name: 'sync_engine',
     );
     if (follows.isEmpty) {
       return SyncReport(
@@ -145,24 +156,19 @@ class SyncEngine {
   }
 
   Future<PeerSyncReport> _syncOnePeer(Follow follow) async {
-    developer.log(
+    _log(
       'syncOnePeer start pubkey=${follow.pubkey} lastSyncedAt=${follow.lastSyncedAt}',
-      name: 'sync_engine',
     );
     final connection = await _peerFactory.resolve(follow.pubkey);
     if (connection == null) {
-      developer.log(
-        'no transport available for ${follow.pubkey} — peer unreachable',
-        name: 'sync_engine',
-      );
+      _log('no transport available for ${follow.pubkey} — peer unreachable');
       return PeerSyncReport(
         pubkey: follow.pubkey,
         status: PeerSyncStatus.unreachable,
       );
     }
-    developer.log(
+    _log(
       '${connection.transport.name} peer resolved ${follow.pubkey} -> ${connection.baseUrl}',
-      name: 'sync_engine',
     );
 
     // Plan 11a: if we resolved to Tor and the peer is libp2p-capable, fire a
@@ -177,8 +183,7 @@ class SyncEngine {
     }
 
     final identity = await _storage.getIdentity();
-    final exchange =
-        ManifestExchange(transport: _transport, storage: _storage);
+    final exchange = ManifestExchange(transport: _transport, storage: _storage);
 
     // S3a: prove we control `requester_pubkey` before the peer honors our
     // delivery acks. Skipped when there's nothing to ack.
@@ -200,7 +205,8 @@ class SyncEngine {
     // D1: the windowed diff is the cheap steady-state; a full paged diff
     // runs on the first sync, on a stale full-pass stamp, or when the
     // windowed manifest overflowed its page (has_older).
-    var ranFull = follow.lastFullSyncAt == 0 ||
+    var ranFull =
+        follow.lastFullSyncAt == 0 ||
         _clock.nowUnixSeconds() - follow.lastFullSyncAt >=
             kFullManifestSyncIntervalSecs;
 
@@ -231,10 +237,7 @@ class SyncEngine {
         diff = await exchange.fetchAndDiffFull(connection, follow);
       }
     } catch (e) {
-      developer.log(
-        'manifest fetch failed for ${follow.pubkey}: $e',
-        name: 'sync_engine',
-      );
+      _log('manifest fetch failed for ${follow.pubkey}: $e');
       _reachability.markUnreachable(follow.pubkey, connection.transport, e);
       return PeerSyncReport(
         pubkey: follow.pubkey,
@@ -242,11 +245,10 @@ class SyncEngine {
         error: e.toString(),
       );
     }
-    developer.log(
+    _log(
       'manifest diff for ${follow.pubkey}: peerEvents=${diff.peerEvents.length} '
       'missing=${diff.missingIds.length} windowSince=${diff.windowSince} '
       'newFeedKey=${diff.newFeedKey != null}',
-      name: 'sync_engine',
     );
 
     // Plan 13: if the peer rotated, apply the new feed key BEFORE we try
@@ -317,10 +319,7 @@ class SyncEngine {
         since: diff.windowSince,
       );
     } catch (e) {
-      developer.log(
-        'envelope fetch failed for ${follow.pubkey}: $e',
-        name: 'sync_engine',
-      );
+      _log('envelope fetch failed for ${follow.pubkey}: $e');
       _reachability.markUnreachable(follow.pubkey, connection.transport, e);
       return PeerSyncReport(
         pubkey: follow.pubkey,
@@ -368,10 +367,9 @@ class SyncEngine {
         _clock.nowUnixSeconds(),
       );
     }
-    developer.log(
+    _log(
       'sync complete for ${follow.pubkey}: inserted=$inserted skipped=$skipped '
       'unknownPreserved=$unknownPreserved',
-      name: 'sync_engine',
     );
 
     final drain = await _drainOutbound(currentFollow, connection);
@@ -396,8 +394,10 @@ class SyncEngine {
   Future<void> _advanceCursor(Follow follow, ManifestDiff diff) async {
     final maxAt = diff.maxCreatedAt;
     if (maxAt == null) return;
-    final clamped =
-        math.min(maxAt, _clock.nowUnixSeconds() + kMaxCursorSkewSecs);
+    final clamped = math.min(
+      maxAt,
+      _clock.nowUnixSeconds() + kMaxCursorSkewSecs,
+    );
     if (clamped > follow.lastSyncedAt) {
       await _storage.updateLastSynced(follow.pubkey, clamped);
     }
@@ -673,7 +673,8 @@ class SyncReport {
   final int finishedAt;
   final List<PeerSyncReport> peers;
 
-  bool get hadFailures => peers.any((p) => p.status == PeerSyncStatus.unreachable);
+  bool get hadFailures =>
+      peers.any((p) => p.status == PeerSyncStatus.unreachable);
   int get totalEventsFetched =>
       peers.fold(0, (sum, p) => sum + p.eventsFetched);
 }

@@ -48,13 +48,13 @@ class RelayPushCoordinator {
     required Future<Uint8List?> Function() ownSecretKeyLookup,
     required Future<Uint8List?> Function(String hash) mediaBytesLookup,
     Duration timeout = const Duration(seconds: 30),
-  })  : _push = pushService,
-        _storage = storage,
-        _client = relayClient,
-        _identityLookup = identityLookup,
-        _ownSecretKeyLookup = ownSecretKeyLookup,
-        _mediaBytesLookup = mediaBytesLookup,
-        _timeout = timeout;
+  }) : _push = pushService,
+       _storage = storage,
+       _client = relayClient,
+       _identityLookup = identityLookup,
+       _ownSecretKeyLookup = ownSecretKeyLookup,
+       _mediaBytesLookup = mediaBytesLookup,
+       _timeout = timeout;
 
   final RelayPushService _push;
   final StorageService _storage;
@@ -78,10 +78,9 @@ class RelayPushCoordinator {
           ),
         ],
       );
-      final failures = await _pushMediaHashes(
-        {for (final m in signed.media) m.hash},
-        ctx,
-      );
+      final failures = await _pushMediaHashes({
+        for (final m in signed.media) m.hash,
+      }, ctx);
       developer.log(
         'relay push published ${signed.id} media=${signed.media.length} '
         'mediaFailures=$failures',
@@ -128,10 +127,12 @@ class RelayPushCoordinator {
       // verbatim).
       final payload = await _storage.getEncryptedPayload(e.id);
       if (payload == null) continue;
-      missingItems.add(RelayPushItem(
-        id: e.id,
-        encryptedEvent: EncryptedEvent.fromBytes(payload),
-      ));
+      missingItems.add(
+        RelayPushItem(
+          id: e.id,
+          encryptedEvent: EncryptedEvent.fromBytes(payload),
+        ),
+      );
     }
     if (missingItems.isNotEmpty) {
       await _pushEventsChunked(missingItems, ctx);
@@ -151,8 +152,10 @@ class RelayPushCoordinator {
         for (final m in e.media)
           if (m.hash.isNotEmpty) m.hash,
     };
-    final failures =
-        await _pushMediaHashes(expected.difference(relayHashes), ctx);
+    final failures = await _pushMediaHashes(
+      expected.difference(relayHashes),
+      ctx,
+    );
     return failures == 0;
   }
 
@@ -220,14 +223,16 @@ class RelayPushCoordinator {
       final identity = await _identityLookup();
       final secretKey = await _ownSecretKeyLookup();
       if (identity == null || secretKey == null) return;
-      await body(_RelayCtx(
-        relayId: relay.relayId,
-        baseUrl: httpBaseUrlForAddress(relay.relayOnion),
-        pubkey: identity.pubkey,
-        pubkeyBytes: decodeStoredPubkey(identity.pubkey),
-        secretKey: secretKey,
-        backfillComplete: relay.backfillComplete,
-      ));
+      await body(
+        _RelayCtx(
+          relayId: relay.relayId,
+          baseUrl: httpBaseUrlForAddress(relay.relayOnion),
+          pubkey: identity.pubkey,
+          pubkeyBytes: decodeStoredPubkey(identity.pubkey),
+          secretKey: secretKey,
+          backfillComplete: relay.backfillComplete,
+        ),
+      );
     } catch (e) {
       developer.log('relay push skipped: $e', name: 'relay_push');
     }
@@ -245,8 +250,9 @@ class RelayPushCoordinator {
         if (until != null) 'until': until.toString(),
         if (until != null && untilId != null) 'until_id': untilId,
       };
-      final uri = Uri.parse('$baseUrl/manifest')
-          .replace(queryParameters: query.isEmpty ? null : query);
+      final uri = Uri.parse(
+        '$baseUrl/manifest',
+      ).replace(queryParameters: query.isEmpty ? null : query);
       final List<dynamic> events;
       final bool hasOlder;
       try {

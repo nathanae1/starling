@@ -14,7 +14,7 @@ import 'ffi_bindings.dart';
 /// isolate via `Isolate.run`, keeping the Dart UI thread responsive.
 class ArtiTorService implements TorService {
   ArtiTorService({ArtiBindings? bindings})
-      : _bindings = bindings ?? ArtiBindings.load();
+    : _bindings = bindings ?? ArtiBindings.load();
 
   final ArtiBindings _bindings;
   Pointer<Void>? _handle;
@@ -31,8 +31,7 @@ class ArtiTorService implements TorService {
     int bootstrapMode = TorBootstrapMode.full,
   }) async {
     if (_handle != null) return;
-    final (handleAddr, errorMessage) =
-        await Isolate.run<(int, String?)>(
+    final (handleAddr, errorMessage) = await Isolate.run<(int, String?)>(
       () => _initInIsolate(dataDir, bootstrapMode),
     );
     if (handleAddr == 0) {
@@ -78,8 +77,7 @@ class ArtiTorService implements TorService {
       throw const TorServiceException('init() must be called first');
     }
     final handleAddr = handle.address;
-    final (address, errorMessage) =
-        await Isolate.run<(String?, String?)>(
+    final (address, errorMessage) = await Isolate.run<(String?, String?)>(
       () => _createOnionInIsolate(handleAddr, localPort),
     );
     if (address == null) {

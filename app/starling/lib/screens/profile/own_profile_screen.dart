@@ -11,6 +11,7 @@ import '../../providers/own_profile_provider.dart';
 import '../../theme/starling_theme.dart';
 import '../../widgets/avatar.dart';
 import '../../widgets/buttons.dart';
+import '../../widgets/encrypted_avatar.dart';
 import '../../widgets/encrypted_image.dart';
 import '../../widgets/starling_address_row.dart';
 import '../../widgets/qr_invite_sheet.dart';
@@ -39,11 +40,13 @@ class OwnProfileScreen extends ConsumerWidget {
             SliverToBoxAdapter(
               child: profileAsync.when(
                 data: (profile) {
-                  final pubkey =
-                      ref.watch(identityControllerProvider).value?.pubkey;
+                  final pubkey = ref
+                      .watch(identityControllerProvider)
+                      .value
+                      ?.pubkey;
                   return _IdentityBlock(profile: profile, pubkey: pubkey);
                 },
-                loading: () => const SizedBox(height: 200),
+                loading: () => const _IdentityBlockSkeleton(),
                 error: (e, _) => _ErrorBlock(message: '$e'),
               ),
             ),
@@ -67,9 +70,8 @@ class OwnProfileScreen extends ConsumerWidget {
                   child: Center(child: CircularProgressIndicator()),
                 ),
               ),
-              error: (e, _) => SliverToBoxAdapter(
-                child: _ErrorBlock(message: '$e'),
-              ),
+              error: (e, _) =>
+                  SliverToBoxAdapter(child: _ErrorBlock(message: '$e')),
             ),
           ],
         ),
@@ -89,12 +91,15 @@ class _Header extends StatelessWidget {
           Expanded(
             child: Text(
               'You',
-              style: starling.typography.h2
-                  .copyWith(fontSize: 22, fontWeight: FontWeight.w500),
+              style: starling.typography.h2.copyWith(
+                fontSize: 22,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
           StarlingIconButton(
             onPressed: () => context.push('/settings'),
+            semanticLabel: 'Settings',
             child: const Icon(LucideIcons.settings, size: 20),
           ),
         ],
@@ -116,16 +121,21 @@ class _IdentityBlock extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
       child: Column(
         children: [
-          Avatar(
+          EncryptedAvatar(
             name: profile.displayName,
+            pubkey: pubkey ?? '',
+            avatarHash: profile.avatarHash,
+            avatarMsgSeq: profile.avatarMsgSeq,
             color: starling.colors.clay,
             size: AvatarSize.lg,
           ),
           const SizedBox(height: 14),
           Text(
             profile.displayName,
-            style: starling.typography.h2
-                .copyWith(fontSize: 24, letterSpacing: -0.24),
+            style: starling.typography.h2.copyWith(
+              fontSize: 24,
+              letterSpacing: -0.24,
+            ),
             textAlign: TextAlign.center,
           ),
           if (pubkey != null) ...[
@@ -158,12 +168,52 @@ class _IdentityBlock extends StatelessWidget {
               const SizedBox(width: 12),
               SecondaryButton(
                 label: 'Edit',
-                leading:
-                    const Icon(LucideIcons.pencil, size: 16),
+                leading: const Icon(LucideIcons.pencil, size: 16),
                 onPressed: () => context.push('/profile/edit'),
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Muted placeholder shown while the profile snapshot loads, so the identity
+/// area holds its shape with a skeleton instead of a blank gap.
+class _IdentityBlockSkeleton extends StatelessWidget {
+  const _IdentityBlockSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final starling = StarlingTheme.of(context);
+    final muted = starling.colors.hairline;
+    Widget bar(double width, double height) => Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: muted,
+        borderRadius: BorderRadius.circular(height / 2),
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+      child: Column(
+        children: [
+          // lg avatar diameter.
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(color: muted, shape: BoxShape.circle),
+          ),
+          const SizedBox(height: 14),
+          bar(150, 20), // name
+          const SizedBox(height: 10),
+          bar(180, 13), // address
+          const SizedBox(height: 10),
+          bar(160, 13), // bio
+          const SizedBox(height: 18),
+          bar(220, 36), // action row
         ],
       ),
     );
@@ -241,24 +291,20 @@ class _PostGrid extends StatelessWidget {
           crossAxisSpacing: 3,
           childAspectRatio: 1,
         ),
-        delegate: SliverChildBuilderDelegate(
-          (context, index) {
-            final event = events[index];
-            final hash =
-                event.media.isNotEmpty ? event.media.first.hash : null;
-            return GestureDetector(
-              onTap: () => context.push('$routePrefix/post/${event.id}'),
-              child: hash == null
-                  ? const ColoredBox(color: Colors.transparent)
-                  : EncryptedImage(
-                      hash: hash,
-                      pubkey: event.pubkey,
-                      msgSeq: event.msgSeq,
-                    ),
-            );
-          },
-          childCount: events.length,
-        ),
+        delegate: SliverChildBuilderDelegate((context, index) {
+          final event = events[index];
+          final hash = event.media.isNotEmpty ? event.media.first.hash : null;
+          return GestureDetector(
+            onTap: () => context.push('$routePrefix/post/${event.id}'),
+            child: hash == null
+                ? const ColoredBox(color: Colors.transparent)
+                : EncryptedImage(
+                    hash: hash,
+                    pubkey: event.pubkey,
+                    msgSeq: event.msgSeq,
+                  ),
+          );
+        }, childCount: events.length),
       ),
     );
   }
@@ -276,7 +322,9 @@ class _ErrorBlock extends StatelessWidget {
       child: Text(
         message,
         textAlign: TextAlign.center,
-        style: starling.typography.small.copyWith(color: starling.colors.danger),
+        style: starling.typography.small.copyWith(
+          color: starling.colors.danger,
+        ),
       ),
     );
   }

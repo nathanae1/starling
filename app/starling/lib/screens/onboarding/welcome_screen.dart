@@ -41,7 +41,9 @@ class WelcomeScreen extends StatelessWidget {
                   const SizedBox(width: 10),
                   Text(
                     'Starling',
-                    style: starling.typography.h2.copyWith(fontWeight: FontWeight.w500),
+                    style: starling.typography.h2.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ],
               ),
@@ -67,7 +69,9 @@ class WelcomeScreen extends StatelessWidget {
                 constraints: const BoxConstraints(maxWidth: 320),
                 child: Text(
                   "No ads. No algorithm. You own everything. Your posts live on your phone, not a company's server.",
-                  style: starling.typography.body.copyWith(color: starling.colors.graphite),
+                  style: starling.typography.body.copyWith(
+                    color: starling.colors.graphite,
+                  ),
                 ),
               ),
               const SizedBox(height: 36),
@@ -82,11 +86,16 @@ class WelcomeScreen extends StatelessWidget {
                   onPressed: () => context.go('/onboarding/restore'),
                   style: TextButton.styleFrom(
                     foregroundColor: starling.colors.sageDeep,
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
                   ),
                   child: RichText(
                     text: TextSpan(
-                      style: starling.typography.caption.copyWith(color: starling.colors.stone),
+                      style: starling.typography.caption.copyWith(
+                        color: starling.colors.stone,
+                      ),
                       children: [
                         const TextSpan(text: 'Already have an account? '),
                         TextSpan(

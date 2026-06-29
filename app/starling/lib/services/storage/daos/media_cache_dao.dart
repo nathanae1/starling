@@ -10,14 +10,14 @@ class MediaCacheDao extends DatabaseAccessor<AppDatabase>
     with _$MediaCacheDaoMixin {
   MediaCacheDao(super.db);
 
-  Future<MediaCacheEntry?> getMedia(String hash) =>
-      (select(mediaCacheEntries)..where((m) => m.hash.equals(hash)))
-          .getSingleOrNull();
+  Future<MediaCacheEntry?> getMedia(String hash) => (select(
+    mediaCacheEntries,
+  )..where((m) => m.hash.equals(hash))).getSingleOrNull();
 
   Future<List<String>> getAllHashes() async {
-    final rows = await (selectOnly(mediaCacheEntries)
-          ..addColumns([mediaCacheEntries.hash]))
-        .get();
+    final rows = await (selectOnly(
+      mediaCacheEntries,
+    )..addColumns([mediaCacheEntries.hash])).get();
     return [for (final r in rows) r.read(mediaCacheEntries.hash)!];
   }
 
@@ -38,15 +38,15 @@ class MediaCacheDao extends DatabaseAccessor<AppDatabase>
     var totalSize = await getTotalSize();
     if (totalSize <= targetSize) return;
 
-    final oldest = await (select(mediaCacheEntries)
-          ..orderBy([(m) => OrderingTerm.asc(m.lastAccessed)]))
-        .get();
+    final oldest = await (select(
+      mediaCacheEntries,
+    )..orderBy([(m) => OrderingTerm.asc(m.lastAccessed)])).get();
 
     for (final entry in oldest) {
       if (totalSize <= targetSize) break;
-      await (delete(mediaCacheEntries)
-            ..where((m) => m.hash.equals(entry.hash)))
-          .go();
+      await (delete(
+        mediaCacheEntries,
+      )..where((m) => m.hash.equals(entry.hash))).go();
       totalSize -= entry.size;
     }
   }
@@ -55,16 +55,16 @@ class MediaCacheDao extends DatabaseAccessor<AppDatabase>
     var totalSize = await getTotalSize();
     if (totalSize <= maxBytes) return 0;
 
-    final oldest = await (select(mediaCacheEntries)
-          ..orderBy([(m) => OrderingTerm.asc(m.lastAccessed)]))
-        .get();
+    final oldest = await (select(
+      mediaCacheEntries,
+    )..orderBy([(m) => OrderingTerm.asc(m.lastAccessed)])).get();
 
     var evicted = 0;
     for (final entry in oldest) {
       if (totalSize <= maxBytes) break;
-      await (delete(mediaCacheEntries)
-            ..where((m) => m.hash.equals(entry.hash)))
-          .go();
+      await (delete(
+        mediaCacheEntries,
+      )..where((m) => m.hash.equals(entry.hash))).go();
       totalSize -= entry.size;
       evicted++;
     }
@@ -79,9 +79,9 @@ class MediaCacheDao extends DatabaseAccessor<AppDatabase>
     int maxBytes,
     Set<String> pinned,
   ) async {
-    final all = await (select(mediaCacheEntries)
-          ..orderBy([(m) => OrderingTerm.asc(m.lastAccessed)]))
-        .get();
+    final all = await (select(
+      mediaCacheEntries,
+    )..orderBy([(m) => OrderingTerm.asc(m.lastAccessed)])).get();
 
     var totalSize = 0;
     for (final e in all) {
@@ -93,9 +93,9 @@ class MediaCacheDao extends DatabaseAccessor<AppDatabase>
     for (final entry in all) {
       if (totalSize <= maxBytes) break;
       if (pinned.contains(entry.hash)) continue;
-      await (delete(mediaCacheEntries)
-            ..where((m) => m.hash.equals(entry.hash)))
-          .go();
+      await (delete(
+        mediaCacheEntries,
+      )..where((m) => m.hash.equals(entry.hash))).go();
       totalSize -= entry.size;
       removed.add(entry);
     }
@@ -109,9 +109,9 @@ class MediaCacheDao extends DatabaseAccessor<AppDatabase>
     final removed = <MediaCacheEntry>[];
     for (final entry in all) {
       if (pinned.contains(entry.hash)) continue;
-      await (delete(mediaCacheEntries)
-            ..where((m) => m.hash.equals(entry.hash)))
-          .go();
+      await (delete(
+        mediaCacheEntries,
+      )..where((m) => m.hash.equals(entry.hash))).go();
       removed.add(entry);
     }
     return removed;
@@ -120,9 +120,9 @@ class MediaCacheDao extends DatabaseAccessor<AppDatabase>
   /// SUM(size) over rows whose hash is in [hashes]. 0 if [hashes] is empty.
   Future<int> getTotalSizeForHashes(Set<String> hashes) async {
     if (hashes.isEmpty) return 0;
-    final rows = await (select(mediaCacheEntries)
-          ..where((m) => m.hash.isIn(hashes)))
-        .get();
+    final rows = await (select(
+      mediaCacheEntries,
+    )..where((m) => m.hash.isIn(hashes))).get();
     var total = 0;
     for (final r in rows) {
       total += r.size;

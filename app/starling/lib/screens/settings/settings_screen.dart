@@ -22,12 +22,15 @@ class SettingsScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
               decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: starling.colors.hairline)),
+                border: Border(
+                  bottom: BorderSide(color: starling.colors.hairline),
+                ),
               ),
               child: Row(
                 children: [
                   StarlingIconButton(
                     onPressed: () => context.pop(),
+                    semanticLabel: 'Back',
                     child: const Icon(LucideIcons.arrowLeft, size: 20),
                   ),
                   Expanded(
@@ -47,6 +50,7 @@ class SettingsScreen extends StatelessWidget {
             Expanded(
               child: ListView(
                 children: [
+                  const _SectionHeader('Network'),
                   _SettingsRow(
                     icon: LucideIcons.globe,
                     label: 'Network',
@@ -54,17 +58,19 @@ class SettingsScreen extends StatelessWidget {
                     onTap: () => context.push('/settings/network'),
                   ),
                   _SettingsRow(
-                    icon: LucideIcons.hardDrive,
-                    label: 'Storage',
-                    detail: 'Cache size, clear cache, export',
-                    onTap: () => context.push('/settings/storage'),
-                  ),
-                  _SettingsRow(
                     icon: LucideIcons.radio,
                     label: 'Connection',
                     detail: 'Per-friend LAN and Tor reachability',
                     onTap: () => context.push('/settings/connection'),
                   ),
+                  const _SectionHeader('Device'),
+                  _SettingsRow(
+                    icon: LucideIcons.hardDrive,
+                    label: 'Storage',
+                    detail: 'Cache size, clear cache, export',
+                    onTap: () => context.push('/settings/storage'),
+                  ),
+                  const _SectionHeader('Calls'),
                   _SettingsRow(
                     icon: LucideIcons.phone,
                     label: 'Voice',
@@ -75,6 +81,29 @@ class SettingsScreen extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A grouped-list section label. Gives the otherwise-identical settings
+/// rows visual hierarchy ("Network", "Device", "Calls").
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final starling = StarlingTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+      child: Text(
+        label.toUpperCase(),
+        style: starling.typography.micro.copyWith(
+          color: starling.colors.stone,
+          letterSpacing: 0.8,
         ),
       ),
     );
@@ -102,8 +131,7 @@ class _SettingsRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         decoration: BoxDecoration(
-          border:
-              Border(bottom: BorderSide(color: starling.colors.hairline)),
+          border: Border(bottom: BorderSide(color: starling.colors.hairline)),
         ),
         child: Row(
           children: [

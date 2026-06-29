@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../providers/search_provider.dart';
+import '../../providers/sync_provider.dart';
 import '../../providers/sync_status_provider.dart';
 import '../../theme/starling_theme.dart';
 import '../../widgets/buttons.dart';
@@ -53,6 +56,16 @@ class _FeedSyncSearchBarState extends ConsumerState<FeedSyncSearchBar> {
     _focus.unfocus();
   }
 
+  /// Offline status is tappable — kick a fresh sync pass. Errors surface
+  /// through `syncStatusProvider`, so we swallow them here.
+  Future<void> _retrySync() async {
+    try {
+      await ref.read(syncControllerProvider.notifier).syncNow();
+    } catch (_) {
+      // Surfaced via the status row itself.
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
@@ -63,29 +76,73 @@ class _FeedSyncSearchBarState extends ConsumerState<FeedSyncSearchBar> {
         border: Border(bottom: BorderSide(color: starling.colors.hairline)),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: _searching ? _buildSearchRow(starling) : _buildSyncRow(starling),
+      // Soft cross-fade between the two modes instead of an abrupt swap.
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 180),
+        child: _searching
+            ? KeyedSubtree(
+                key: const ValueKey('search'),
+                child: _buildSearchRow(starling),
+              )
+            : KeyedSubtree(
+                key: const ValueKey('sync'),
+                child: _buildSyncRow(starling),
+              ),
+      ),
     );
   }
 
   Widget _buildSyncRow(StarlingTheme starling) {
     final status = ref.watch(syncStatusProvider);
-    return Row(
+    final isOffline = status.state == SyncState.offline;
+
+    final statusRow = Row(
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
           child: SyncDot(state: status.state),
         ),
         const SizedBox(width: 10),
-        Expanded(
+        Flexible(
           child: Text(
             _statusLabel(status),
-            style: starling.typography.small.copyWith(color: starling.colors.graphite),
+            style: starling.typography.small.copyWith(
+              color: starling.colors.graphite,
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
         ),
+        if (isOffline) ...[
+          const SizedBox(width: 8),
+          StarlingIcon(
+            LucideIcons.refreshCw,
+            size: 14,
+            color: starling.colors.sageDeep,
+          ),
+        ],
+      ],
+    );
+
+    return Row(
+      children: [
+        Expanded(
+          child: isOffline
+              ? Semantics(
+                  button: true,
+                  label: 'Offline. Tap to retry sync.',
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => unawaited(_retrySync()),
+                    child: statusRow,
+                  ),
+                )
+              : statusRow,
+        ),
         StarlingIconButton(
           onPressed: _enterSearch,
+          semanticLabel: 'Search',
+          tooltip: 'Search',
           child: const Icon(LucideIcons.search, size: 18),
         ),
       ],
@@ -114,8 +171,9 @@ class _FeedSyncSearchBarState extends ConsumerState<FeedSyncSearchBar> {
               border: InputBorder.none,
               isCollapsed: true,
               hintText: 'Search posts and friends',
-              hintStyle:
-                  starling.typography.small.copyWith(color: starling.colors.stone),
+              hintStyle: starling.typography.small.copyWith(
+                color: starling.colors.stone,
+              ),
             ),
             style: starling.typography.body,
             cursorColor: starling.colors.sage,
@@ -130,18 +188,21 @@ class _FeedSyncSearchBarState extends ConsumerState<FeedSyncSearchBar> {
     switch (status.state) {
       case SyncState.synced:
         if (status.lastSyncedAtSeconds == null) {
-          return status.reachableFriends > 0
-              ? '${status.reachableFriends} friends reachable'
-              : 'Up to date';
+          if (status.reachableFriends > 0) {
+            // Render reachability as a fraction (e.g. "3/5 friends reachable")
+            // so the count has context. `totalFriends` is always >= reachable.
+            final total = status.totalFriends >= status.reachableFriends
+                ? status.totalFriends
+                : status.reachableFriends;
+            return '${status.reachableFriends}/$total friends reachable';
+          }
+          return 'Up to date';
         }
         return 'Last synced just now';
       case SyncState.syncing:
         return 'Syncing…';
-      case SyncState.waiting:
-        final name = status.waitingForName ?? 'a friend';
-        return "Waiting for $name's device…";
       case SyncState.offline:
-        return 'Offline — posts will sync when online.';
+        return 'Offline — tap to retry';
     }
   }
 }

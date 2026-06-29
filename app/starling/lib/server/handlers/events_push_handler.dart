@@ -90,10 +90,7 @@ Future<void> ingestPushedEnvelope({
       await storage.saveEvent(plain);
       accepted++;
     } catch (e) {
-      developer.log(
-        'rejected pushed event: $e',
-        name: 'events_push_handler',
-      );
+      developer.log('rejected pushed event: $e', name: 'events_push_handler');
       rejected++;
     }
   }

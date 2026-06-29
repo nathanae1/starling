@@ -39,14 +39,13 @@ class VoiceParticipant {
     bool? isMuted,
     bool? isSpeaking,
     ParticipantConnectionState? connectionState,
-  }) =>
-      VoiceParticipant(
-        pubkey: pubkey,
-        displayName: displayName ?? this.displayName,
-        isMuted: isMuted ?? this.isMuted,
-        isSpeaking: isSpeaking ?? this.isSpeaking,
-        connectionState: connectionState ?? this.connectionState,
-      );
+  }) => VoiceParticipant(
+    pubkey: pubkey,
+    displayName: displayName ?? this.displayName,
+    isMuted: isMuted ?? this.isMuted,
+    isSpeaking: isSpeaking ?? this.isSpeaking,
+    connectionState: connectionState ?? this.connectionState,
+  );
 }
 
 class VoiceRoom {
@@ -76,16 +75,15 @@ class VoiceRoom {
     List<String>? invitedPubkeys,
     int? endedAt,
     bool clearEndedAt = false,
-  }) =>
-      VoiceRoom(
-        id: id,
-        name: name ?? this.name,
-        creatorPubkey: creatorPubkey,
-        createdAt: createdAt,
-        participants: participants ?? this.participants,
-        invitedPubkeys: invitedPubkeys ?? this.invitedPubkeys,
-        endedAt: clearEndedAt ? null : (endedAt ?? this.endedAt),
-      );
+  }) => VoiceRoom(
+    id: id,
+    name: name ?? this.name,
+    creatorPubkey: creatorPubkey,
+    createdAt: createdAt,
+    participants: participants ?? this.participants,
+    invitedPubkeys: invitedPubkeys ?? this.invitedPubkeys,
+    endedAt: clearEndedAt ? null : (endedAt ?? this.endedAt),
+  );
 }
 
 /// The live state of the room the local user is in (or null when idle).
@@ -104,10 +102,9 @@ class VoiceRoomState {
     VoiceRoom? room,
     bool? localMuted,
     bool? speakerMode,
-  }) =>
-      VoiceRoomState(
-        room: room ?? this.room,
-        localMuted: localMuted ?? this.localMuted,
-        speakerMode: speakerMode ?? this.speakerMode,
-      );
+  }) => VoiceRoomState(
+    room: room ?? this.room,
+    localMuted: localMuted ?? this.localMuted,
+    speakerMode: speakerMode ?? this.speakerMode,
+  );
 }

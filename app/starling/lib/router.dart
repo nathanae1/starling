@@ -13,7 +13,7 @@ import 'screens/onboarding/recovery_phrase_screen.dart';
 import 'screens/onboarding/restore_screen.dart';
 import 'screens/onboarding/setup_screen.dart';
 import 'screens/onboarding/welcome_screen.dart';
-import 'screens/placeholder_screen.dart';
+import 'screens/profile/edit_profile_screen.dart';
 import 'screens/profile/other_profile_screen.dart';
 import 'screens/profile/own_profile_screen.dart';
 import 'screens/settings/connection_settings_screen.dart';
@@ -29,6 +29,7 @@ import 'shell/app_shell.dart';
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _feedNavigatorKey = GlobalKey<NavigatorState>();
 final _friendsNavigatorKey = GlobalKey<NavigatorState>();
+final _roomsNavigatorKey = GlobalKey<NavigatorState>();
 final _youNavigatorKey = GlobalKey<NavigatorState>();
 
 GoRouter buildRouter(Ref ref) {
@@ -80,16 +81,13 @@ GoRouter buildRouter(Ref ref) {
       GoRoute(
         path: '/compose',
         parentNavigatorKey: _rootNavigatorKey,
-        pageBuilder: (_, _) => const MaterialPage(
-          fullscreenDialog: true,
-          child: ComposeScreen(),
-        ),
+        pageBuilder: (_, _) =>
+            const MaterialPage(fullscreenDialog: true, child: ComposeScreen()),
         routes: [
           GoRoute(
             path: 'preview',
             parentNavigatorKey: _rootNavigatorKey,
-            pageBuilder: (_, _) =>
-                const MaterialPage(child: PreviewScreen()),
+            pageBuilder: (_, _) => const MaterialPage(child: PreviewScreen()),
           ),
         ],
       ),
@@ -118,60 +116,26 @@ GoRouter buildRouter(Ref ref) {
         ],
       ),
 
-      // Plan 15 (or sooner) replaces /profile/edit with the profile editor.
-      // /invite was removed in Plan 08 — share-invite opens QrInviteSheet
-      // directly instead.
+      // Profile editor (root-level push, dismissed with back). /invite was
+      // removed in Plan 08 — share-invite opens QrInviteSheet directly.
       GoRoute(
         path: '/profile/edit',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (_, _) => const PlaceholderScreen(
-          title: 'Edit profile',
-          planHint: 'Plan 15 fills this in.',
-        ),
-      ),
-
-      // Plan 16 — voice rooms (root-level, over the shell).
-      GoRoute(
-        path: '/voice',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (_, _) => const RoomListScreen(),
-        routes: [
-          GoRoute(
-            path: 'create',
-            parentNavigatorKey: _rootNavigatorKey,
-            builder: (_, _) => const CreateRoomScreen(),
-          ),
-          GoRoute(
-            path: 'room',
-            parentNavigatorKey: _rootNavigatorKey,
-            pageBuilder: (_, _) => const MaterialPage(
-              fullscreenDialog: true,
-              child: ActiveRoomScreen(),
-            ),
-          ),
-          GoRoute(
-            path: 'settings',
-            parentNavigatorKey: _rootNavigatorKey,
-            builder: (_, _) => const VoiceSettingsScreen(),
-          ),
-        ],
+        builder: (_, _) => const EditProfileScreen(),
       ),
 
       // Plan 08 — fullscreen scan (modal over the Friends tab).
       GoRoute(
         path: '/friends/scan',
         parentNavigatorKey: _rootNavigatorKey,
-        pageBuilder: (_, _) => const MaterialPage(
-          fullscreenDialog: true,
-          child: ScanScreen(),
-        ),
+        pageBuilder: (_, _) =>
+            const MaterialPage(fullscreenDialog: true, child: ScanScreen()),
       ),
       GoRoute(
         path: '/friends/profile/:pubkey',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (_, state) => OtherProfileScreen(
-          pubkey: state.pathParameters['pubkey']!,
-        ),
+        builder: (_, state) =>
+            OtherProfileScreen(pubkey: state.pathParameters['pubkey']!),
       ),
 
       // Tab shell
@@ -188,9 +152,8 @@ GoRouter buildRouter(Ref ref) {
                 routes: [
                   GoRoute(
                     path: 'post/:id',
-                    builder: (_, state) => PostDetailScreen(
-                      eventId: state.pathParameters['id']!,
-                    ),
+                    builder: (_, state) =>
+                        PostDetailScreen(eventId: state.pathParameters['id']!),
                   ),
                   GoRoute(
                     path: 'profile/:pubkey',
@@ -211,6 +174,36 @@ GoRouter buildRouter(Ref ref) {
               ),
             ],
           ),
+          // Plan 16 — voice rooms, promoted to a top-level tab. The active-call
+          // screen stays pinned to the root navigator so it covers the tab bar
+          // and CallOverlay can re-enter it from anywhere.
+          StatefulShellBranch(
+            navigatorKey: _roomsNavigatorKey,
+            routes: [
+              GoRoute(
+                path: '/voice',
+                builder: (_, _) => const RoomListScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'create',
+                    builder: (_, _) => const CreateRoomScreen(),
+                  ),
+                  GoRoute(
+                    path: 'room',
+                    parentNavigatorKey: _rootNavigatorKey,
+                    pageBuilder: (_, _) => const MaterialPage(
+                      fullscreenDialog: true,
+                      child: ActiveRoomScreen(),
+                    ),
+                  ),
+                  GoRoute(
+                    path: 'settings',
+                    builder: (_, _) => const VoiceSettingsScreen(),
+                  ),
+                ],
+              ),
+            ],
+          ),
           StatefulShellBranch(
             navigatorKey: _youNavigatorKey,
             routes: [
@@ -220,9 +213,8 @@ GoRouter buildRouter(Ref ref) {
                 routes: [
                   GoRoute(
                     path: 'post/:id',
-                    builder: (_, state) => PostDetailScreen(
-                      eventId: state.pathParameters['id']!,
-                    ),
+                    builder: (_, state) =>
+                        PostDetailScreen(eventId: state.pathParameters['id']!),
                   ),
                 ],
               ),

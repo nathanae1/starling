@@ -9,8 +9,7 @@ class VoiceRoomEntries extends Table {
   TextColumn get creatorPubkey => text()();
   IntColumn get createdAt => integer()();
   IntColumn get endedAt => integer().nullable()();
-  IntColumn get participantCount =>
-      integer().withDefault(const Constant(1))();
+  IntColumn get participantCount => integer().withDefault(const Constant(1))();
 
   @override
   Set<Column> get primaryKey => {id};

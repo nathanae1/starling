@@ -47,11 +47,11 @@ class MockTorService implements TorService {
 
   @override
   TorStatus getStatus() => TorStatus(
-        bootstrapPercent: _isReady ? 100 : 0,
-        circuitCount: _isReady ? 3 : 0,
-        isReady: _isReady,
-        onionAddress: _onionAddress,
-      );
+    bootstrapPercent: _isReady ? 100 : 0,
+    circuitCount: _isReady ? 3 : 0,
+    isReady: _isReady,
+    onionAddress: _onionAddress,
+  );
 
   @override
   Future<void> shutdown() async {

@@ -8,7 +8,13 @@ import '../../models/voice_room.dart';
 import '../../providers/identity_provider.dart';
 import '../../providers/voice_provider.dart';
 import '../../theme/starling_theme.dart';
+import '../../widgets/starling_alert_dialog.dart';
 import '../../widgets/voice/participant_avatar.dart';
+
+/// Off-white foreground for the dark (ink) in-call surface. Established on-dark
+/// text/icon color used across the app — intentionally a fixed value (the
+/// theme is light-only), not a newly introduced hex.
+const Color _onInk = Color(0xFFFDFBF5);
 
 class ActiveRoomScreen extends ConsumerStatefulWidget {
   const ActiveRoomScreen({super.key});
@@ -37,10 +43,23 @@ class _ActiveRoomScreenState extends ConsumerState<ActiveRoomScreen> {
 
   Future<void> _leave(VoiceRoom room, String? myPubkey) async {
     if (_leaving) return;
+    final isCreator = myPubkey != null && myPubkey == room.creatorPubkey;
+    // Confirm first so an accidental tap doesn't silently drop the call.
+    final confirmed = await showStarlingConfirm(
+      context,
+      title: 'Leave call?',
+      message: isCreator
+          ? 'You started this call. Leaving will end it for everyone.'
+          : 'You will be disconnected from this call.',
+      confirmLabel: 'Leave',
+      destructive: true,
+    );
+    if (!confirmed || _leaving) return;
+    if (!mounted) return;
     _leaving = true;
     final manager = ref.read(roomManagerProvider);
     final navigator = Navigator.of(context);
-    if (myPubkey != null && myPubkey == room.creatorPubkey) {
+    if (isCreator) {
       await manager.closeRoom();
     } else {
       await manager.leaveRoom();
@@ -65,9 +84,7 @@ class _ActiveRoomScreenState extends ConsumerState<ActiveRoomScreen> {
     if (state == null) {
       return Scaffold(
         backgroundColor: colors.ink,
-        body: const Center(
-          child: CircularProgressIndicator(color: Color(0xFFFDFBF5)),
-        ),
+        body: const Center(child: CircularProgressIndicator(color: _onInk)),
       );
     }
 
@@ -86,34 +103,51 @@ class _ActiveRoomScreenState extends ConsumerState<ActiveRoomScreen> {
                   Text(
                     room.name,
                     style: starling.typography.h2.copyWith(
-                      color: const Color(0xFFFDFBF5),
+                      color: _onInk,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     '${participants.length} in call',
-                    style: starling.typography.small
-                        .copyWith(color: colors.stone),
+                    style: starling.typography.small.copyWith(
+                      color: colors.stone,
+                    ),
                   ),
                 ],
               ),
             ),
             Expanded(
-              child: Center(
-                child: SingleChildScrollView(
+              // Center the avatars when there's room, but scroll once enough
+              // participants (6+) overflow a single screen so none get clipped
+              // or cramped. ConstrainedBox floors the content to the viewport
+              // height so Center can vertically center the short case.
+              child: LayoutBuilder(
+                builder: (context, constraints) => SingleChildScrollView(
                   padding: const EdgeInsets.all(24),
-                  child: Wrap(
-                    spacing: 28,
-                    runSpacing: 28,
-                    alignment: WrapAlignment.center,
-                    children: [
-                      for (final p in participants)
-                        ParticipantAvatar(
-                          participant: p,
-                          isYou: p.pubkey == myPubkey,
-                        ),
-                    ],
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: (constraints.maxHeight - 48).clamp(
+                        0.0,
+                        double.infinity,
+                      ),
+                    ),
+                    child: Center(
+                      child: Wrap(
+                        spacing: 28,
+                        runSpacing: 28,
+                        alignment: WrapAlignment.center,
+                        runAlignment: WrapAlignment.center,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          for (final p in participants)
+                            ParticipantAvatar(
+                              participant: p,
+                              isYou: p.pubkey == myPubkey,
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -157,23 +191,40 @@ class _Controls extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
+          // Labels announce the current STATE, not the action. "Live"
+          // (transmitting) is the active/positive state (sage); "Muted" is
+          // inactive (graphite circle, stone label).
           _CircleControl(
             icon: muted ? LucideIcons.micOff : LucideIcons.mic,
-            label: muted ? 'Unmute' : 'Mute',
-            active: muted,
+            label: muted ? 'Muted' : 'Live',
+            background: muted ? colors.graphite : colors.sage,
+            labelColor: muted ? colors.stone : colors.sage,
+            semanticLabel: muted
+                ? 'Microphone muted. Tap to unmute'
+                : 'Microphone live. Tap to mute',
+            tooltip: muted ? 'Unmute' : 'Mute',
             onTap: onMute,
           ),
           _CircleControl(
             icon: LucideIcons.phoneOff,
             label: 'Leave',
             background: colors.clay,
-            foreground: const Color(0xFFFDFBF5),
+            labelColor: colors.stone,
+            semanticLabel: 'Leave call',
+            tooltip: 'Leave call',
             onTap: onLeave,
           ),
+          // Audio routing (where call audio plays), not an output mute:
+          // speakerphone is the active route (sage), earpiece is inactive.
           _CircleControl(
-            icon: speaker ? LucideIcons.volume2 : LucideIcons.volumeX,
-            label: 'Speaker',
-            active: speaker,
+            icon: speaker ? LucideIcons.volume2 : LucideIcons.ear,
+            label: speaker ? 'Speakerphone' : 'Earpiece',
+            background: speaker ? colors.sage : colors.graphite,
+            labelColor: speaker ? colors.sage : colors.stone,
+            semanticLabel: speaker
+                ? 'Audio routing: speakerphone. Tap to use earpiece'
+                : 'Audio routing: earpiece. Tap to use speakerphone',
+            tooltip: speaker ? 'Speakerphone' : 'Earpiece',
             onTap: onSpeaker,
           ),
         ],
@@ -187,43 +238,61 @@ class _CircleControl extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
-    this.active = false,
-    this.background,
-    this.foreground,
+    required this.background,
+    required this.labelColor,
+    this.semanticLabel,
+    this.tooltip,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final bool active;
-  final Color? background;
-  final Color? foreground;
+  final Color background;
+  final Color labelColor;
+
+  /// Screen-reader label for this icon-only control. Falls back to [tooltip].
+  final String? semanticLabel;
+
+  /// Long-press / hover tooltip.
+  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
     final colors = starling.colors;
-    final bg = background ?? (active ? const Color(0xFFFDFBF5) : colors.graphite);
-    final fg = foreground ?? (active ? colors.ink : const Color(0xFFFDFBF5));
+    Widget circle = Material(
+      color: background,
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        // The default ripple is white and invisible on the dark in-call
+        // surface; use a translucent sage so taps give visible feedback.
+        splashColor: colors.sage.withValues(alpha: 0.35),
+        highlightColor: colors.sage.withValues(alpha: 0.15),
+        child: SizedBox(
+          width: 60,
+          height: 60,
+          child: Icon(icon, size: 24, color: _onInk),
+        ),
+      ),
+    );
+    if (tooltip != null) {
+      circle = Tooltip(message: tooltip!, child: circle);
+    }
+    final semantics = semanticLabel ?? tooltip;
+    if (semantics != null) {
+      circle = Semantics(button: true, label: semantics, child: circle);
+    }
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Material(
-          color: bg,
-          shape: const CircleBorder(),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: onTap,
-            child: SizedBox(
-              width: 60,
-              height: 60,
-              child: Icon(icon, size: 24, color: fg),
-            ),
-          ),
-        ),
+        circle,
         const SizedBox(height: 8),
-        Text(label,
-            style: starling.typography.micro.copyWith(color: colors.stone)),
+        Text(
+          label,
+          style: starling.typography.micro.copyWith(color: labelColor),
+        ),
       ],
     );
   }

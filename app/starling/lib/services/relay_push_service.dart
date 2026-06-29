@@ -31,9 +31,9 @@ class RelayPushService {
     required CryptoService crypto,
     required http.Client httpClient,
     Duration timeout = const Duration(seconds: 30),
-  })  : _crypto = crypto,
-        _http = httpClient,
-        _timeout = timeout;
+  }) : _crypto = crypto,
+       _http = httpClient,
+       _timeout = timeout;
 
   final CryptoService _crypto;
   final http.Client _http;
@@ -54,14 +54,18 @@ class RelayPushService {
     if (items.isEmpty) {
       return const RelayPushReceipt(accepted: 0, rejected: 0);
     }
-    final body = Uint8List.fromList(cbor.encode(<String, dynamic>{
-      'items': items
-          .map((i) => <String, dynamic>{
+    final body = Uint8List.fromList(
+      cbor.encode(<String, dynamic>{
+        'items': items
+            .map(
+              (i) => <String, dynamic>{
                 'id': i.id,
                 'payload': i.encryptedEvent.toBytes(),
-              })
-          .toList(),
-    }));
+              },
+            )
+            .toList(),
+      }),
+    );
     final headers = _signHeaders(
       body: body,
       ownerPubkeyBytes: ownerPubkeyBytes,
@@ -70,10 +74,7 @@ class RelayPushService {
     final res = await _http
         .post(
           Uri.parse('$relayBaseUrl/events'),
-          headers: {
-            ...headers,
-            'content-type': 'application/cbor',
-          },
+          headers: {...headers, 'content-type': 'application/cbor'},
           body: body,
         )
         .timeout(_timeout);
@@ -103,10 +104,7 @@ class RelayPushService {
     final res = await _http
         .post(
           Uri.parse('$relayBaseUrl/media/$hash'),
-          headers: {
-            ...headers,
-            'content-type': 'application/octet-stream',
-          },
+          headers: {...headers, 'content-type': 'application/octet-stream'},
           body: blob,
         )
         .timeout(_timeout);
@@ -132,8 +130,9 @@ class RelayPushService {
       ownerPubkeyBytes: ownerPubkeyBytes,
       ownerSecretKey: ownerSecretKey,
     );
-    final uri = Uri.parse('$relayBaseUrl/media-manifest')
-        .replace(queryParameters: after == null ? null : {'after': after});
+    final uri = Uri.parse(
+      '$relayBaseUrl/media-manifest',
+    ).replace(queryParameters: after == null ? null : {'after': after});
     final res = await _http.get(uri, headers: headers).timeout(_timeout);
     if (res.statusCode != 200) {
       throw RelayPushException(
@@ -187,10 +186,7 @@ class RelayPushService {
 }
 
 class RelayPushItem {
-  const RelayPushItem({
-    required this.id,
-    required this.encryptedEvent,
-  });
+  const RelayPushItem({required this.id, required this.encryptedEvent});
 
   /// Plaintext Event id (Crockford base32). Echoed by the Relay in
   /// `/manifest` responses.

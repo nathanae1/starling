@@ -30,10 +30,11 @@ Future<List<Event>> comments(Ref ref, String postId) async {
   // Filter out comments that have a kind=6 tombstone from the same author.
   final filtered = <Event>[];
   for (final comment in visible) {
-    final tombstones =
-        await storage.getEventsByRef(comment.id, kind: EventKind.delete);
-    final tombstoned =
-        tombstones.any((t) => t.pubkey == comment.pubkey);
+    final tombstones = await storage.getEventsByRef(
+      comment.id,
+      kind: EventKind.delete,
+    );
+    final tombstoned = tombstones.any((t) => t.pubkey == comment.pubkey);
     if (!tombstoned) filtered.add(comment);
   }
   return filtered;

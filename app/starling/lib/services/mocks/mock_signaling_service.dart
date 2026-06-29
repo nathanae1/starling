@@ -62,9 +62,7 @@ class MockSignalingService implements SignalingService {
   }
 
   @override
-  void onInboundConnection(
-    void Function(SignalingChannel channel) handler,
-  ) {
+  void onInboundConnection(void Function(SignalingChannel channel) handler) {
     _inboundHandler = handler;
   }
 
@@ -95,10 +93,7 @@ class MockSignalingService implements SignalingService {
 
 /// In-memory signaling channel for testing.
 class MockSignalingChannel implements SignalingChannel {
-  MockSignalingChannel({
-    required this.remotePubkey,
-    required this.transport,
-  });
+  MockSignalingChannel({required this.remotePubkey, required this.transport});
 
   @override
   final String remotePubkey;

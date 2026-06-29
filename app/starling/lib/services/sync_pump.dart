@@ -5,10 +5,7 @@ import 'dart:developer' as developer;
 /// Mirrors `FollowRetryPump`: a single in-flight tick is enforced via the
 /// `_running` guard so sync runs that overflow the interval don't stack.
 class SyncPump {
-  SyncPump({
-    required this.runSync,
-    this.interval = const Duration(minutes: 1),
-  });
+  SyncPump({required this.runSync, this.interval = const Duration(minutes: 1)});
 
   final Future<void> Function() runSync;
   final Duration interval;

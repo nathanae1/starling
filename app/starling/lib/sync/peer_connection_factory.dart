@@ -8,7 +8,7 @@ import 'peer_reachability_monitor.dart';
 /// they just call `resolve(pubkey)` and get a connection or `null`.
 class PeerConnectionFactory {
   PeerConnectionFactory({required PeerReachabilityMonitor monitor})
-      : _monitor = monitor;
+    : _monitor = monitor;
 
   final PeerReachabilityMonitor _monitor;
 

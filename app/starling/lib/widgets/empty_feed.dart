@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/starling_theme.dart';
@@ -34,6 +35,16 @@ class EmptyFeed extends StatelessWidget {
           ),
           const SizedBox(height: 32),
           _InviteCard(),
+          const SizedBox(height: 12),
+          // Secondary nudge — invite stays the primary action, but they can
+          // also seed their feed so there's something waiting when a friend
+          // accepts.
+          Center(
+            child: GhostButton(
+              label: 'Or share your first post',
+              onPressed: () => context.push('/compose'),
+            ),
+          ),
         ],
       ),
     );
@@ -41,10 +52,7 @@ class EmptyFeed extends StatelessWidget {
 }
 
 void _openInviteSheet(BuildContext context) {
-  showStarlingSheet(
-    context: context,
-    builder: (_) => const QrInviteSheet(),
-  );
+  showStarlingSheet(context: context, builder: (_) => const QrInviteSheet());
 }
 
 class _InviteCard extends StatelessWidget {
@@ -84,9 +92,12 @@ class _InviteCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Share your invite',
-                        style: starling.typography.body
-                            .copyWith(fontWeight: FontWeight.w600)),
+                    Text(
+                      'Share your invite',
+                      style: starling.typography.body.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const SizedBox(height: 2),
                     Text(
                       'Scan their QR, or send them yours.',

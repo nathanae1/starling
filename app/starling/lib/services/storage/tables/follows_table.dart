@@ -6,12 +6,9 @@ class FollowEntries extends Table {
   TextColumn get avatarHash => text().nullable()();
   TextColumn get connectionCard => text()();
   BlobColumn get feedKey => blob()();
-  IntColumn get feedKeyEpoch =>
-      integer().withDefault(const Constant(0))();
-  IntColumn get lastSyncedAt =>
-      integer().withDefault(const Constant(0))();
-  TextColumn get status =>
-      text().withDefault(const Constant('active'))();
+  IntColumn get feedKeyEpoch => integer().withDefault(const Constant(0))();
+  IntColumn get lastSyncedAt => integer().withDefault(const Constant(0))();
+  TextColumn get status => text().withDefault(const Constant('active'))();
   // The `created_at` stamp on the most recent rotated feed key we've
   // received from this peer (Plan 13). Sent back to the peer as
   // `ack_rotation_at` on the next /manifest call so they can mark the
@@ -33,8 +30,7 @@ class FollowEntries extends Table {
   // for this peer (D1). The windowed cursor can't see events that arrived
   // at a store out of author-time order; a periodic full id-diff catches
   // them. 0 means "never" — the first sync runs full.
-  IntColumn get lastFullSyncAt =>
-      integer().withDefault(const Constant(0))();
+  IntColumn get lastFullSyncAt => integer().withDefault(const Constant(0))();
 
   @override
   Set<Column> get primaryKey => {pubkey};

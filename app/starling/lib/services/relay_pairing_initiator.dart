@@ -27,9 +27,9 @@ class RelayPairingInitiator {
     // timeout must comfortably exceed it or every pair "fails" while the
     // relay actually succeeds.
     Duration timeout = const Duration(seconds: 90),
-  })  : _crypto = crypto,
-        _http = httpClient,
-        _timeout = timeout;
+  }) : _crypto = crypto,
+       _http = httpClient,
+       _timeout = timeout;
 
   final CryptoService _crypto;
   final http.Client _http;
@@ -53,11 +53,13 @@ class RelayPairingInitiator {
     final digest = _crypto.blake2b256(claimBytes);
     final sig = _crypto.sign(ownerSecretKey, digest);
 
-    final body = Uint8List.fromList(cbor.encode(<String, dynamic>{
-      'owner_pubkey': base64.encode(ownerPubkeyBytes),
-      'pairing_token': payload.pairingToken,
-      'sig': sig,
-    }));
+    final body = Uint8List.fromList(
+      cbor.encode(<String, dynamic>{
+        'owner_pubkey': base64.encode(ownerPubkeyBytes),
+        'pairing_token': payload.pairingToken,
+        'sig': sig,
+      }),
+    );
 
     final res = await _http
         .post(
@@ -79,15 +81,9 @@ class RelayPairingInitiator {
     final relayOnion = decoded['relay_onion'];
     final relayId = decoded['relay_id'];
     if (relayOnion is! String || relayId is! String) {
-      throw const RelayPairingException(
-        'pair response missing fields',
-        200,
-      );
+      throw const RelayPairingException('pair response missing fields', 200);
     }
-    return RelayPairingResult(
-      relayOnion: relayOnion,
-      relayId: relayId,
-    );
+    return RelayPairingResult(relayOnion: relayOnion, relayId: relayId);
   }
 }
 
@@ -109,8 +105,8 @@ class RelayPairingPayload {
     final padded = _padBase64Url(base64Url);
     final bytes = base64Url.contains('-') || base64Url.contains('_')
         ? base64Url == padded
-            ? base64UrlDecode(base64Url)
-            : base64UrlDecode(padded)
+              ? base64UrlDecode(base64Url)
+              : base64UrlDecode(padded)
         : base64.decode(padded);
     final decoded = cbor.decode(bytes);
     if (decoded is! Map) {
@@ -131,10 +127,7 @@ class RelayPairingPayload {
 }
 
 class RelayPairingResult {
-  const RelayPairingResult({
-    required this.relayOnion,
-    required this.relayId,
-  });
+  const RelayPairingResult({required this.relayOnion, required this.relayId});
   final String relayOnion;
   final String relayId;
 }

@@ -19,7 +19,10 @@ class TorBootstrapMode {
 }
 
 abstract class TorService {
-  Future<void> init(String dataDir, {int bootstrapMode = TorBootstrapMode.full});
+  Future<void> init(
+    String dataDir, {
+    int bootstrapMode = TorBootstrapMode.full,
+  });
 
   /// Drive bootstrap explicitly. Idempotent. Useful with
   /// [TorBootstrapMode.onDemand] when the caller wants to bound how long

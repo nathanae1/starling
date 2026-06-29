@@ -30,8 +30,8 @@ class Libp2pNetworkService implements NetworkService, SyncTransport {
   Libp2pNetworkService({
     required Libp2pService libp2p,
     Duration timeout = const Duration(seconds: 10),
-  })  : _libp2p = libp2p,
-        _timeout = timeout;
+  }) : _libp2p = libp2p,
+       _timeout = timeout;
 
   final Libp2pService _libp2p;
   final Duration _timeout;
@@ -106,10 +106,7 @@ class Libp2pNetworkService implements NetworkService, SyncTransport {
   Uint8List _toBytes(dynamic value, String pubkey) {
     if (value is Uint8List) return value;
     if (value is List<int>) return Uint8List.fromList(value);
-    throw NetworkException(
-      'expected bytes, got ${value.runtimeType}',
-      pubkey,
-    );
+    throw NetworkException('expected bytes, got ${value.runtimeType}', pubkey);
   }
 
   // --- discovery (not applicable to libp2p — peers come from the
@@ -167,10 +164,7 @@ class Libp2pNetworkService implements NetworkService, SyncTransport {
     final body = await _exchange(connection, _pManifest, _encode(req));
     final decoded = cbor.decode(body);
     if (decoded is! Map) {
-      throw NetworkException(
-        'manifest body not a CBOR map',
-        connection.pubkey,
-      );
+      throw NetworkException('manifest body not a CBOR map', connection.pubkey);
     }
     return parseManifestResponse(
       decoded,

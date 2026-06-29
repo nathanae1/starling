@@ -8,6 +8,7 @@ import '../../providers/feed_provider.dart';
 import '../../providers/post_provider.dart';
 import '../../theme/starling_theme.dart';
 import '../../widgets/buttons.dart';
+import '../../widgets/sticky_action_bar.dart';
 
 class PreviewScreen extends ConsumerStatefulWidget {
   const PreviewScreen({super.key});
@@ -30,10 +31,9 @@ class _PreviewScreenState extends ConsumerState<PreviewScreen> {
     });
     ref.read(composeControllerProvider.notifier).markPublishing();
     try {
-      await ref.read(postServiceProvider).createPost(
-            photoBytes: bytes,
-            caption: state.caption,
-          );
+      await ref
+          .read(postServiceProvider)
+          .createPost(photoBytes: bytes, caption: state.caption);
       ref.invalidate(ownEventsProvider);
       ref.invalidate(feedProvider);
       ref.invalidate(ownPostsProvider);
@@ -90,8 +90,9 @@ class _PreviewScreenState extends ConsumerState<PreviewScreen> {
                     const SizedBox(height: 16),
                     Text(
                       _error!,
-                      style: starling.typography.small
-                          .copyWith(color: starling.colors.danger),
+                      style: starling.typography.small.copyWith(
+                        color: starling.colors.danger,
+                      ),
                     ),
                   ],
                 ],
@@ -102,55 +103,26 @@ class _PreviewScreenState extends ConsumerState<PreviewScreen> {
             bottom: 0,
             left: 0,
             right: 0,
-            child: _StickyBar(
-              isPublishing: _isPublishing,
-              onBack: _isPublishing ? null : () => context.pop(),
-              onPost: _isPublishing ? null : _publish,
+            child: StickyActionBar(
+              child: Row(
+                children: [
+                  GhostButton(
+                    label: 'Back to edit',
+                    onPressed: _isPublishing ? null : () => context.pop(),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: PrimaryButton(
+                      label: _isPublishing ? 'Posting…' : 'Post',
+                      block: true,
+                      onPressed: _isPublishing ? null : _publish,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _StickyBar extends StatelessWidget {
-  const _StickyBar({
-    required this.isPublishing,
-    required this.onBack,
-    required this.onPost,
-  });
-
-  final bool isPublishing;
-  final VoidCallback? onBack;
-  final Future<void> Function()? onPost;
-
-  @override
-  Widget build(BuildContext context) {
-    final starling = StarlingTheme.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: starling.colors.paper,
-        border: Border(top: BorderSide(color: starling.colors.hairline)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-          child: Row(
-            children: [
-              GhostButton(label: 'Back to edit', onPressed: onBack),
-              const SizedBox(width: 12),
-              Expanded(
-                child: PrimaryButton(
-                  label: isPublishing ? 'Posting…' : 'Post',
-                  block: true,
-                  onPressed: onPost == null ? null : () => onPost!(),
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

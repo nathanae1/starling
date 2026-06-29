@@ -1,30 +1,36 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../models/profile_content.dart';
+import '../utils/pubkey_format.dart';
 import 'identity_provider.dart';
 import 'own_profile_provider.dart';
 import 'service_providers.dart';
 
 part 'follow_profile_provider.g.dart';
 
-/// Display name + avatar hash for an arbitrary pubkey, used by post cards
+/// Display name + bio + avatar for an arbitrary pubkey, used by post cards
 /// and other-profile screens. For own pubkey, dispatches to
-/// [ownProfileProvider]; otherwise reads the cached display name from the
-/// `follows` row.
+/// [ownProfileProvider]; otherwise reads the friend's latest synced kind=2
+/// profile event (the `follows` row carries no live name/avatar).
 class FollowProfileSnapshot {
   const FollowProfileSnapshot({
     required this.displayName,
+    this.bio,
     this.avatarHash,
+    this.avatarMsgSeq,
   });
 
   final String displayName;
+  final String? bio;
   final String? avatarHash;
+
+  /// `msg_seq` of the profile event that carried [avatarHash], needed to
+  /// re-derive the avatar blob's AEAD key. Null when there's no avatar.
+  final int? avatarMsgSeq;
 }
 
 @riverpod
-Future<FollowProfileSnapshot> followProfile(
-  Ref ref,
-  String pubkey,
-) async {
+Future<FollowProfileSnapshot> followProfile(Ref ref, String pubkey) async {
   // Subscribe synchronously before any await — using `ref` after an await
   // is illegal if the provider was invalidated during the await.
   final identityFuture = ref.watch(identityControllerProvider.future);
@@ -36,17 +42,24 @@ Future<FollowProfileSnapshot> followProfile(
     final own = await ownProfileFuture;
     return FollowProfileSnapshot(
       displayName: own.displayName,
+      bio: own.bio,
       avatarHash: own.avatarHash,
+      avatarMsgSeq: own.avatarMsgSeq,
     );
   }
 
-  final follow = await storage.getFollow(pubkey);
-  final name = follow?.displayName?.trim().isNotEmpty == true
-      ? follow!.displayName!.trim()
-      : _fallbackName(pubkey);
+  // Read the friend's latest kind=2 event directly (it syncs like any other
+  // event and carries the msg_seq the avatar blob was encrypted under).
+  final event = await storage.getLatestProfile(pubkey);
+  final profile = event == null ? null : decodeProfileContent(event.content);
+  final name = profile != null && profile.name.isNotEmpty
+      ? profile.name
+      : shortPubkey(pubkey);
   return FollowProfileSnapshot(
     displayName: name,
-    avatarHash: follow?.avatarHash,
+    bio: profile?.bio,
+    avatarHash: profile?.avatarHash,
+    avatarMsgSeq: profile?.avatarHash != null ? event?.msgSeq : null,
   );
 }
 
@@ -56,11 +69,4 @@ String firstNameOf(String displayName) {
   if (trimmed.isEmpty) return 'Friend';
   final ws = trimmed.indexOf(RegExp(r'\s'));
   return ws == -1 ? trimmed : trimmed.substring(0, ws);
-}
-
-/// When we have no display name and the pubkey is unknown, render a short
-/// hash so the row isn't blank.
-String _fallbackName(String pubkey) {
-  if (pubkey.length <= 8) return pubkey;
-  return '${pubkey.substring(0, 4)}…${pubkey.substring(pubkey.length - 4)}';
 }

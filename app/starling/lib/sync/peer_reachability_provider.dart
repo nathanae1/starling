@@ -12,9 +12,7 @@ part 'peer_reachability_provider.g.dart';
 /// be invoked once at launch — `main.dart`'s `_StarlingAppState.initState`
 /// does that.
 @Riverpod(keepAlive: true)
-PeerReachabilityMonitor peerReachabilityMonitor(
-  Ref ref,
-) {
+PeerReachabilityMonitor peerReachabilityMonitor(Ref ref) {
   final lanClient = http.Client();
 
   // Tor probe client mirrors followServiceProvider's pattern: rebuild the
@@ -57,9 +55,7 @@ PeerReachabilityMonitor peerReachabilityMonitor(
 /// current snapshot so first build doesn't flash empty before the stream
 /// emits.
 @riverpod
-Stream<Map<String, PeerReachability>> peerReachabilityState(
-  Ref ref,
-) async* {
+Stream<Map<String, PeerReachability>> peerReachabilityState(Ref ref) async* {
   final monitor = ref.watch(peerReachabilityMonitorProvider);
   yield monitor.state;
   yield* monitor.stateStream;

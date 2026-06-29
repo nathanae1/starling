@@ -29,10 +29,10 @@ class OnionPublisher {
       Duration(minutes: 2),
       Duration(minutes: 5),
     ],
-  })  : _ensureTorInit = ensureTorInit,
-        _tor = tor,
-        _onAddress = onAddress,
-        _backoff = backoff;
+  }) : _ensureTorInit = ensureTorInit,
+       _tor = tor,
+       _onAddress = onAddress,
+       _backoff = backoff;
 
   final Future<void> Function() _ensureTorInit;
   final TorService Function() _tor;
@@ -114,10 +114,14 @@ class OnionPublisher {
     } catch (e, st) {
       if (port != _desiredPort) return;
       final delay =
-          _backoff[_failures < _backoff.length ? _failures : _backoff.length - 1];
+          _backoff[_failures < _backoff.length
+              ? _failures
+              : _backoff.length - 1];
       _failures++;
-      _log('createOnionService failed (retry #$_failures in '
-          '${delay.inSeconds}s): $e\n$st');
+      _log(
+        'createOnionService failed (retry #$_failures in '
+        '${delay.inSeconds}s): $e\n$st',
+      );
       _scheduleRetry(port, delay);
     }
   }

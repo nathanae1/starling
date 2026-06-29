@@ -21,15 +21,16 @@ class ParticipantAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
     final colors = starling.colors;
-    final name = participant.displayName ??
+    final name =
+        participant.displayName ??
         (isYou ? 'You' : participant.pubkey.substring(0, 6));
-    final speaking = participant.isSpeaking &&
+    final speaking =
+        participant.isSpeaking &&
         participant.connectionState == ParticipantConnectionState.connected;
 
     final connecting =
         participant.connectionState == ParticipantConnectionState.connecting ||
-            participant.connectionState ==
-                ParticipantConnectionState.reconnecting;
+        participant.connectionState == ParticipantConnectionState.reconnecting;
     final disconnected =
         participant.connectionState == ParticipantConnectionState.disconnected;
 
@@ -74,8 +75,11 @@ class ParticipantAvatar extends StatelessWidget {
                     shape: BoxShape.circle,
                     border: Border.all(color: colors.paper, width: 2),
                   ),
-                  child: const Icon(LucideIcons.micOff,
-                      size: 12, color: Color(0xFFFDFBF5)),
+                  child: const Icon(
+                    LucideIcons.micOff,
+                    size: 12,
+                    color: Color(0xFFFDFBF5),
+                  ),
                 ),
               ),
           ],
@@ -90,8 +94,7 @@ class ParticipantAvatar extends StatelessWidget {
             fontWeight: isYou ? FontWeight.w500 : FontWeight.w400,
           ),
         ),
-        if (disconnected)
-          Text('unreachable', style: starling.typography.micro),
+        if (disconnected) Text('unreachable', style: starling.typography.micro),
       ],
     );
   }

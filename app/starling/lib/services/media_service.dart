@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../utils/debug_log.dart';
 import 'clock.dart';
 import 'crypto_service.dart';
 import 'media/encrypted_media_paths.dart';
@@ -53,9 +54,16 @@ abstract class MediaService {
   /// `deriveMsgKey(chainRoot, msgSeq)`. The same key encrypts both the
   /// post body and every media blob attached to that post — letting the
   /// receiver re-derive once from the post's `msgSeq`.
+  ///
+  /// [maxDimension] caps the longest edge (post photos use 1080; avatars
+  /// pass 256). When [square] is true the source is center-cropped to a
+  /// square before resizing — used for avatars so they fill a circular
+  /// frame without distortion.
   Future<MediaProcessingResult> processAndStoreOwnPhoto({
     required Uint8List photoBytes,
     required Uint8List msgKey,
+    int maxDimension = 1080,
+    bool square = false,
   });
 
   /// Decrypt and return the plaintext bytes for a known media hash. Returns
@@ -83,11 +91,11 @@ class DefaultMediaService implements MediaService {
     required Clock clock,
     required Future<Directory> appSupportDir,
     CompressFn? compressFn,
-  })  : _crypto = crypto,
-        _storage = storage,
-        _clock = clock,
-        _appSupportDir = appSupportDir,
-        _compress = compressFn ?? _defaultCompress;
+  }) : _crypto = crypto,
+       _storage = storage,
+       _clock = clock,
+       _appSupportDir = appSupportDir,
+       _compress = compressFn ?? _defaultCompress;
 
   final CryptoService _crypto;
   final StorageService _storage;
@@ -102,12 +110,18 @@ class DefaultMediaService implements MediaService {
   Future<MediaProcessingResult> processAndStoreOwnPhoto({
     required Uint8List photoBytes,
     required Uint8List msgKey,
+    int maxDimension = 1080,
+    bool square = false,
   }) async {
     // 1. Compress in an isolate (JPEG decode + resize + re-encode is the
     //    expensive step; everything else stays on main so libsodium's
     //    per-isolate FFI resources don't have to be re-initialized).
     final compressed = await _compress(
-      CompressRequest(sourceBytes: photoBytes),
+      CompressRequest(
+        sourceBytes: photoBytes,
+        maxDimension: maxDimension,
+        square: square,
+      ),
     );
 
     // 2. Hash both plaintexts (microsecond-cheap on main).
@@ -115,23 +129,28 @@ class DefaultMediaService implements MediaService {
     final originalHash = _hex(_crypto.blake2b256(photoBytes));
 
     // 3. Encrypt both with the per-message key (nonce || ct framing).
-    _logMedia(
+    debugLog(
+      'starling.media',
       'enc compressed hash=${_shortHex(compressedHash)} '
-      'plainLen=${compressed.compressedBytes.length} '
-      'msgKeyFp=${_shortBytesFp(msgKey)}',
+          'plainLen=${compressed.compressedBytes.length} '
+          'msgKeyFp=${shortFingerprint(msgKey)}',
     );
-    final compressedEncrypted =
-        _crypto.encryptMedia(compressed.compressedBytes, msgKey);
-    _logMedia(
+    final compressedEncrypted = _crypto.encryptMedia(
+      compressed.compressedBytes,
+      msgKey,
+    );
+    debugLog(
+      'starling.media',
       'enc original hash=${_shortHex(originalHash)} '
-      'plainLen=${photoBytes.length} '
-      'msgKeyFp=${_shortBytesFp(msgKey)}',
+          'plainLen=${photoBytes.length} '
+          'msgKeyFp=${shortFingerprint(msgKey)}',
     );
     final originalEncrypted = _crypto.encryptMedia(photoBytes, msgKey);
-    _logMedia(
+    debugLog(
+      'starling.media',
       'enc result compressedLen=${compressedEncrypted.length} '
-      'originalLen=${originalEncrypted.length} '
-      '(includes 24-byte nonce prefix)',
+          'originalLen=${originalEncrypted.length} '
+          '(includes 24-byte nonce prefix)',
     );
 
     // 4. Write both blobs atomically into the sharded media dir.
@@ -144,18 +163,22 @@ class DefaultMediaService implements MediaService {
     // 5. Upsert media_cache rows (size = on-disk encrypted size; the
     //    plaintext size lives in MediaRef for wire reporting).
     final now = _clock.nowUnixSeconds();
-    await _storage.saveMedia(CachedMedia(
-      hash: compressedHash,
-      path: mediaRelativePath(compressedHash),
-      size: compressedEncrypted.length,
-      lastAccessed: now,
-    ));
-    await _storage.saveMedia(CachedMedia(
-      hash: originalHash,
-      path: mediaRelativePath(originalHash),
-      size: originalEncrypted.length,
-      lastAccessed: now,
-    ));
+    await _storage.saveMedia(
+      CachedMedia(
+        hash: compressedHash,
+        path: mediaRelativePath(compressedHash),
+        size: compressedEncrypted.length,
+        lastAccessed: now,
+      ),
+    );
+    await _storage.saveMedia(
+      CachedMedia(
+        hash: originalHash,
+        path: mediaRelativePath(originalHash),
+        size: originalEncrypted.length,
+        lastAccessed: now,
+      ),
+    );
 
     return MediaProcessingResult(
       compressedHash: compressedHash,
@@ -172,28 +195,34 @@ class DefaultMediaService implements MediaService {
     final root = await _appSupportDir;
     final file = File('${root.path}/${mediaRelativePath(hexHash)}');
     if (!file.existsSync()) {
-      _logMedia('dec MISS hash=${_shortHex(hexHash)} (no file on disk)');
+      debugLog(
+        'starling.media',
+        'dec MISS hash=${_shortHex(hexHash)} (no file on disk)',
+      );
       return null;
     }
     final bytes = await file.readAsBytes();
     final noncePreview = bytes.length >= 24
-        ? _shortBytesFp(bytes.sublist(0, 24))
+        ? shortFingerprint(bytes.sublist(0, 24))
         : 'short(${bytes.length})';
-    _logMedia(
+    debugLog(
+      'starling.media',
       'dec attempt hash=${_shortHex(hexHash)} '
-      'blobLen=${bytes.length} noncePrefix=$noncePreview '
-      'msgKeyFp=${_shortBytesFp(msgKey)}',
+          'blobLen=${bytes.length} noncePrefix=$noncePreview '
+          'msgKeyFp=${shortFingerprint(msgKey)}',
     );
     try {
       final pt = _crypto.decryptMedia(bytes, msgKey);
-      _logMedia(
+      debugLog(
+        'starling.media',
         'dec OK hash=${_shortHex(hexHash)} ptLen=${pt.length}',
       );
       return pt;
     } catch (e) {
-      _logMedia(
+      debugLog(
+        'starling.media',
         'dec FAIL hash=${_shortHex(hexHash)} '
-        'msgKeyFp=${_shortBytesFp(msgKey)} err=$e',
+            'msgKeyFp=${shortFingerprint(msgKey)} err=$e',
       );
       rethrow;
     }
@@ -205,20 +234,23 @@ class DefaultMediaService implements MediaService {
     Uint8List encryptedBytes,
   ) async {
     final noncePreview = encryptedBytes.length >= 24
-        ? _shortBytesFp(encryptedBytes.sublist(0, 24))
+        ? shortFingerprint(encryptedBytes.sublist(0, 24))
         : 'short(${encryptedBytes.length})';
-    _logMedia(
+    debugLog(
+      'starling.media',
       'rcv hash=${_shortHex(hexHash)} blobLen=${encryptedBytes.length} '
-      'noncePrefix=$noncePreview',
+          'noncePrefix=$noncePreview',
     );
     final root = await _appSupportDir;
     await _atomicWrite(root, hexHash, encryptedBytes);
-    await _storage.saveMedia(CachedMedia(
-      hash: hexHash,
-      path: mediaRelativePath(hexHash),
-      size: encryptedBytes.length,
-      lastAccessed: _clock.nowUnixSeconds(),
-    ));
+    await _storage.saveMedia(
+      CachedMedia(
+        hash: hexHash,
+        path: mediaRelativePath(hexHash),
+        size: encryptedBytes.length,
+        lastAccessed: _clock.nowUnixSeconds(),
+      ),
+    );
   }
 
   @override
@@ -251,17 +283,4 @@ String _hex(Uint8List bytes) {
 String _shortHex(String hex) {
   if (hex.length <= 8) return hex;
   return '${hex.substring(0, 8)}…';
-}
-
-String _shortBytesFp(Uint8List bytes) {
-  final hex = bytes
-      .take(4)
-      .map((b) => b.toRadixString(16).padLeft(2, '0'))
-      .join();
-  return '$hex…';
-}
-
-void _logMedia(String msg) {
-  // ignore: avoid_print
-  print('[starling.media] $msg');
 }

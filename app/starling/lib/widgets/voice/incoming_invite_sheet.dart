@@ -13,10 +13,7 @@ import '../sheet.dart';
 
 /// Present the inbound-invite modal. Auto-dismisses after 60s (the invite
 /// expires); Join accepts + opens the room, Decline notifies the creator.
-Future<void> showIncomingInviteSheet(
-  BuildContext context,
-  VoiceRoom invite,
-) {
+Future<void> showIncomingInviteSheet(BuildContext context, VoiceRoom invite) {
   return showStarlingSheet<void>(
     context: context,
     builder: (_) => _IncomingInviteBody(invite: invite),
@@ -28,7 +25,8 @@ class _IncomingInviteBody extends ConsumerStatefulWidget {
   final VoiceRoom invite;
 
   @override
-  ConsumerState<_IncomingInviteBody> createState() => _IncomingInviteBodyState();
+  ConsumerState<_IncomingInviteBody> createState() =>
+      _IncomingInviteBodyState();
 }
 
 class _IncomingInviteBodyState extends ConsumerState<_IncomingInviteBody> {
@@ -77,7 +75,9 @@ class _IncomingInviteBodyState extends ConsumerState<_IncomingInviteBody> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Center(child: Avatar(name: creatorName, size: AvatarSize.xl)),
+        Center(
+          child: Avatar(name: creatorName, size: AvatarSize.xl),
+        ),
         const SizedBox(height: 16),
         Text(
           widget.invite.name,

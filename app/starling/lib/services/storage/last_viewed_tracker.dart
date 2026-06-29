@@ -12,8 +12,8 @@ import '../storage_service.dart';
 /// flood the DB with writes.
 class LastViewedTracker {
   LastViewedTracker({required StorageService storage, required Clock clock})
-      : _storage = storage,
-        _clock = clock;
+    : _storage = storage,
+      _clock = clock;
 
   final StorageService _storage;
   final Clock _clock;
@@ -25,9 +25,7 @@ class LastViewedTracker {
   void markViewed(String eventId) {
     if (_sessionMarked.contains(eventId)) return;
     _sessionMarked.add(eventId);
-    unawaited(
-      _storage.setEventLastViewed(eventId, _clock.nowUnixSeconds()),
-    );
+    unawaited(_storage.setEventLastViewed(eventId, _clock.nowUnixSeconds()));
   }
 
   /// Test hook — drops the per-session memoization.

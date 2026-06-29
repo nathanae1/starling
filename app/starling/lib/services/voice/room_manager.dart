@@ -30,12 +30,12 @@ class RoomManager {
     required Clock clock,
     required Future<String?> Function() localPubkeyLookup,
     this.speakingThreshold = 0.02,
-  })  : _roomSignaling = roomSignaling,
-        _voice = voice,
-        _storage = storage,
-        _crypto = crypto,
-        _clock = clock,
-        _localPubkeyLookup = localPubkeyLookup;
+  }) : _roomSignaling = roomSignaling,
+       _voice = voice,
+       _storage = storage,
+       _crypto = crypto,
+       _clock = clock,
+       _localPubkeyLookup = localPubkeyLookup;
 
   final RoomSignaling _roomSignaling;
   final VoiceService _voice;
@@ -80,7 +80,8 @@ class RoomManager {
     _roomSignaling.start();
     _subs.add(_roomSignaling.inbound.listen((s) => unawaited(_onSignal(s))));
     _subs.add(
-        _voice.localIceCandidates.listen((c) => unawaited(_onLocalIce(c))));
+      _voice.localIceCandidates.listen((c) => unawaited(_onLocalIce(c))),
+    );
     _subs.add(_voice.peerStates.listen(_onPeerState));
     _subs.add(_voice.audioLevels.listen(_onAudioLevels));
   }
@@ -138,8 +139,9 @@ class RoomManager {
     );
 
     await _voice.startSession(roomId);
-    await _storage
-        .saveVoiceRoom(_room!.copyWith(participants: _roster.values.toList()));
+    await _storage.saveVoiceRoom(
+      _room!.copyWith(participants: _roster.values.toList()),
+    );
     await _storage.saveVoiceRoomParticipant(roomId, me, joinedAt: now);
 
     final sessionHex = _hex(_sessionKey!);
@@ -163,10 +165,13 @@ class RoomManager {
     final creator = pending.invite.creatorPubkey;
 
     _resetSession();
-    _sessionKey =
-        pending.sessionKeyHex != null ? _unhex(pending.sessionKeyHex!) : null;
+    _sessionKey = pending.sessionKeyHex != null
+        ? _unhex(pending.sessionKeyHex!)
+        : null;
     _invitedRoster = {...pending.roster, creator};
-    _present..add(me)..add(creator);
+    _present
+      ..add(me)
+      ..add(creator);
 
     final now = _clock.nowUnixSeconds();
     _roster[me] = VoiceParticipant(
@@ -186,20 +191,23 @@ class RoomManager {
       name: pending.invite.name,
       creatorPubkey: creator,
       createdAt: now,
-      invitedPubkeys:
-          _invitedRoster.where((p) => p != me && p != creator).toList(),
+      invitedPubkeys: _invitedRoster
+          .where((p) => p != me && p != creator)
+          .toList(),
     );
 
     await _voice.startSession(roomId);
-    await _storage
-        .saveVoiceRoom(_room!.copyWith(participants: _roster.values.toList()));
+    await _storage.saveVoiceRoom(
+      _room!.copyWith(participants: _roster.values.toList()),
+    );
     await _storage.saveVoiceRoomParticipant(roomId, me, joinedAt: now);
 
     final sessionHex = _sessionKey != null ? _hex(_sessionKey!) : '';
     for (final p in _invitedRoster) {
       if (p == me) continue;
-      await _safeSend(
-          p, SignalingMessageType.roomAccept, roomId, {'session_key': sessionHex});
+      await _safeSend(p, SignalingMessageType.roomAccept, roomId, {
+        'session_key': sessionHex,
+      });
     }
     await _maybeOffer(creator);
     _emitState();
@@ -208,8 +216,12 @@ class RoomManager {
   Future<void> declineInvite(String roomId) async {
     final pending = _pendingInvites.remove(roomId);
     if (pending == null) return;
-    await _safeSend(pending.invite.creatorPubkey,
-        SignalingMessageType.roomDecline, roomId, const {});
+    await _safeSend(
+      pending.invite.creatorPubkey,
+      SignalingMessageType.roomDecline,
+      roomId,
+      const {},
+    );
   }
 
   Future<void> setMuted(bool muted) async {
@@ -219,8 +231,9 @@ class RoomManager {
     if (room != null) {
       for (final p in _present) {
         if (p == _localPubkey) continue;
-        await _safeSend(
-            p, SignalingMessageType.muteStatus, room.id, {'muted': muted});
+        await _safeSend(p, SignalingMessageType.muteStatus, room.id, {
+          'muted': muted,
+        });
       }
     }
     _emitState();
@@ -281,8 +294,6 @@ class RoomManager {
         await _onRemoteIce(from, msg);
       case SignalingMessageType.muteStatus:
         _onMuteStatus(from, msg);
-      case SignalingMessageType.speakingStatus:
-        _onSpeakingStatus(from, msg);
       case SignalingMessageType.libp2pConnect:
         break; // never delivered here; RoomSignaling filters it out
     }
@@ -290,8 +301,12 @@ class RoomManager {
 
   Future<void> _onInvite(SignalingMessage msg) async {
     if (_room != null) {
-      await _safeSend(msg.senderPubkey, SignalingMessageType.roomDecline,
-          msg.roomId, {'reason': 'busy'});
+      await _safeSend(
+        msg.senderPubkey,
+        SignalingMessageType.roomDecline,
+        msg.roomId,
+        {'reason': 'busy'},
+      );
       return;
     }
     final creator = (msg.payload['creator'] as String?) ?? msg.senderPubkey;
@@ -330,8 +345,9 @@ class RoomManager {
     );
     if (firstSight) {
       final sessionHex = _sessionKey != null ? _hex(_sessionKey!) : '';
-      await _safeSend(from, SignalingMessageType.roomAccept, room.id,
-          {'session_key': sessionHex});
+      await _safeSend(from, SignalingMessageType.roomAccept, room.id, {
+        'session_key': sessionHex,
+      });
     }
     await _maybeOffer(from);
     _emitState();
@@ -391,21 +407,17 @@ class RoomManager {
     _emitState();
   }
 
-  void _onSpeakingStatus(String from, SignalingMessage msg) {
-    if (_room == null || msg.roomId != _room!.id) return;
-    final cur = _roster[from];
-    if (cur == null) return;
-    _roster[from] = cur.copyWith(isSpeaking: msg.payload['speaking'] == true);
-    _emitState();
-  }
-
   // --- WebRTC engine events ---
 
   Future<void> _onLocalIce(VoiceIceCandidate c) async {
     final room = _room;
     if (room == null) return;
     await _safeSend(
-        c.peerPubkey, SignalingMessageType.iceCandidate, room.id, c.candidate);
+      c.peerPubkey,
+      SignalingMessageType.iceCandidate,
+      room.id,
+      c.candidate,
+    );
   }
 
   void _onPeerState(VoicePeerState s) {
@@ -517,8 +529,12 @@ class RoomManager {
     Map<String, dynamic> payload,
   ) async {
     try {
-      await _roomSignaling.sendTo(pubkey,
-          type: type, roomId: roomId, payload: payload);
+      await _roomSignaling.sendTo(
+        pubkey,
+        type: type,
+        roomId: roomId,
+        payload: payload,
+      );
     } catch (_) {
       // Unreachable peer / transient signaling failure — the participant
       // stays in its current (connecting/disconnected) state; the next

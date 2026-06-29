@@ -152,8 +152,9 @@ class BackgroundSyncRunner {
       // PeerConnection.transport. `PeerConnectionFactory` only resolves
       // transports the monitor has validated, so the Tor backing is only
       // dialed when its probe came back reachable.
-      final SyncTransport transport =
-          torLan != null ? TransportRouter(lan: lan, tor: torLan) : lan;
+      final SyncTransport transport = torLan != null
+          ? TransportRouter(lan: lan, tor: torLan)
+          : lan;
 
       final engine = SyncEngine(
         storage: storage,
@@ -194,7 +195,8 @@ class BackgroundSyncRunner {
   }
 
   static Future<DriftStorageService> _openStorage(
-      KeychainManager keychain) async {
+    KeychainManager keychain,
+  ) async {
     final dbKey = await keychain.read(KeychainManager.dbKeyName);
     if (dbKey == null) {
       throw StateError(
@@ -211,4 +213,3 @@ class BackgroundSyncRunner {
     print('[starling.bgsync] $msg');
   }
 }
-

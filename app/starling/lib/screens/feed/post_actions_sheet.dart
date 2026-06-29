@@ -8,11 +8,7 @@ import '../../providers/post_provider.dart';
 import '../../theme/starling_theme.dart';
 
 class PostActionsSheet extends ConsumerWidget {
-  const PostActionsSheet({
-    super.key,
-    required this.eventId,
-    this.onDeleted,
-  });
+  const PostActionsSheet({super.key, required this.eventId, this.onDeleted});
 
   final String eventId;
   final VoidCallback? onDeleted;

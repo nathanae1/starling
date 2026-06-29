@@ -182,10 +182,7 @@ class SodiumCryptoService implements CryptoService {
     SecureKey? keyMaterial;
     SecureKey? derived;
     try {
-      sharedSecret = _sodium.crypto.scalarmult.call(
-        n: mySk,
-        p: theirPublicKey,
-      );
+      sharedSecret = _sodium.crypto.scalarmult.call(n: mySk, p: theirPublicKey);
       final rawShared = sharedSecret.extractBytes();
 
       // Step 2: incorporate info into key material via BLAKE2b-256.
@@ -194,7 +191,8 @@ class SodiumCryptoService implements CryptoService {
       final bd = ByteData.sublistView(timestampBytes);
       bd.setInt64(0, timestamp, Endian.little);
 
-      final infoLen = rawShared.length +
+      final infoLen =
+          rawShared.length +
           requesterPubkey.length +
           responderPubkey.length +
           timestampBytes.length;
@@ -253,10 +251,7 @@ class SodiumCryptoService implements CryptoService {
     SecureKey? keyMaterial;
     SecureKey? derived;
     try {
-      sharedSecret = _sodium.crypto.scalarmult.call(
-        n: mySk,
-        p: theirPkX25519,
-      );
+      sharedSecret = _sodium.crypto.scalarmult.call(n: mySk, p: theirPkX25519);
       final rawShared = sharedSecret.extractBytes();
 
       // Lex-sort the two Ed25519 pubkeys so both sides arrive at the same
@@ -299,16 +294,14 @@ class SodiumCryptoService implements CryptoService {
     required Uint8List key,
     required Uint8List nonce,
     required Uint8List plaintext,
-  }) =>
-      encrypt(plaintext, nonce, key);
+  }) => encrypt(plaintext, nonce, key);
 
   @override
   Uint8List decryptEphemeral({
     required Uint8List key,
     required Uint8List nonce,
     required Uint8List ciphertext,
-  }) =>
-      decrypt(ciphertext, nonce, key);
+  }) => decrypt(ciphertext, nonce, key);
 
   static bool _lexLess(Uint8List a, Uint8List b) {
     final len = a.length < b.length ? a.length : b.length;

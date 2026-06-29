@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 
 import 'package:starling/models/connection_card.dart';
+import 'package:starling/models/models.dart';
+import 'package:starling/models/profile_content.dart';
 import 'package:starling/providers/server_provider.dart';
 import 'package:starling/providers/service_providers.dart';
 import 'package:starling/screens/friends/friends_screen.dart';
@@ -176,10 +178,23 @@ void main() {
     );
     await storage.saveFollow(Follow(
       pubkey: friendCard.pubkey,
-      displayName: 'Alex',
       connectionCard: friendCard.toMap().toString(),
       feedKey: Uint8List(32),
       lastSyncedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000 - 5,
+    ));
+    // The friend's name now resolves from their latest kind=2 profile event
+    // (the follows row carries no live name), so seed one.
+    await storage.saveEvent(Event(
+      version: '2026-04-28',
+      id: 'profile-alex',
+      pubkey: friendCard.pubkey,
+      createdAt: 500,
+      kind: EventKind.profile,
+      ref: null,
+      content: encodeProfileContent(name: 'Alex'),
+      media: const [],
+      sig: Uint8List(64),
+      msgSeq: null,
     ));
     final container = await _container(storage: storage);
     // LIFO: dispose the container (cancelling its stream subscriptions)

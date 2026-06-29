@@ -61,9 +61,16 @@ class _DashedRoundedRectPainter extends CustomPainter {
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke;
     final inset = strokeWidth / 2;
-    final rect = Rect.fromLTWH(inset, inset, size.width - strokeWidth,
-        size.height - strokeWidth);
-    final rrect = RRect.fromRectAndRadius(rect, Radius.circular(radius - inset));
+    final rect = Rect.fromLTWH(
+      inset,
+      inset,
+      size.width - strokeWidth,
+      size.height - strokeWidth,
+    );
+    final rrect = RRect.fromRectAndRadius(
+      rect,
+      Radius.circular(radius - inset),
+    );
 
     final path = Path()..addRRect(rrect);
     final dashed = Path();
@@ -71,10 +78,7 @@ class _DashedRoundedRectPainter extends CustomPainter {
       var distance = 0.0;
       while (distance < metric.length) {
         final next = (distance + dashOn).clamp(0, metric.length).toDouble();
-        dashed.addPath(
-          metric.extractPath(distance, next),
-          Offset.zero,
-        );
+        dashed.addPath(metric.extractPath(distance, next), Offset.zero);
         distance = next + dashOff;
       }
     }

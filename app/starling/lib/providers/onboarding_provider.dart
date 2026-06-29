@@ -7,6 +7,9 @@ import '../services/crypto/crockford_base32.dart';
 import '../services/storage/keychain_manager.dart';
 import '../services/types.dart';
 import 'identity_provider.dart';
+import 'own_profile_provider.dart';
+import 'profile_provider.dart';
+import 'profile_service_provider.dart';
 import 'service_providers.dart';
 
 part 'onboarding_provider.g.dart';
@@ -45,6 +48,11 @@ class OnboardingController extends _$OnboardingController {
     final storage = ref.read(storageServiceProvider);
     final clock = ref.read(clockProvider);
 
+    // Read the name + avatar the user entered on Setup synchronously, before
+    // any await — OnboardingProfileController is autoDispose and could be torn
+    // down across the async gaps below.
+    final onboardingProfile = ref.read(onboardingProfileControllerProvider);
+
     // Seed → keypair → phrase. Round-tripping through recoverFromPhrase keeps
     // the pubkey matched to what a future restore would derive.
     final seed = crypto.randomBytes(32);
@@ -63,8 +71,32 @@ class OnboardingController extends _$OnboardingController {
     );
     await storage.saveIdentity(identity);
 
+    // Persist the collected name + optional avatar as the first kind=2
+    // profile event so the owner's profile isn't empty. publishProfile reads
+    // the just-saved identity via storage. (On first run the content-key
+    // service is still the mock binding — see main.dart — so this populates
+    // the local "You" tab immediately; it's re-published with real crypto
+    // from the edit screen after the next launch.)
+    final displayName = onboardingProfile.displayName.trim();
+    if (displayName.isNotEmpty) {
+      try {
+        await ref
+            .read(profileServiceProvider)
+            .publishProfile(
+              displayName: displayName,
+              bio: onboardingProfile.bio,
+              avatarBytes: onboardingProfile.avatarBytes,
+            );
+      } catch (_) {
+        // Non-fatal: the identity already exists; the profile can be set
+        // later from the edit screen.
+      }
+      ref.read(onboardingProfileControllerProvider.notifier).reset();
+    }
+
     state = state.copyWith(recoveryPhrase: phrase);
     ref.read(identityControllerProvider.notifier).refresh();
+    ref.invalidate(ownProfileProvider);
     return phrase;
   }
 
@@ -110,4 +142,3 @@ class OnboardingController extends _$OnboardingController {
     );
   }
 }
-

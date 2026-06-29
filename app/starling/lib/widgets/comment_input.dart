@@ -90,6 +90,7 @@ class _CommentInputState extends ConsumerState<CommentInput> {
                 const SizedBox(width: 8),
                 StarlingIconButton(
                   onPressed: _sending ? null : _submit,
+                  semanticLabel: 'Send comment',
                   child: Icon(
                     LucideIcons.send,
                     size: 20,

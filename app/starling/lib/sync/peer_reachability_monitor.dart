@@ -41,14 +41,13 @@ class TransportStatus {
     String? lastError,
     String? endpointHint,
     bool clearEndpoint = false,
-  }) =>
-      TransportStatus(
-        state: state ?? this.state,
-        lastChange: lastChange ?? this.lastChange,
-        consecutiveFailures: consecutiveFailures ?? this.consecutiveFailures,
-        lastError: lastError ?? this.lastError,
-        endpointHint: clearEndpoint ? null : (endpointHint ?? this.endpointHint),
-      );
+  }) => TransportStatus(
+    state: state ?? this.state,
+    lastChange: lastChange ?? this.lastChange,
+    consecutiveFailures: consecutiveFailures ?? this.consecutiveFailures,
+    lastError: lastError ?? this.lastError,
+    endpointHint: clearEndpoint ? null : (endpointHint ?? this.endpointHint),
+  );
 }
 
 class PeerReachability {
@@ -77,16 +76,16 @@ class PeerReachabilityMonitor {
     Duration probeTimeout = const Duration(seconds: 5),
     Duration torProbeTimeout = const Duration(seconds: 15),
     Duration firstCallWindow = const Duration(seconds: 5),
-  })  : _mdns = mdns,
-        _tor = tor,
-        _storage = storage,
-        _lanProbeClient = lanProbeClient,
-        _torProbeClient = torProbeClient,
-        _clock = clock,
-        _probeInterval = probeInterval,
-        _probeTimeout = probeTimeout,
-        _torProbeTimeout = torProbeTimeout,
-        _firstCallWindow = firstCallWindow;
+  }) : _mdns = mdns,
+       _tor = tor,
+       _storage = storage,
+       _lanProbeClient = lanProbeClient,
+       _torProbeClient = torProbeClient,
+       _clock = clock,
+       _probeInterval = probeInterval,
+       _probeTimeout = probeTimeout,
+       _torProbeTimeout = torProbeTimeout,
+       _firstCallWindow = firstCallWindow;
 
   final MdnsService _mdns;
   final TorService _tor;
@@ -357,14 +356,14 @@ class PeerReachabilityMonitor {
         if (transport == PeerTransport.libp2pDirect) {
           final status = _state[f.pubkey]!.transports[transport]!;
           if (status.state != TransportState.reachable) continue;
-          tasks.add(_probePool.run(
-            () => _passivePingLibp2p(f.pubkey).then((_) {}),
-          ));
+          tasks.add(
+            _probePool.run(() => _passivePingLibp2p(f.pubkey).then((_) {})),
+          );
           continue;
         }
-        tasks.add(_probePool.run(
-          () => _probePeer(f.pubkey, transport, f).then((_) {}),
-        ));
+        tasks.add(
+          _probePool.run(() => _probePeer(f.pubkey, transport, f).then((_) {})),
+        );
       }
     }
     await Future.wait(tasks, eagerError: false);
@@ -404,11 +403,7 @@ class PeerReachabilityMonitor {
 
     bool ok = false;
     try {
-      ok = await _executeProbe(
-        pubkey,
-        url,
-        useTor: transport.dialsViaTor,
-      );
+      ok = await _executeProbe(pubkey, url, useTor: transport.dialsViaTor);
     } catch (_) {
       ok = false;
     }
@@ -499,8 +494,9 @@ class PeerReachabilityMonitor {
     }
     final timeout = useTor ? _torProbeTimeout : _probeTimeout;
     try {
-      final res =
-          await client.get(Uri.parse('$baseUrl/status')).timeout(timeout);
+      final res = await client
+          .get(Uri.parse('$baseUrl/status'))
+          .timeout(timeout);
       if (res.statusCode != 200) {
         _log('probe $baseUrl -> ${res.statusCode}');
         return false;
@@ -518,7 +514,9 @@ class PeerReachabilityMonitor {
       _log('probe $baseUrl ok');
       return true;
     } catch (e) {
-      _log('probe $baseUrl failed (useTor=$useTor timeout=${timeout.inSeconds}s): $e');
+      _log(
+        'probe $baseUrl failed (useTor=$useTor timeout=${timeout.inSeconds}s): $e',
+      );
       return false;
     }
   }
@@ -652,13 +650,14 @@ class PeerReachabilityMonitor {
 
 extension on PeerReachability {
   PeerReachability _init(String pubkey) => PeerReachability(
-        pubkey: pubkey,
-        transports: const {
-          PeerTransport.lan: TransportStatus(state: TransportState.unknown),
-          PeerTransport.libp2pDirect:
-              TransportStatus(state: TransportState.unknown),
-          PeerTransport.relay: TransportStatus(state: TransportState.unknown),
-          PeerTransport.tor: TransportStatus(state: TransportState.unknown),
-        },
-      );
+    pubkey: pubkey,
+    transports: const {
+      PeerTransport.lan: TransportStatus(state: TransportState.unknown),
+      PeerTransport.libp2pDirect: TransportStatus(
+        state: TransportState.unknown,
+      ),
+      PeerTransport.relay: TransportStatus(state: TransportState.unknown),
+      PeerTransport.tor: TransportStatus(state: TransportState.unknown),
+    },
+  );
 }

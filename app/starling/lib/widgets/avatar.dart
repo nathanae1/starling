@@ -19,20 +19,20 @@ class Avatar extends StatelessWidget {
   final ImageProvider? imageProvider;
 
   double get _diameter => switch (size) {
-        AvatarSize.xs => 20,
-        AvatarSize.sm => 28,
-        AvatarSize.md => 36,
-        AvatarSize.lg => 72,
-        AvatarSize.xl => 96,
-      };
+    AvatarSize.xs => 20,
+    AvatarSize.sm => 28,
+    AvatarSize.md => 36,
+    AvatarSize.lg => 72,
+    AvatarSize.xl => 96,
+  };
 
   double get _fontSize => switch (size) {
-        AvatarSize.xs => 10,
-        AvatarSize.sm => 12,
-        AvatarSize.md => 15,
-        AvatarSize.lg => 28,
-        AvatarSize.xl => 38,
-      };
+    AvatarSize.xs => 10,
+    AvatarSize.sm => 12,
+    AvatarSize.md => 15,
+    AvatarSize.lg => 28,
+    AvatarSize.xl => 38,
+  };
 
   @override
   Widget build(BuildContext context) {

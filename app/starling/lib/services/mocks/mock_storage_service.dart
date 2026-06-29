@@ -41,6 +41,7 @@ class MockStorageService implements StorageService {
     _inboundController.add(_snapshotInbound());
     _inboundFollowersController.add(_snapshotInboundFollowers());
   }
+
   void _emitOutbound() => _outboundController.add(_snapshotOutbound());
 
   /// Releases broadcast controllers. Call from tearDown when the test
@@ -112,10 +113,7 @@ class MockStorageService implements StorageService {
   }
 
   @override
-  Future<void> setLastDecryptFailureAt(
-    String pubkey,
-    int? timestamp,
-  ) async {
+  Future<void> setLastDecryptFailureAt(String pubkey, int? timestamp) async {
     final follow = _follows[pubkey];
     if (follow != null) {
       _follows[pubkey] = follow.copyWith(
@@ -156,10 +154,12 @@ class MockStorageService implements StorageService {
       results = untilId != null
           // Strict keyset cursor — see StorageService.getEvents.
           ? results
-              .where((e) =>
-                  e.createdAt < until ||
-                  (e.createdAt == until && e.id.compareTo(untilId) < 0))
-              .toList()
+                .where(
+                  (e) =>
+                      e.createdAt < until ||
+                      (e.createdAt == until && e.id.compareTo(untilId) < 0),
+                )
+                .toList()
           : results.where((e) => e.createdAt <= until).toList();
     }
     results.sort((a, b) {
@@ -174,6 +174,19 @@ class MockStorageService implements StorageService {
 
   @override
   Future<Event?> getEvent(String id) async => _events[id];
+
+  @override
+  Future<Event?> getLatestProfile(String pubkey) async {
+    final profiles =
+        _events.values
+            .where((e) => e.pubkey == pubkey && e.kind == EventKind.profile)
+            .toList()
+          ..sort((a, b) {
+            final byTime = b.createdAt.compareTo(a.createdAt);
+            return byTime != 0 ? byTime : b.id.compareTo(a.id);
+          });
+    return profiles.isEmpty ? null : profiles.first;
+  }
 
   @override
   Future<void> saveEvent(Event event) async {
@@ -381,12 +394,14 @@ class MockStorageService implements StorageService {
     required int validFrom,
     required int validUntil,
   }) async {
-    _feedKeyHistory.add(RetiredFeedKey(
-      feedKey: feedKey,
-      feedKeyEpoch: feedKeyEpoch,
-      validFrom: validFrom,
-      validUntil: validUntil,
-    ));
+    _feedKeyHistory.add(
+      RetiredFeedKey(
+        feedKey: feedKey,
+        feedKeyEpoch: feedKeyEpoch,
+        validFrom: validFrom,
+        validUntil: validUntil,
+      ),
+    );
   }
 
   @override
@@ -418,12 +433,14 @@ class MockStorageService implements StorageService {
   }) async {
     _followFeedKeyHistory
         .putIfAbsent(followPubkey, () => [])
-        .add(RetiredFeedKey(
-          feedKey: feedKey,
-          feedKeyEpoch: feedKeyEpoch,
-          validFrom: validFrom,
-          validUntil: validUntil,
-        ));
+        .add(
+          RetiredFeedKey(
+            feedKey: feedKey,
+            feedKeyEpoch: feedKeyEpoch,
+            validFrom: validFrom,
+            validUntil: validUntil,
+          ),
+        );
   }
 
   @override
@@ -455,12 +472,14 @@ class MockStorageService implements StorageService {
       ..removeWhere(
         (d) => d.targetPubkey == targetPubkey && d.createdAt == createdAt,
       )
-      ..add(PendingKeyDistribution(
-        targetPubkey: targetPubkey,
-        encryptedFeedKey: encryptedFeedKey,
-        nonce: nonce,
-        createdAt: createdAt,
-      ));
+      ..add(
+        PendingKeyDistribution(
+          targetPubkey: targetPubkey,
+          encryptedFeedKey: encryptedFeedKey,
+          nonce: nonce,
+          createdAt: createdAt,
+        ),
+      );
     _deliveredKeys.remove(_distKey(targetPubkey, createdAt));
   }
 
@@ -480,10 +499,7 @@ class MockStorageService implements StorageService {
   }
 
   @override
-  Future<void> markDistributionsDelivered(
-    String targetPubkey,
-    int upTo,
-  ) async {
+  Future<void> markDistributionsDelivered(String targetPubkey, int upTo) async {
     for (final d in _pendingDistributions) {
       if (d.targetPubkey == targetPubkey && d.createdAt <= upTo) {
         _deliveredKeys.add(_distKey(d.targetPubkey, d.createdAt));
@@ -548,12 +564,14 @@ class MockStorageService implements StorageService {
       ..removeWhere(
         (d) => d.targetPubkey == targetPubkey && d.createdAt == createdAt,
       )
-      ..add(PendingCardDistribution(
-        targetPubkey: targetPubkey,
-        encryptedCard: encryptedCard,
-        nonce: nonce,
-        createdAt: createdAt,
-      ));
+      ..add(
+        PendingCardDistribution(
+          targetPubkey: targetPubkey,
+          encryptedCard: encryptedCard,
+          nonce: nonce,
+          createdAt: createdAt,
+        ),
+      );
     _deliveredCards.remove(_distKey(targetPubkey, createdAt));
   }
 
@@ -626,10 +644,12 @@ class MockStorageService implements StorageService {
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return rooms
         .take(limit)
-        .map((r) => r.copyWith(
-              participants:
-                  (_voiceParticipants[r.id]?.values.toList()) ?? const [],
-            ))
+        .map(
+          (r) => r.copyWith(
+            participants:
+                (_voiceParticipants[r.id]?.values.toList()) ?? const [],
+          ),
+        )
         .toList();
   }
 
@@ -637,8 +657,9 @@ class MockStorageService implements StorageService {
   Future<int> evictOldVoiceRooms(int maxAgeSeconds) async {
     final cutoff =
         DateTime.now().millisecondsSinceEpoch ~/ 1000 - maxAgeSeconds;
-    final stale =
-        _voiceRooms.values.where((r) => r.createdAt < cutoff).toList();
+    final stale = _voiceRooms.values
+        .where((r) => r.createdAt < cutoff)
+        .toList();
     for (final r in stale) {
       _voiceRooms.remove(r.id);
       _voiceParticipants.remove(r.id);
@@ -678,7 +699,9 @@ class MockStorageService implements StorageService {
 
   @override
   Future<void> saveInboundRequest(FollowRequest request) async {
-    final index = _inboundRequests.indexWhere((r) => r.pubkey == request.pubkey);
+    final index = _inboundRequests.indexWhere(
+      (r) => r.pubkey == request.pubkey,
+    );
     if (index >= 0) {
       _inboundRequests[index] = request;
     } else {
@@ -688,10 +711,7 @@ class MockStorageService implements StorageService {
   }
 
   @override
-  Future<void> updateInboundRequestStatus(
-    String pubkey,
-    String status,
-  ) async {
+  Future<void> updateInboundRequestStatus(String pubkey, String status) async {
     final index = _inboundRequests.indexWhere((r) => r.pubkey == pubkey);
     if (index >= 0) {
       final old = _inboundRequests[index];
@@ -732,7 +752,9 @@ class MockStorageService implements StorageService {
 
   @override
   Future<void> saveOutboundRequest(FollowRequest request) async {
-    final index = _outboundRequests.indexWhere((r) => r.pubkey == request.pubkey);
+    final index = _outboundRequests.indexWhere(
+      (r) => r.pubkey == request.pubkey,
+    );
     if (index >= 0) {
       _outboundRequests[index] = request;
     } else {
@@ -742,10 +764,7 @@ class MockStorageService implements StorageService {
   }
 
   @override
-  Future<void> updateOutboundRequestStatus(
-    String pubkey,
-    String status,
-  ) async {
+  Future<void> updateOutboundRequestStatus(String pubkey, String status) async {
     final index = _outboundRequests.indexWhere((r) => r.pubkey == pubkey);
     if (index >= 0) {
       final old = _outboundRequests[index];
@@ -778,19 +797,20 @@ class MockStorageService implements StorageService {
   @override
   Future<List<UnknownEnvelopeItem>> getUnknownEnvelopeItemsByType(
     String type,
-  ) async =>
-      _unknownItems.where((i) => i.type == type).toList();
+  ) async => _unknownItems.where((i) => i.type == type).toList();
 
   // --- Outbound queue ---
 
   @override
   Future<void> enqueue(String targetPubkey, Uint8List eventBlob) async {
-    _queue.add(QueuedEvent(
-      id: _nextQueueId++,
-      targetPubkey: targetPubkey,
-      eventBlob: eventBlob,
-      createdAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-    ));
+    _queue.add(
+      QueuedEvent(
+        id: _nextQueueId++,
+        targetPubkey: targetPubkey,
+        eventBlob: eventBlob,
+        createdAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      ),
+    );
   }
 
   @override

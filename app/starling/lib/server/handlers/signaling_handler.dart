@@ -30,9 +30,7 @@ Handler signalingHandler({
     final sigHeader = request.headers['x-starling-sig'];
     final timestampHeader = request.headers['x-starling-timestamp'];
 
-    if (pubkeyHeader == null ||
-        sigHeader == null ||
-        timestampHeader == null) {
+    if (pubkeyHeader == null || sigHeader == null || timestampHeader == null) {
       return Response(401, body: 'Missing auth headers');
     }
 

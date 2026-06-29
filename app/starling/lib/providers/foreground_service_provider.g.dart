@@ -43,7 +43,7 @@ final class ForegroundServiceStateProvider
 }
 
 String _$foregroundServiceStateHash() =>
-    r'5244ad4e9d24560acf69dcac6367cd2a86ac2087';
+    r'b76b41ba0c2843f35f055874b9d39e34bc8d2d76';
 
 /// Plan 14 Phase C — UI-facing state for the Android foreground service.
 /// Polls [FlutterForegroundTask.isRunningService] on a slow interval; the

@@ -31,9 +31,9 @@ class DefaultPostFanoutService implements PostFanoutService {
     required StorageService storage,
     required SyncTransport transport,
     required PeerReachabilityMonitor reachability,
-  })  : _storage = storage,
-        _transport = transport,
-        _reachability = reachability;
+  }) : _storage = storage,
+       _transport = transport,
+       _reachability = reachability;
 
   final StorageService _storage;
   final SyncTransport _transport;
@@ -52,9 +52,7 @@ class DefaultPostFanoutService implements PostFanoutService {
 
     final envelope = Envelope(
       version: kStarlingProtocolVersion,
-      items: [
-        EnvelopeItem(type: 'event', payload: encryptedEventBytes),
-      ],
+      items: [EnvelopeItem(type: 'event', payload: encryptedEventBytes)],
     );
 
     await Future.wait(

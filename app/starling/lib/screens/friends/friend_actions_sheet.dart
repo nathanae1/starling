@@ -58,7 +58,7 @@ class FriendActionsSheet extends ConsumerWidget {
     final name = follow.displayName ?? 'this friend';
     final body = isAlsoFollower
         ? 'You will stop receiving posts from $name, and they will no '
-            'longer receive your future posts.'
+              'longer receive your future posts.'
         : 'You will stop receiving posts from $name.';
     final confirm = await showDialog<bool>(
       context: context,

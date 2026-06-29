@@ -13,21 +13,18 @@ class OutboundQueueDao extends DatabaseAccessor<AppDatabase>
   Future<void> enqueue(OutboundQueueEntriesCompanion entry) =>
       into(outboundQueueEntries).insert(entry);
 
-  Future<List<OutboundQueueEntry>> dequeue(String targetPubkey) =>
-      (select(outboundQueueEntries)
-            ..where((q) => q.targetPubkey.equals(targetPubkey)))
-          .get();
+  Future<List<OutboundQueueEntry>> dequeue(String targetPubkey) => (select(
+    outboundQueueEntries,
+  )..where((q) => q.targetPubkey.equals(targetPubkey))).get();
 
   Future<void> incrementRetry(int id) async {
-    final entry = await (select(outboundQueueEntries)
-          ..where((q) => q.id.equals(id)))
-        .getSingleOrNull();
+    final entry = await (select(
+      outboundQueueEntries,
+    )..where((q) => q.id.equals(id))).getSingleOrNull();
     if (entry != null) {
-      await (update(outboundQueueEntries)
-            ..where((q) => q.id.equals(id)))
-          .write(OutboundQueueEntriesCompanion(
-        retryCount: Value(entry.retryCount + 1),
-      ));
+      await (update(outboundQueueEntries)..where((q) => q.id.equals(id))).write(
+        OutboundQueueEntriesCompanion(retryCount: Value(entry.retryCount + 1)),
+      );
     }
   }
 

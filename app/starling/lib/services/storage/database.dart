@@ -83,108 +83,102 @@ class AppDatabase extends _$AppDatabase {
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (m) async {
-          await m.createAll();
-          await customStatement(
-            'CREATE INDEX idx_events_feed '
-            'ON event_entries (created_at DESC)',
-          );
-          await customStatement(
-            'CREATE INDEX idx_events_pubkey '
-            'ON event_entries (pubkey, created_at DESC)',
-          );
-          await customStatement(
-            'CREATE INDEX idx_events_ref '
-            'ON event_entries (ref_id)',
-          );
-          await customStatement(
-            'CREATE INDEX idx_events_saved '
-            'ON event_entries (is_saved) WHERE is_saved = 1',
-          );
-          await customStatement(
-            'CREATE INDEX idx_pending_distributions_undelivered '
-            'ON pending_key_distribution_entries (target_pubkey) '
-            'WHERE distributed = 0',
-          );
-          await customStatement(
-            'CREATE INDEX idx_pending_card_distributions_undelivered '
-            'ON pending_card_distribution_entries (target_pubkey) '
-            'WHERE distributed = 0',
-          );
-        },
-        onUpgrade: (m, from, to) async {
-          if (from < 2) {
-            await m.addColumn(eventEntries, eventEntries.encryptedPayload);
-          }
-          if (from < 3) {
-            await m.createTable(pairedRelayEntries);
-            await m.createTable(pendingCardDistributionEntries);
-            await customStatement(
-              'CREATE INDEX idx_pending_card_distributions_undelivered '
-              'ON pending_card_distribution_entries (target_pubkey) '
-              'WHERE distributed = 0',
-            );
-          }
-          if (from < 4) {
-            // Plan 15 R3 cleanup: phone is no longer a relay. Drop the
-            // tables that backed the abandoned phone-as-relay code. The
-            // index lived on a dropped table; DROP TABLE removes it, but
-            // be explicit in case a dev manually created it without the
-            // table.
-            await customStatement(
-              'DROP TABLE IF EXISTS relay_paired_owner_entries',
-            );
-            await customStatement(
-              'DROP TABLE IF EXISTS relay_pairing_entries',
-            );
-            await customStatement(
-              'DROP TABLE IF EXISTS served_event_entries',
-            );
-            await customStatement(
-              'DROP TABLE IF EXISTS served_media_entries',
-            );
-            await customStatement(
-              'DROP TABLE IF EXISTS served_follow_request_entries',
-            );
-            await customStatement(
-              'DROP INDEX IF EXISTS idx_served_events_pubkey_created',
-            );
-          }
-          if (from < 5) {
-            // Plan 15: track the most recent Connection card update accepted
-            // from each peer, so the follower can ack card distributions the
-            // same way it acks key rotations.
-            await m.addColumn(followEntries, followEntries.lastReceivedCardAt);
-          }
-          if (from < 6) {
-            // S2/S3b: card deliveries are now sealed per follower
-            // (encrypted_card + nonce replace card_cbor + sig). Old
-            // cleartext rows are a transient outbox — drop and recreate;
-            // they're re-queued on the next pair/unpair.
-            await customStatement(
-              'DROP TABLE IF EXISTS pending_card_distribution_entries',
-            );
-            await m.createTable(pendingCardDistributionEntries);
-            await customStatement(
-              'CREATE INDEX idx_pending_card_distributions_undelivered '
-              'ON pending_card_distribution_entries (target_pubkey) '
-              'WHERE distributed = 0',
-            );
-          }
-          if (from < 7) {
-            // D1: per-follow timestamp of the last FULL (un-windowed)
-            // manifest diff; the periodic full pass catches events that
-            // arrived at a store out of author-time order.
-            await m.addColumn(followEntries, followEntries.lastFullSyncAt);
-          }
-          if (from < 8) {
-            // Plan 16: local-only voice-room call history (signaling-plane
-            // rooms, never feed events). Pruned after 7 days.
-            await m.createTable(voiceRoomEntries);
-            await m.createTable(voiceRoomParticipantEntries);
-          }
-        },
+    onCreate: (m) async {
+      await m.createAll();
+      await customStatement(
+        'CREATE INDEX idx_events_feed '
+        'ON event_entries (created_at DESC)',
       );
+      await customStatement(
+        'CREATE INDEX idx_events_pubkey '
+        'ON event_entries (pubkey, created_at DESC)',
+      );
+      await customStatement(
+        'CREATE INDEX idx_events_ref '
+        'ON event_entries (ref_id)',
+      );
+      await customStatement(
+        'CREATE INDEX idx_events_saved '
+        'ON event_entries (is_saved) WHERE is_saved = 1',
+      );
+      await customStatement(
+        'CREATE INDEX idx_pending_distributions_undelivered '
+        'ON pending_key_distribution_entries (target_pubkey) '
+        'WHERE distributed = 0',
+      );
+      await customStatement(
+        'CREATE INDEX idx_pending_card_distributions_undelivered '
+        'ON pending_card_distribution_entries (target_pubkey) '
+        'WHERE distributed = 0',
+      );
+    },
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.addColumn(eventEntries, eventEntries.encryptedPayload);
+      }
+      if (from < 3) {
+        await m.createTable(pairedRelayEntries);
+        await m.createTable(pendingCardDistributionEntries);
+        await customStatement(
+          'CREATE INDEX idx_pending_card_distributions_undelivered '
+          'ON pending_card_distribution_entries (target_pubkey) '
+          'WHERE distributed = 0',
+        );
+      }
+      if (from < 4) {
+        // Plan 15 R3 cleanup: phone is no longer a relay. Drop the
+        // tables that backed the abandoned phone-as-relay code. The
+        // index lived on a dropped table; DROP TABLE removes it, but
+        // be explicit in case a dev manually created it without the
+        // table.
+        await customStatement(
+          'DROP TABLE IF EXISTS relay_paired_owner_entries',
+        );
+        await customStatement('DROP TABLE IF EXISTS relay_pairing_entries');
+        await customStatement('DROP TABLE IF EXISTS served_event_entries');
+        await customStatement('DROP TABLE IF EXISTS served_media_entries');
+        await customStatement(
+          'DROP TABLE IF EXISTS served_follow_request_entries',
+        );
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_served_events_pubkey_created',
+        );
+      }
+      if (from < 5) {
+        // Plan 15: track the most recent Connection card update accepted
+        // from each peer, so the follower can ack card distributions the
+        // same way it acks key rotations.
+        await m.addColumn(followEntries, followEntries.lastReceivedCardAt);
+      }
+      if (from < 6) {
+        // S2/S3b: card deliveries are now sealed per follower
+        // (encrypted_card + nonce replace card_cbor + sig). Old
+        // cleartext rows are a transient outbox — drop and recreate;
+        // they're re-queued on the next pair/unpair.
+        await customStatement(
+          'DROP TABLE IF EXISTS pending_card_distribution_entries',
+        );
+        await m.createTable(pendingCardDistributionEntries);
+        await customStatement(
+          'CREATE INDEX idx_pending_card_distributions_undelivered '
+          'ON pending_card_distribution_entries (target_pubkey) '
+          'WHERE distributed = 0',
+        );
+      }
+      if (from < 7) {
+        // D1: per-follow timestamp of the last FULL (un-windowed)
+        // manifest diff; the periodic full pass catches events that
+        // arrived at a store out of author-time order.
+        await m.addColumn(followEntries, followEntries.lastFullSyncAt);
+      }
+      if (from < 8) {
+        // Plan 16: local-only voice-room call history (signaling-plane
+        // rooms, never feed events). Pruned after 7 days.
+        await m.createTable(voiceRoomEntries);
+        await m.createTable(voiceRoomParticipantEntries);
+      }
+    },
+  );
 }
 
 LazyDatabase _openEncryptedConnection(String dbKey) {

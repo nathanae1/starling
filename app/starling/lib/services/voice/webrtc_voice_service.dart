@@ -20,22 +20,24 @@ class WebRtcVoiceService implements VoiceService {
     // Injection seams for tests. Default to the real flutter_webrtc entry
     // points so production wiring is unchanged.
     Future<RTCPeerConnection> Function(Map<String, dynamic> configuration)
-        peerConnectionFactory = createPeerConnection,
-    Future<MediaStream> Function(Map<String, dynamic> constraints)? getUserMedia,
-  })  : _iceConfigLookup = iceConfigLookup,
-        _audioLevelInterval = audioLevelInterval,
-        _peerConnectionFactory = peerConnectionFactory,
-        _getUserMedia = getUserMedia ?? _defaultGetUserMedia;
+        peerConnectionFactory =
+        createPeerConnection,
+    Future<MediaStream> Function(Map<String, dynamic> constraints)?
+    getUserMedia,
+  }) : _iceConfigLookup = iceConfigLookup,
+       _audioLevelInterval = audioLevelInterval,
+       _peerConnectionFactory = peerConnectionFactory,
+       _getUserMedia = getUserMedia ?? _defaultGetUserMedia;
 
   final Future<IceConfig> Function() _iceConfigLookup;
   final Duration _audioLevelInterval;
   final Future<RTCPeerConnection> Function(Map<String, dynamic>)
-      _peerConnectionFactory;
+  _peerConnectionFactory;
   final Future<MediaStream> Function(Map<String, dynamic>) _getUserMedia;
 
   static Future<MediaStream> _defaultGetUserMedia(
-          Map<String, dynamic> constraints) =>
-      navigator.mediaDevices.getUserMedia(constraints);
+    Map<String, dynamic> constraints,
+  ) => navigator.mediaDevices.getUserMedia(constraints);
 
   final _localIce = StreamController<VoiceIceCandidate>.broadcast();
   final _peerStateCtrl = StreamController<VoicePeerState>.broadcast();
@@ -77,10 +79,7 @@ class WebRtcVoiceService implements VoiceService {
     } catch (_) {}
     final iceConfig = await _iceConfigLookup();
     _rtcConfig = iceConfig.toRtcConfiguration();
-    _localStream ??= await _getUserMedia({
-      'audio': true,
-      'video': false,
-    });
+    _localStream ??= await _getUserMedia({'audio': true, 'video': false});
     _applyMuteToLocalTracks();
     _levelTimer ??= Timer.periodic(_audioLevelInterval, (_) => _pollLevels());
   }
@@ -122,11 +121,13 @@ class WebRtcVoiceService implements VoiceService {
   ) async {
     final pc = _peers[peerPubkey];
     if (pc == null) return;
-    await pc.addCandidate(RTCIceCandidate(
-      candidate['candidate'] as String?,
-      candidate['sdpMid'] as String?,
-      (candidate['sdpMLineIndex'] as num?)?.toInt(),
-    ));
+    await pc.addCandidate(
+      RTCIceCandidate(
+        candidate['candidate'] as String?,
+        candidate['sdpMid'] as String?,
+        (candidate['sdpMLineIndex'] as num?)?.toInt(),
+      ),
+    );
   }
 
   @override
@@ -200,19 +201,22 @@ class WebRtcVoiceService implements VoiceService {
 
     pc.onIceCandidate = (candidate) {
       if (_localIce.isClosed) return;
-      _localIce.add(VoiceIceCandidate(
-        peerPubkey: peerPubkey,
-        candidate: {
-          'candidate': candidate.candidate,
-          'sdpMid': candidate.sdpMid,
-          'sdpMLineIndex': candidate.sdpMLineIndex,
-        },
-      ));
+      _localIce.add(
+        VoiceIceCandidate(
+          peerPubkey: peerPubkey,
+          candidate: {
+            'candidate': candidate.candidate,
+            'sdpMid': candidate.sdpMid,
+            'sdpMLineIndex': candidate.sdpMLineIndex,
+          },
+        ),
+      );
     };
     pc.onConnectionState = (state) {
       if (_peerStateCtrl.isClosed) return;
-      _peerStateCtrl
-          .add(VoicePeerState(peerPubkey: peerPubkey, state: _mapState(state)));
+      _peerStateCtrl.add(
+        VoicePeerState(peerPubkey: peerPubkey, state: _mapState(state)),
+      );
     };
     return pc;
   }

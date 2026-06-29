@@ -30,11 +30,7 @@ Uint8List ratchetFeedKey(Uint8List currentKey, CryptoService crypto) {
 ///
 /// `delta == 0` returns [baseKey] unchanged. Negative deltas are rejected —
 /// the ratchet is one-way.
-Uint8List deriveEpochKey(
-  Uint8List baseKey,
-  int delta,
-  CryptoService crypto,
-) {
+Uint8List deriveEpochKey(Uint8List baseKey, int delta, CryptoService crypto) {
   if (delta < 0) {
     throw ArgumentError('delta must be non-negative (ratchet is one-way)');
   }
@@ -57,11 +53,7 @@ Uint8List deriveEpochKey(
 ///   `msg_key_n` for that epoch. A future plan can replace this with a
 ///   ratcheting derivation for forward secrecy *within* an epoch — the
 ///   change is local to this function plus sender-side state.
-Uint8List deriveMsgKey(
-  Uint8List chainRoot,
-  int msgSeq,
-  CryptoService crypto,
-) {
+Uint8List deriveMsgKey(Uint8List chainRoot, int msgSeq, CryptoService crypto) {
   if (msgSeq < 0) {
     throw ArgumentError('msgSeq must be non-negative');
   }

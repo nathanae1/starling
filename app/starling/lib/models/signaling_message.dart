@@ -12,7 +12,6 @@ enum SignalingMessageType {
   answer('answer'),
   iceCandidate('ice_candidate'),
   muteStatus('mute_status'),
-  speakingStatus('speaking_status'),
   // Plan 11a — DCUtR hole-punch coordination. payload shape:
   //   { peer_id: String,           // sender's libp2p PeerId (base58)
   //     observed_addrs: List<Uint8List>, // candidate multiaddrs (STUN +
@@ -56,12 +55,12 @@ class SignalingMessage {
   final int timestamp;
 
   Map<String, dynamic> toMap() => {
-        'type': type.value,
-        'room_id': roomId,
-        'sender_pubkey': senderPubkey,
-        'payload': payload,
-        'timestamp': timestamp,
-      };
+    'type': type.value,
+    'room_id': roomId,
+    'sender_pubkey': senderPubkey,
+    'payload': payload,
+    'timestamp': timestamp,
+  };
 
   Uint8List toBytes() => Uint8List.fromList(cbor.encode(toMap()));
 
@@ -97,9 +96,7 @@ class SignalingMessage {
 
 Map<String, dynamic> _castPayload(dynamic value) {
   if (value is Map) {
-    return value.map(
-      (key, val) => MapEntry(key.toString(), val),
-    );
+    return value.map((key, val) => MapEntry(key.toString(), val));
   }
   return {};
 }

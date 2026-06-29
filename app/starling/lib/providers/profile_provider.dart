@@ -24,10 +24,7 @@ class OnboardingProfileController extends _$OnboardingProfileController {
   }
 
   void clearAvatar() {
-    state = Profile(
-      displayName: state.displayName,
-      bio: state.bio,
-    );
+    state = Profile(displayName: state.displayName, bio: state.bio);
   }
 
   void reset() => state = const Profile(displayName: '');

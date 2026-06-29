@@ -27,9 +27,7 @@ class PairedRelayController extends _$PairedRelayController {
 
   /// Re-read the paired relay after a pair/unpair so dependents rebuild.
   Future<void> reload() async {
-    state = AsyncData(
-      await ref.read(storageServiceProvider).getPairedRelay(),
-    );
+    state = AsyncData(await ref.read(storageServiceProvider).getPairedRelay());
   }
 }
 

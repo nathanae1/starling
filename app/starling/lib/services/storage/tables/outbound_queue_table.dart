@@ -5,6 +5,5 @@ class OutboundQueueEntries extends Table {
   TextColumn get targetPubkey => text()();
   BlobColumn get eventBlob => blob()();
   IntColumn get createdAt => integer()();
-  IntColumn get retryCount =>
-      integer().withDefault(const Constant(0))();
+  IntColumn get retryCount => integer().withDefault(const Constant(0))();
 }

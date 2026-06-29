@@ -66,7 +66,7 @@ final class FollowProfileProvider
   }
 }
 
-String _$followProfileHash() => r'a8bfd4c3f03e69574314f5471a7855e489c46099';
+String _$followProfileHash() => r'd02d5ea6e4e516fa9c0385a882af62c6f1048f91';
 
 final class FollowProfileFamily extends $Family
     with $FunctionalFamilyOverride<FutureOr<FollowProfileSnapshot>, String> {

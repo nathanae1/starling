@@ -1,18 +1,11 @@
 import 'dart:collection';
-import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../providers/identity_provider.dart';
-import '../providers/media_provider.dart';
-import '../providers/service_providers.dart';
-import '../providers/sync_provider.dart';
-import '../services/crypto/feed_key_ratchet.dart';
-import '../services/media_service.dart';
-import '../sync/key_refresh_throttle.dart';
 import '../theme/starling_theme.dart';
+import 'media_decrypt.dart';
 
 /// Decrypts a media blob (by hash) for the given author pubkey and renders
 /// it. The author's feed key is resolved transparently — own posts use the
@@ -81,162 +74,23 @@ class _EncryptedImageState extends ConsumerState<EncryptedImage> {
     if (_loading) return;
     _loading = true;
     try {
-      final bytes = await _resolveAndDecrypt();
+      final bytes = await resolveAndDecryptMedia(
+        ref,
+        hash: widget.hash,
+        pubkey: widget.pubkey,
+        msgSeq: widget.msgSeq,
+        mounted: () => mounted,
+      );
       if (!mounted) return;
       if (bytes == null) {
         setState(() => _missing = true);
       } else {
         _imageCache.put(widget.hash, bytes);
         setState(() => _bytes = bytes);
-        await _clearDecryptFailure();
       }
     } finally {
       _loading = false;
     }
-  }
-
-  Future<Uint8List?> _resolveAndDecrypt() async {
-    final candidates = await _candidateFeedKeys();
-    if (candidates.isEmpty) return null;
-    final mediaService = ref.read(mediaServiceProvider);
-    final local = await _tryDecryptWithAny(mediaService, candidates);
-    if (local != null) return local;
-
-    // Try fetching the encrypted blob. RemoteMediaFetcher returns null
-    // both for "already cached on disk" and "no peer reachable" — we
-    // can't tell which, so we decrypt again unconditionally below.
-    final fetcher = ref.read(remoteMediaFetcherProvider);
-    await fetcher.fetch(widget.hash, widget.pubkey);
-    final afterFetch = await _tryDecryptWithAny(mediaService, candidates);
-    if (afterFetch != null) return afterFetch;
-
-    // Two decrypt attempts under the cached key failed. Either:
-    //  - the blob was cached from a previous session under a different
-    //    feed-key epoch, or
-    //  - the peer rotated their feed key and the rotation hasn't
-    //    reached us yet.
-    // Pull a one-shot sync (which inlines any pending rotation via the
-    // manifest), then retry decrypt once with the refreshed candidate
-    // list. Throttled per-peer so a screen full of stale media doesn't
-    // fan out into dozens of redundant manifest calls.
-    return _refreshKeyAndRetry(mediaService);
-  }
-
-  Future<Uint8List?> _refreshKeyAndRetry(MediaService mediaService) async {
-    final throttle = ref.read(keyRefreshThrottleProvider);
-    final clock = ref.read(clockProvider);
-    if (!throttle.tryAcquire(widget.pubkey)) {
-      // Already attempted recently — record the staleness signal and
-      // give up for this round; the cooldown will lapse in due course.
-      await _recordDecryptFailure(clock.nowUnixSeconds());
-      return null;
-    }
-    developer.log(
-      'media decrypt failed for ${widget.pubkey}; refreshing feed key',
-      name: 'encrypted_image',
-    );
-    try {
-      await ref.read(syncEngineProvider).syncOnePeerByPubkey(widget.pubkey);
-    } catch (e) {
-      developer.log(
-        'feed-key refresh sync failed for ${widget.pubkey}: $e',
-        name: 'encrypted_image',
-      );
-    }
-    if (!mounted) return null;
-    final refreshed = await _candidateFeedKeys();
-    if (refreshed.isEmpty) return null;
-    final retry = await _tryDecryptWithAny(mediaService, refreshed);
-    if (retry != null) return retry;
-    await _recordDecryptFailure(clock.nowUnixSeconds());
-    return null;
-  }
-
-  Future<void> _recordDecryptFailure(int now) async {
-    // Stamp the staleness signal on the follow row so connection
-    // settings can show "Key — stale" and ops can spot the gap.
-    // Skip for own-pubkey: we never look up our own row that way, and
-    // a same-app self-decrypt mismatch is a different bug class.
-    final identity = await ref.read(identityControllerProvider.future);
-    if (identity != null && identity.pubkey == widget.pubkey) return;
-    final storage = ref.read(storageServiceProvider);
-    await storage.setLastDecryptFailureAt(widget.pubkey, now);
-  }
-
-  Future<void> _clearDecryptFailure() async {
-    final identity = await ref.read(identityControllerProvider.future);
-    if (identity != null && identity.pubkey == widget.pubkey) return;
-    final storage = ref.read(storageServiceProvider);
-    await storage.clearLastDecryptFailureIfSet(widget.pubkey);
-  }
-
-  /// Walks [chainRoots] in priority order, derives the per-message AEAD
-  /// key from each one (using the post's `msgSeq` from the widget arg),
-  /// and tries to decrypt. Returns the first plaintext that comes
-  /// through, or null if everything failed.
-  ///
-  /// A libsodium failure on any one root is expected when the blob was
-  /// encrypted under a different epoch's chain root — keep going until
-  /// something works.
-  Future<Uint8List?> _tryDecryptWithAny(
-    MediaService mediaService,
-    List<Uint8List> chainRoots,
-  ) async {
-    final msgSeq = widget.msgSeq;
-    if (msgSeq == null) {
-      // Legacy / pre-v9 row with no msg_seq stored — there's no way to
-      // derive the key. Fall through to the placeholder.
-      developer.log(
-        'no msgSeq for media ${widget.hash} (pubkey=${widget.pubkey})',
-        name: 'encrypted_image',
-      );
-      return null;
-    }
-    final crypto = ref.read(cryptoServiceProvider);
-    for (final root in chainRoots) {
-      final msgKey = deriveMsgKey(root, msgSeq, crypto);
-      _logImg(
-        'dec deriveMsgKey hash=${_shortHexImg(widget.hash)} '
-        'pubkey=${widget.pubkey} msgSeq=$msgSeq '
-        'rootFp=${_shortFpImg(root)} msgKeyFp=${_shortFpImg(msgKey)}',
-      );
-      try {
-        final bytes = await mediaService.readPlaintext(widget.hash, msgKey);
-        if (bytes != null) return bytes;
-      } catch (_) {
-        // Wrong key — try the next chain root.
-        continue;
-      }
-    }
-    developer.log(
-      'no candidate key decrypted media ${widget.hash} '
-      '(pubkey=${widget.pubkey}, msgSeq=$msgSeq, '
-      'tried=${chainRoots.length})',
-      name: 'encrypted_image',
-    );
-    return null;
-  }
-
-  /// Returns the chain roots to try when decrypting this media, in
-  /// priority order. For own posts: current identity feed key first,
-  /// then retired keys (Plan 13 history). For followee posts: current
-  /// `Follow.feedKey` first, then archived chain roots from
-  /// `follow_feed_key_history` covering the post's createdAt window.
-  Future<List<Uint8List>> _candidateFeedKeys() async {
-    final identity = await ref.read(identityControllerProvider.future);
-    final storage = ref.read(storageServiceProvider);
-    if (identity != null && identity.pubkey == widget.pubkey) {
-      final history = await storage.getFeedKeyHistory();
-      // Newest retired first — recent posts are far more common than
-      // ancient ones, so this minimises wasted decrypt attempts.
-      history.sort((a, b) => b.validUntil.compareTo(a.validUntil));
-      return [identity.feedKey, ...history.map((r) => r.feedKey)];
-    }
-    final follow = await storage.getFollow(widget.pubkey);
-    if (follow == null) return const [];
-    final history = await storage.getFollowFeedKeyHistory(widget.pubkey);
-    history.sort((a, b) => b.validUntil.compareTo(a.validUntil));
-    return [follow.feedKey, ...history.map((r) => r.feedKey)];
   }
 
   Future<void> _retry() async {
@@ -251,11 +105,7 @@ class _EncryptedImageState extends ConsumerState<EncryptedImage> {
 
     Widget content;
     if (_bytes != null) {
-      content = Image.memory(
-        _bytes!,
-        fit: widget.fit,
-        gaplessPlayback: true,
-      );
+      content = Image.memory(_bytes!, fit: widget.fit, gaplessPlayback: true);
     } else if (_missing) {
       content = _PlaceholderTile(
         background: starling.colors.linen,
@@ -270,10 +120,7 @@ class _EncryptedImageState extends ConsumerState<EncryptedImage> {
       );
     }
 
-    final clipped = ClipRRect(
-      borderRadius: radius,
-      child: content,
-    );
+    final clipped = ClipRRect(borderRadius: radius, child: content);
 
     if (widget.aspectRatio != null) {
       return AspectRatio(aspectRatio: widget.aspectRatio!, child: clipped);
@@ -350,22 +197,4 @@ class _LruImageCache {
   }
 
   void clear() => _entries.clear();
-}
-
-String _shortHexImg(String hex) {
-  if (hex.length <= 8) return hex;
-  return '${hex.substring(0, 8)}…';
-}
-
-String _shortFpImg(Uint8List bytes) {
-  final hex = bytes
-      .take(4)
-      .map((b) => b.toRadixString(16).padLeft(2, '0'))
-      .join();
-  return '$hex…';
-}
-
-void _logImg(String msg) {
-  // ignore: avoid_print
-  print('[starling.media] $msg');
 }

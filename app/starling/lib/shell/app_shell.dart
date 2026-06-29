@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../providers/follow_requests_provider.dart';
 import '../providers/sync_provider.dart';
@@ -19,12 +20,18 @@ class AppShell extends ConsumerWidget {
 
   final StatefulNavigationShell navigationShell;
 
-  // The shell has three branches (feed, friends, you); "post" is modal.
-  static const _branchToTab = [StarlingTab.feed, StarlingTab.friends, StarlingTab.you];
+  // The shell has four branches (feed, friends, rooms, you); compose is a FAB.
+  static const _branchToTab = [
+    StarlingTab.feed,
+    StarlingTab.friends,
+    StarlingTab.rooms,
+    StarlingTab.you,
+  ];
   static const _tabToBranch = {
     StarlingTab.feed: 0,
     StarlingTab.friends: 1,
-    StarlingTab.you: 2,
+    StarlingTab.rooms: 2,
+    StarlingTab.you: 3,
   };
 
   StarlingTab get _current => _branchToTab[navigationShell.currentIndex];
@@ -38,12 +45,6 @@ class AppShell extends ConsumerWidget {
   }
 
   void _onTap(BuildContext context, WidgetRef ref, StarlingTab tab) {
-    if (tab == StarlingTab.post) {
-      // "Post" is a modal action, not a tab. Push compose over whichever tab
-      // the user was on; do not change the active tab index.
-      context.push('/compose');
-      return;
-    }
     if (tab == StarlingTab.feed) {
       // Tapping Feed always kicks a pull. syncNow() coalesces concurrent
       // calls so rapid taps are safe; errors surface via syncStatusProvider.
@@ -61,6 +62,10 @@ class AppShell extends ConsumerWidget {
     final starling = StarlingTheme.of(context);
     final inboundCount =
         ref.watch(inboundRequestsStreamProvider).value?.length ?? 0;
+    // Hide the compose FAB while a voice call is active so it can't collide
+    // with the CallOverlay banner pinned above the tab bar.
+    final inCall =
+        kVoiceEnabled && ref.watch(voiceRoomStateProvider).value != null;
 
     if (kVoiceEnabled) {
       // Surface an inbound voice invite as a modal sheet from anywhere in the
@@ -79,8 +84,9 @@ class AppShell extends ConsumerWidget {
       // downgrades to dataSync-only or stops. No-op on iOS/desktop.
       ref.listen(voiceRoomStateProvider, (_, next) {
         unawaited(
-          ForegroundServiceController.instance
-              .setCallActive(next.value != null),
+          ForegroundServiceController.instance.setCallActive(
+            next.value != null,
+          ),
         );
       });
     }
@@ -93,6 +99,16 @@ class AppShell extends ConsumerWidget {
           if (kVoiceEnabled) const CallOverlay(),
         ],
       ),
+      floatingActionButton: inCall
+          ? null
+          : FloatingActionButton(
+              onPressed: () => context.push('/compose'),
+              backgroundColor: starling.colors.sage,
+              foregroundColor: const Color(0xFFFDFBF5),
+              elevation: 2,
+              tooltip: 'New post',
+              child: const Icon(LucideIcons.plus),
+            ),
       bottomNavigationBar: StarlingBottomTabBar(
         current: _current,
         onTap: (t) => _onTap(context, ref, t),

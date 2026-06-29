@@ -49,10 +49,10 @@ class MethodChannelMdnsService implements MdnsService {
   MethodChannelMdnsService({
     MethodChannel? methodChannel,
     EventChannel? eventChannel,
-  })  : _methodChannel =
-            methodChannel ?? const MethodChannel('dev.starling.mdns'),
-        _eventChannel =
-            eventChannel ?? const EventChannel('dev.starling.mdns/peers');
+  }) : _methodChannel =
+           methodChannel ?? const MethodChannel('dev.starling.mdns'),
+       _eventChannel =
+           eventChannel ?? const EventChannel('dev.starling.mdns/peers');
 
   final MethodChannel _methodChannel;
   final EventChannel _eventChannel;
@@ -65,12 +65,12 @@ class MethodChannelMdnsService implements MdnsService {
   void _ensureSubscribed() {
     if (_eventSub != null) return;
     _eventSub = _eventChannel.receiveBroadcastStream().listen(
-          _onNativeEvent,
-          onError: (_) {
-            // Native stream errors are non-fatal; the resolver will
-            // re-emit on the next discovery tick.
-          },
-        );
+      _onNativeEvent,
+      onError: (_) {
+        // Native stream errors are non-fatal; the resolver will
+        // re-emit on the next discovery tick.
+      },
+    );
   }
 
   void _onNativeEvent(dynamic raw) {
@@ -83,8 +83,7 @@ class MethodChannelMdnsService implements MdnsService {
       final host = raw['host'] as String?;
       final port = raw['port'] as int?;
       if (host == null || port == null) return;
-      _cache[pubkey] =
-          LanPeer(pubkey: pubkey, host: host, port: port);
+      _cache[pubkey] = LanPeer(pubkey: pubkey, host: host, port: port);
       _emitSnapshot();
     } else if (event == 'peer-lost') {
       if (_cache.remove(pubkey) != null) {
