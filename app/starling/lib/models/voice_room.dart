@@ -19,6 +19,11 @@ enum ParticipantConnectionState {
   disconnected,
 }
 
+/// Coarse per-peer link quality derived from RTP loss / RTT / jitter. Only
+/// `fair`/`poor` surface visually (signal bars); `good` shows nothing, and a
+/// null quality means "no sample yet" (also drawn as nothing).
+enum ConnectionQuality { good, fair, poor }
+
 class VoiceParticipant {
   const VoiceParticipant({
     required this.pubkey,
@@ -26,6 +31,7 @@ class VoiceParticipant {
     this.isMuted = false,
     this.isSpeaking = false,
     this.connectionState = ParticipantConnectionState.connecting,
+    this.quality,
   });
 
   final String pubkey;
@@ -33,18 +39,21 @@ class VoiceParticipant {
   final bool isMuted;
   final bool isSpeaking;
   final ParticipantConnectionState connectionState;
+  final ConnectionQuality? quality;
 
   VoiceParticipant copyWith({
     String? displayName,
     bool? isMuted,
     bool? isSpeaking,
     ParticipantConnectionState? connectionState,
+    ConnectionQuality? quality,
   }) => VoiceParticipant(
     pubkey: pubkey,
     displayName: displayName ?? this.displayName,
     isMuted: isMuted ?? this.isMuted,
     isSpeaking: isSpeaking ?? this.isSpeaking,
     connectionState: connectionState ?? this.connectionState,
+    quality: quality ?? this.quality,
   );
 }
 
@@ -97,6 +106,14 @@ class VoiceRoomState {
   final VoiceRoom room;
   final bool localMuted;
   final bool speakerMode;
+
+  /// True while any participant's transport is mid-reconnect (WebRTC ICE
+  /// `disconnected` → [ParticipantConnectionState.reconnecting]). The local
+  /// user is seeded `connected`, so this reflects remote peers and drives the
+  /// call-wide "Reconnecting…" banner.
+  bool get anyReconnecting => room.participants.any(
+    (p) => p.connectionState == ParticipantConnectionState.reconnecting,
+  );
 
   VoiceRoomState copyWith({
     VoiceRoom? room,

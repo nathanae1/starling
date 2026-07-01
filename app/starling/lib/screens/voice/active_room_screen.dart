@@ -117,6 +117,7 @@ class _ActiveRoomScreenState extends ConsumerState<ActiveRoomScreen> {
                 ],
               ),
             ),
+            if (state.anyReconnecting) const _ReconnectingBanner(),
             Expanded(
               // Center the avatars when there's room, but scroll once enough
               // participants (6+) overflow a single screen so none get clipped
@@ -162,6 +163,55 @@ class _ActiveRoomScreenState extends ConsumerState<ActiveRoomScreen> {
               onLeave: () => _leave(room, myPubkey),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Call-wide banner shown while any remote peer is mid-reconnect. Aggregates
+/// the per-participant [ParticipantConnectionState.reconnecting] states that
+/// each avatar already surfaces individually.
+class _ReconnectingBanner extends StatelessWidget {
+  const _ReconnectingBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final starling = StarlingTheme.of(context);
+    final colors = starling.colors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      child: Semantics(
+        liveRegion: true,
+        label: 'Reconnecting',
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: colors.warning.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: colors.warning.withValues(alpha: 0.5)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: colors.warning,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Reconnecting…',
+                style: starling.typography.small.copyWith(
+                  color: _onInk,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -9,6 +9,7 @@ import 'screens/feed/feed_screen.dart';
 import 'screens/feed/post_detail_screen.dart';
 import 'screens/friends/friends_screen.dart';
 import 'screens/friends/scan_screen.dart';
+import 'screens/onboarding/done_screen.dart';
 import 'screens/onboarding/recovery_phrase_screen.dart';
 import 'screens/onboarding/restore_screen.dart';
 import 'screens/onboarding/setup_screen.dart';
@@ -24,6 +25,7 @@ import 'screens/settings/voice_settings_screen.dart';
 import 'screens/voice/active_room_screen.dart';
 import 'screens/voice/create_room_screen.dart';
 import 'screens/voice/room_list_screen.dart';
+import 'screens/voice/room_screen.dart';
 import 'shell/app_shell.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -44,7 +46,14 @@ GoRouter buildRouter(Ref ref) {
 
       if (identity.isLoading) return null;
       if (!hasIdentity && !isOnboarding) return '/onboarding/welcome';
-      if (hasIdentity && isOnboarding) return '/feed';
+      // `/onboarding/done` is the post-signup capstone — the identity already
+      // exists by the time we land there, so exempt it from the bounce that
+      // sends every other onboarding route to the feed once onboarded.
+      if (hasIdentity &&
+          isOnboarding &&
+          state.matchedLocation != '/onboarding/done') {
+        return '/feed';
+      }
       // iOS reports `/` as the platform's initial route, which overrides
       // `initialLocation`. We don't define a `/` route, so bounce it to
       // the feed for already-onboarded users.
@@ -72,6 +81,11 @@ GoRouter buildRouter(Ref ref) {
         path: '/onboarding/restore',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (_, _) => const RestoreScreen(),
+      ),
+      GoRoute(
+        path: '/onboarding/done',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (_, _) => const DoneScreen(),
       ),
 
       // Compose (root-level modal, pushed from the "Post" tab). The preview
@@ -195,6 +209,14 @@ GoRouter buildRouter(Ref ref) {
                       fullscreenDialog: true,
                       child: ActiveRoomScreen(),
                     ),
+                  ),
+                  // Plan 17 — the durable chatroom (text timeline + call
+                  // affordance). Distinct from the root-pinned live-mesh
+                  // screen above.
+                  GoRoute(
+                    path: 'room/:roomId',
+                    builder: (context, state) =>
+                        RoomScreen(roomId: state.pathParameters['roomId']!),
                   ),
                   GoRoute(
                     path: 'settings',

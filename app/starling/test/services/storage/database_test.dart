@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:drift/drift.dart' show Value;
 import 'package:starling/services/storage/database.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -48,5 +51,35 @@ void main() {
       'idx_events_pubkey',
       'idx_events_ref',
     ]));
+  });
+
+  test('follow_entries has no vestigial name/avatar columns', () async {
+    final cols =
+        await db.customSelect('PRAGMA table_info(follow_entries)').get();
+    final names = cols.map((r) => r.data['name'] as String).toSet();
+    expect(names, isNot(contains('display_name')));
+    expect(names, isNot(contains('avatar_hash')));
+    // The columns that matter still exist.
+    expect(names, containsAll(['pubkey', 'connection_card', 'feed_key']));
+  });
+
+  test('follow round-trips its remaining columns through the DAO', () async {
+    await db.followsDao.upsertFollow(
+      FollowEntriesCompanion.insert(
+        pubkey: 'pk-1',
+        connectionCard: '{"pubkey":"pk-1"}',
+        feedKey: Uint8List.fromList(List.filled(32, 0x11)),
+        feedKeyEpoch: const Value(3),
+        status: const Value('active'),
+      ),
+    );
+
+    final row = await db.followsDao.getFollow('pk-1');
+    expect(row, isNotNull);
+    expect(row!.pubkey, 'pk-1');
+    expect(row.connectionCard, '{"pubkey":"pk-1"}');
+    expect(row.feedKey, Uint8List.fromList(List.filled(32, 0x11)));
+    expect(row.feedKeyEpoch, 3);
+    expect(row.status, 'active');
   });
 }

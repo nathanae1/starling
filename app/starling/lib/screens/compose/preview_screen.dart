@@ -6,6 +6,7 @@ import '../../providers/compose_provider.dart';
 import '../../providers/events_provider.dart';
 import '../../providers/feed_provider.dart';
 import '../../providers/post_provider.dart';
+import '../../providers/publish_activity_provider.dart';
 import '../../theme/starling_theme.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/sticky_action_bar.dart';
@@ -30,6 +31,11 @@ class _PreviewScreenState extends ConsumerState<PreviewScreen> {
       _error = null;
     });
     ref.read(composeControllerProvider.notifier).markPublishing();
+    // Capture the notifier up front (the widget is popped on success, after
+    // which its `ref` is unsafe) and clear the flag in `finally` so the sync
+    // indicator's "Publishing…" state always resolves.
+    final publishActivity = ref.read(publishActivityProvider.notifier);
+    publishActivity.begin();
     try {
       await ref
           .read(postServiceProvider)
@@ -54,6 +60,8 @@ class _PreviewScreenState extends ConsumerState<PreviewScreen> {
         _error = "Couldn't publish. Try again.";
       });
       ref.read(composeControllerProvider.notifier).markPublishFailed('$e');
+    } finally {
+      publishActivity.end();
     }
   }
 

@@ -34,6 +34,15 @@ class ParticipantAvatar extends StatelessWidget {
     final disconnected =
         participant.connectionState == ParticipantConnectionState.disconnected;
 
+    // Signal bars only for a live peer with a fair/poor sample; good and
+    // no-sample stay clean (the grid shows only exceptional states).
+    final quality =
+        participant.connectionState == ParticipantConnectionState.connected
+        ? participant.quality
+        : null;
+    final showBars =
+        quality == ConnectionQuality.fair || quality == ConnectionQuality.poor;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -82,6 +91,12 @@ class ParticipantAvatar extends StatelessWidget {
                   ),
                 ),
               ),
+            if (showBars)
+              Positioned(
+                left: 2,
+                bottom: 2,
+                child: _SignalBars(quality: quality!),
+              ),
           ],
         ),
         const SizedBox(height: 8),
@@ -96,6 +111,54 @@ class ParticipantAvatar extends StatelessWidget {
         ),
         if (disconnected) Text('unreachable', style: starling.typography.micro),
       ],
+    );
+  }
+}
+
+/// Small signal-strength chip shown bottom-left of the avatar for a degraded
+/// link. Only `fair` (2 warning bars) and `poor` (1 danger bar) render — a
+/// good or not-yet-sampled link shows nothing.
+class _SignalBars extends StatelessWidget {
+  const _SignalBars({required this.quality});
+
+  final ConnectionQuality quality;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = StarlingTheme.of(context).colors;
+    final lit = quality == ConnectionQuality.fair ? 2 : 1;
+    final litColor =
+        quality == ConnectionQuality.fair ? colors.warning : colors.danger;
+    final dimColor = colors.stone.withValues(alpha: 0.5);
+    return Semantics(
+      label: quality == ConnectionQuality.fair
+          ? 'Fair connection'
+          : 'Weak connection',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+        decoration: BoxDecoration(
+          color: colors.ink.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: colors.paper, width: 1.5),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            for (var i = 0; i < 3; i++) ...[
+              if (i > 0) const SizedBox(width: 2),
+              Container(
+                width: 3,
+                height: 4 + i * 3.0,
+                decoration: BoxDecoration(
+                  color: i < lit ? litColor : dimColor,
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

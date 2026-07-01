@@ -61,6 +61,11 @@ abstract class VoiceService {
   /// emitted on a low-frequency poll. Best-effort.
   Stream<Map<String, double>> get audioLevels;
 
+  /// `pubkey -> coarse link quality` snapshots, derived from the same
+  /// low-frequency stats poll as [audioLevels]. Best-effort; a peer is absent
+  /// from the map until it has a usable RTP sample.
+  Stream<Map<String, ConnectionQuality>> get connectionQuality;
+
   Future<void> setMicMuted(bool muted);
   Future<void> setSpeakerMode(bool speaker);
 

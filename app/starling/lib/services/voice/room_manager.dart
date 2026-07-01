@@ -29,13 +29,15 @@ class RoomManager {
     required CryptoService crypto,
     required Clock clock,
     required Future<String?> Function() localPubkeyLookup,
+    Future<void> Function(String roomId, String callId)? announceCall,
     this.speakingThreshold = 0.02,
   }) : _roomSignaling = roomSignaling,
        _voice = voice,
        _storage = storage,
        _crypto = crypto,
        _clock = clock,
-       _localPubkeyLookup = localPubkeyLookup;
+       _localPubkeyLookup = localPubkeyLookup,
+       _announceCall = announceCall;
 
   final RoomSignaling _roomSignaling;
   final VoiceService _voice;
@@ -44,6 +46,11 @@ class RoomManager {
   final Clock _clock;
   final Future<String?> Function() _localPubkeyLookup;
 
+  /// Plan 17: authors the durable `roomCallStarted` record when a chatroom
+  /// call starts, so offline members see it on next sync. Null for the Plan
+  /// 16 direct-call path (no durable record).
+  final Future<void> Function(String roomId, String callId)? _announceCall;
+
   /// Normalized audio level above which a participant is rendered "speaking".
   final double speakingThreshold;
 
@@ -51,6 +58,12 @@ class RoomManager {
   final _inviteCtrl = StreamController<VoiceRoom>.broadcast();
 
   VoiceRoom? _room;
+
+  /// The per-call history PK (Plan 16 `voice_rooms`), kept DISTINCT from the
+  /// signaling `_room.id`. For a Plan 16 direct call the two are equal; for a
+  /// Plan 17 chatroom call the signaling id is the chatroomId while this is a
+  /// fresh call id, so a second call doesn't overwrite the first's history.
+  String? _callId;
   final Map<String, VoiceParticipant> _roster = {};
   final Set<String> _present = {};
   final Set<String> _offeredTo = {};
@@ -84,6 +97,7 @@ class RoomManager {
     );
     _subs.add(_voice.peerStates.listen(_onPeerState));
     _subs.add(_voice.audioLevels.listen(_onAudioLevels));
+    _subs.add(_voice.connectionQuality.listen(_onConnectionQuality));
   }
 
   Future<void> stop() async {
@@ -117,6 +131,7 @@ class RoomManager {
     final now = _clock.nowUnixSeconds();
 
     _resetSession();
+    _callId = roomId; // Plan 16 direct call: history PK == signaling id.
     _invitedRoster = {me, ...inviteePubkeys};
     _present.add(me);
     _roster[me] = VoiceParticipant(
@@ -126,7 +141,6 @@ class RoomManager {
     for (final p in inviteePubkeys) {
       _roster[p] = VoiceParticipant(
         pubkey: p,
-        displayName: await _displayName(p),
         connectionState: ParticipantConnectionState.connecting,
       );
     }
@@ -139,10 +153,8 @@ class RoomManager {
     );
 
     await _voice.startSession(roomId);
-    await _storage.saveVoiceRoom(
-      _room!.copyWith(participants: _roster.values.toList()),
-    );
-    await _storage.saveVoiceRoomParticipant(roomId, me, joinedAt: now);
+    await _saveHistoryRoom();
+    await _storage.saveVoiceRoomParticipant(_callId!, me, joinedAt: now);
 
     final sessionHex = _hex(_sessionKey!);
     for (final p in inviteePubkeys) {
@@ -157,6 +169,69 @@ class RoomManager {
     return _room!;
   }
 
+  /// Plan 17: start the single live call for chatroom [chatroomId]. Unlike
+  /// [createRoom], the signaling roomId IS the chatroomId (so concurrent
+  /// starts converge on one mesh), the per-call history is keyed on a fresh
+  /// callId, and a durable `roomCallStarted` record is authored for offline
+  /// members. The ≤4 mesh cap is enforced on accept, not here — every member
+  /// is pinged even in a large room.
+  Future<VoiceRoom> startRoomCall({
+    required String chatroomId,
+    required String name,
+    required List<String> memberPubkeys,
+  }) async {
+    if (_room != null) throw StateError('already in a room');
+    final me = await _requireLocalPubkey();
+    final others = memberPubkeys.where((p) => p != me).toList();
+    final callId = _hex(_crypto.randomBytes(16));
+    _sessionKey = _crypto.randomBytes(32);
+    final now = _clock.nowUnixSeconds();
+
+    _resetSession();
+    _callId = callId; // distinct from the signaling id (= chatroomId)
+    _invitedRoster = {me, ...others};
+    _present.add(me);
+    _roster[me] = VoiceParticipant(
+      pubkey: me,
+      connectionState: ParticipantConnectionState.connected,
+    );
+    for (final p in others) {
+      _roster[p] = VoiceParticipant(
+        pubkey: p,
+        connectionState: ParticipantConnectionState.connecting,
+      );
+    }
+    _room = VoiceRoom(
+      id: chatroomId,
+      name: name,
+      creatorPubkey: me,
+      createdAt: now,
+      invitedPubkeys: others,
+    );
+
+    await _voice.startSession(chatroomId);
+    await _saveHistoryRoom();
+    await _storage.saveVoiceRoomParticipant(callId, me, joinedAt: now);
+
+    // Durable "call started" record so offline members learn of it on sync.
+    await _announceCall?.call(chatroomId, callId);
+
+    // Live presence ping — the ONLY presence broadcast — to every member.
+    final sessionHex = _hex(_sessionKey!);
+    for (final p in others) {
+      await _safeSend(p, SignalingMessageType.roomInvite, chatroomId, {
+        'name': name,
+        'creator': me,
+        'roster': _invitedRoster.toList(),
+        'session_key': sessionHex,
+        'call_id': callId,
+        'chatroom': true,
+      });
+    }
+    _emitState();
+    return _room!;
+  }
+
   Future<void> acceptInvite(String roomId) async {
     final pending = _pendingInvites.remove(roomId);
     if (pending == null) throw StateError('no pending invite for $roomId');
@@ -165,6 +240,8 @@ class RoomManager {
     final creator = pending.invite.creatorPubkey;
 
     _resetSession();
+    // Chatroom calls carry a distinct call_id; direct calls key on roomId.
+    _callId = pending.callId ?? roomId;
     _sessionKey = pending.sessionKeyHex != null
         ? _unhex(pending.sessionKeyHex!)
         : null;
@@ -182,7 +259,6 @@ class RoomManager {
       if (p == me) continue;
       _roster[p] = VoiceParticipant(
         pubkey: p,
-        displayName: await _displayName(p),
         connectionState: ParticipantConnectionState.connecting,
       );
     }
@@ -197,10 +273,8 @@ class RoomManager {
     );
 
     await _voice.startSession(roomId);
-    await _storage.saveVoiceRoom(
-      _room!.copyWith(participants: _roster.values.toList()),
-    );
-    await _storage.saveVoiceRoomParticipant(roomId, me, joinedAt: now);
+    await _saveHistoryRoom();
+    await _storage.saveVoiceRoomParticipant(_callId!, me, joinedAt: now);
 
     final sessionHex = _sessionKey != null ? _hex(_sessionKey!) : '';
     for (final p in _invitedRoster) {
@@ -324,6 +398,7 @@ class RoomManager {
       invite: invite,
       roster: roster,
       sessionKeyHex: msg.payload['session_key'] as String?,
+      callId: msg.payload['call_id'] as String?,
     );
     _inviteCtrl.add(invite);
   }
@@ -335,12 +410,19 @@ class RoomManager {
     if (!_sessionKeyMatches(msg.payload['session_key'])) return;
 
     final firstSight = !_present.contains(from);
+    // Live-call cap: the mesh stays ≤ kMaxRoomParticipants even in an
+    // unbounded chatroom. A joiner beyond the cap is declined 'full'.
+    if (firstSight && _present.length >= kMaxRoomParticipants) {
+      await _safeSend(from, SignalingMessageType.roomDecline, room.id, {
+        'reason': 'full',
+      });
+      return;
+    }
     _present.add(from);
     _setParticipantState(from, ParticipantConnectionState.connecting);
     await _storage.saveVoiceRoomParticipant(
-      room.id,
+      _callId!,
       from,
-      displayName: await _displayName(from),
       joinedAt: _clock.nowUnixSeconds(),
     );
     if (firstSight) {
@@ -379,6 +461,13 @@ class RoomManager {
     final room = _room;
     if (room == null || msg.roomId != room.id) return;
     if (!_invitedRoster.contains(from)) return;
+    final firstSight = !_present.contains(from);
+    if (firstSight && _present.length >= kMaxRoomParticipants) {
+      await _safeSend(from, SignalingMessageType.roomDecline, room.id, {
+        'reason': 'full',
+      });
+      return;
+    }
     _present.add(from);
     try {
       final answer = await _voice.createAnswer(from, msg.payload);
@@ -440,6 +529,20 @@ class RoomManager {
     if (changed) _emitState();
   }
 
+  void _onConnectionQuality(Map<String, ConnectionQuality> quality) {
+    if (_room == null) return;
+    var changed = false;
+    for (final entry in quality.entries) {
+      final cur = _roster[entry.key];
+      if (cur == null) continue;
+      if (cur.quality != entry.value) {
+        _roster[entry.key] = cur.copyWith(quality: entry.value);
+        changed = true;
+      }
+    }
+    if (changed) _emitState();
+  }
+
   // --- internals ---
 
   Future<void> _maybeOffer(String peer) async {
@@ -459,10 +562,10 @@ class RoomManager {
   }
 
   Future<void> _endSession() async {
-    final roomId = _room?.id;
+    final callId = _callId;
     await _voice.endSession();
-    if (roomId != null) {
-      await _storage.updateVoiceRoomEnded(roomId, _clock.nowUnixSeconds());
+    if (callId != null) {
+      await _storage.updateVoiceRoomEnded(callId, _clock.nowUnixSeconds());
     }
     _resetSession();
     _room = null;
@@ -477,6 +580,25 @@ class RoomManager {
     _present.clear();
     _offeredTo.clear();
     _invitedRoster = {};
+    _callId = null;
+  }
+
+  /// Persist the current call to Plan 16 `voice_rooms` history under [_callId]
+  /// (kept distinct from the signaling `_room.id` for chatroom calls).
+  Future<void> _saveHistoryRoom() async {
+    final room = _room;
+    final callId = _callId;
+    if (room == null || callId == null) return;
+    await _storage.saveVoiceRoom(
+      VoiceRoom(
+        id: callId,
+        name: room.name,
+        creatorPubkey: room.creatorPubkey,
+        createdAt: room.createdAt,
+        invitedPubkeys: room.invitedPubkeys,
+        participants: _roster.values.toList(),
+      ),
+    );
   }
 
   void _setParticipantState(String pubkey, ParticipantConnectionState st) {
@@ -512,9 +634,6 @@ class RoomManager {
     if (follow == null || follow.status != 'active') return false;
     return _storage.isAcceptedFollower(pubkey);
   }
-
-  Future<String?> _displayName(String pubkey) async =>
-      (await _storage.getFollow(pubkey))?.displayName;
 
   bool _sessionKeyMatches(Object? got) {
     final key = _sessionKey;
@@ -564,8 +683,13 @@ class _PendingInvite {
     required this.invite,
     required this.roster,
     required this.sessionKeyHex,
+    this.callId,
   });
   final VoiceRoom invite;
   final List<String> roster;
   final String? sessionKeyHex;
+
+  /// Plan 17: distinct per-call history id for a chatroom call (null for a
+  /// Plan 16 direct call, where the history keys on the roomId).
+  final String? callId;
 }

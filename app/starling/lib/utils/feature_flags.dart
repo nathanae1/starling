@@ -17,3 +17,10 @@ const bool kLibp2pEnabled = true;
 /// substrate it rides on is always present, so flipping this false simply
 /// stops the app from joining/offering calls.
 const bool kVoiceEnabled = true;
+
+/// Plan 17 — durable chatrooms. Gates the room lifecycle/messaging services
+/// and the chatroom UI entry points. A kill-switch like [kVoiceEnabled]: the
+/// storage and sync substrate it rides on is always present, so flipping this
+/// false simply hides the durable-room features. Starts false until the Plan
+/// 17 test matrix + a two-device smoke test pass.
+const bool kChatroomsEnabled = false;

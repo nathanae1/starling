@@ -335,7 +335,7 @@ final class Libp2pStreamServerProvider
 }
 
 String _$libp2pStreamServerHash() =>
-    r'4a68f20fafcfc570cf7d158fd7f1e91213f4fbcc';
+    r'376a7dacd99c74a767ddf8b94650171f05309c84';
 
 /// Singleton [SyncTransport] that routes each `PeerConnection` to the
 /// HTTP client matching its transport (LAN direct vs SOCKS5-over-Tor vs

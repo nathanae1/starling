@@ -9,6 +9,7 @@ import '../services/voice/room_manager.dart';
 import '../services/voice/room_signaling.dart';
 import '../services/voice/webrtc_voice_service.dart';
 import '../services/voice_service.dart';
+import '../utils/feature_flags.dart';
 import 'service_providers.dart';
 import 'sync_provider.dart';
 
@@ -59,6 +60,12 @@ RoomManager roomManager(Ref ref) {
     clock: ref.watch(clockProvider),
     localPubkeyLookup: () async =>
         (await ref.read(storageServiceProvider).getIdentity())?.pubkey,
+    // Plan 17: a chatroom call authors a durable roomCallStarted record.
+    announceCall: kChatroomsEnabled
+        ? (roomId, callId) => ref
+              .read(roomServiceProvider)
+              .announceCall(roomId: roomId, callId: callId)
+        : null,
   );
 }
 

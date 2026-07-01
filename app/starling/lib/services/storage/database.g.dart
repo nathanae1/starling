@@ -502,28 +502,6 @@ class $FollowEntriesTable extends FollowEntries
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
-  static const VerificationMeta _displayNameMeta = const VerificationMeta(
-    'displayName',
-  );
-  @override
-  late final GeneratedColumn<String> displayName = GeneratedColumn<String>(
-    'display_name',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _avatarHashMeta = const VerificationMeta(
-    'avatarHash',
-  );
-  @override
-  late final GeneratedColumn<String> avatarHash = GeneratedColumn<String>(
-    'avatar_hash',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
   static const VerificationMeta _connectionCardMeta = const VerificationMeta(
     'connectionCard',
   );
@@ -627,8 +605,6 @@ class $FollowEntriesTable extends FollowEntries
   @override
   List<GeneratedColumn> get $columns => [
     pubkey,
-    displayName,
-    avatarHash,
     connectionCard,
     feedKey,
     feedKeyEpoch,
@@ -658,21 +634,6 @@ class $FollowEntriesTable extends FollowEntries
       );
     } else if (isInserting) {
       context.missing(_pubkeyMeta);
-    }
-    if (data.containsKey('display_name')) {
-      context.handle(
-        _displayNameMeta,
-        displayName.isAcceptableOrUnknown(
-          data['display_name']!,
-          _displayNameMeta,
-        ),
-      );
-    }
-    if (data.containsKey('avatar_hash')) {
-      context.handle(
-        _avatarHashMeta,
-        avatarHash.isAcceptableOrUnknown(data['avatar_hash']!, _avatarHashMeta),
-      );
     }
     if (data.containsKey('connection_card')) {
       context.handle(
@@ -766,14 +727,6 @@ class $FollowEntriesTable extends FollowEntries
         DriftSqlType.string,
         data['${effectivePrefix}pubkey'],
       )!,
-      displayName: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}display_name'],
-      ),
-      avatarHash: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}avatar_hash'],
-      ),
       connectionCard: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}connection_card'],
@@ -821,8 +774,6 @@ class $FollowEntriesTable extends FollowEntries
 
 class FollowEntry extends DataClass implements Insertable<FollowEntry> {
   final String pubkey;
-  final String? displayName;
-  final String? avatarHash;
   final String connectionCard;
   final Uint8List feedKey;
   final int feedKeyEpoch;
@@ -834,8 +785,6 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
   final int lastFullSyncAt;
   const FollowEntry({
     required this.pubkey,
-    this.displayName,
-    this.avatarHash,
     required this.connectionCard,
     required this.feedKey,
     required this.feedKeyEpoch,
@@ -850,12 +799,6 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['pubkey'] = Variable<String>(pubkey);
-    if (!nullToAbsent || displayName != null) {
-      map['display_name'] = Variable<String>(displayName);
-    }
-    if (!nullToAbsent || avatarHash != null) {
-      map['avatar_hash'] = Variable<String>(avatarHash);
-    }
     map['connection_card'] = Variable<String>(connectionCard);
     map['feed_key'] = Variable<Uint8List>(feedKey);
     map['feed_key_epoch'] = Variable<int>(feedKeyEpoch);
@@ -873,12 +816,6 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
   FollowEntriesCompanion toCompanion(bool nullToAbsent) {
     return FollowEntriesCompanion(
       pubkey: Value(pubkey),
-      displayName: displayName == null && nullToAbsent
-          ? const Value.absent()
-          : Value(displayName),
-      avatarHash: avatarHash == null && nullToAbsent
-          ? const Value.absent()
-          : Value(avatarHash),
       connectionCard: Value(connectionCard),
       feedKey: Value(feedKey),
       feedKeyEpoch: Value(feedKeyEpoch),
@@ -900,8 +837,6 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return FollowEntry(
       pubkey: serializer.fromJson<String>(json['pubkey']),
-      displayName: serializer.fromJson<String?>(json['displayName']),
-      avatarHash: serializer.fromJson<String?>(json['avatarHash']),
       connectionCard: serializer.fromJson<String>(json['connectionCard']),
       feedKey: serializer.fromJson<Uint8List>(json['feedKey']),
       feedKeyEpoch: serializer.fromJson<int>(json['feedKeyEpoch']),
@@ -922,8 +857,6 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'pubkey': serializer.toJson<String>(pubkey),
-      'displayName': serializer.toJson<String?>(displayName),
-      'avatarHash': serializer.toJson<String?>(avatarHash),
       'connectionCard': serializer.toJson<String>(connectionCard),
       'feedKey': serializer.toJson<Uint8List>(feedKey),
       'feedKeyEpoch': serializer.toJson<int>(feedKeyEpoch),
@@ -938,8 +871,6 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
 
   FollowEntry copyWith({
     String? pubkey,
-    Value<String?> displayName = const Value.absent(),
-    Value<String?> avatarHash = const Value.absent(),
     String? connectionCard,
     Uint8List? feedKey,
     int? feedKeyEpoch,
@@ -951,8 +882,6 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
     int? lastFullSyncAt,
   }) => FollowEntry(
     pubkey: pubkey ?? this.pubkey,
-    displayName: displayName.present ? displayName.value : this.displayName,
-    avatarHash: avatarHash.present ? avatarHash.value : this.avatarHash,
     connectionCard: connectionCard ?? this.connectionCard,
     feedKey: feedKey ?? this.feedKey,
     feedKeyEpoch: feedKeyEpoch ?? this.feedKeyEpoch,
@@ -969,12 +898,6 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
   FollowEntry copyWithCompanion(FollowEntriesCompanion data) {
     return FollowEntry(
       pubkey: data.pubkey.present ? data.pubkey.value : this.pubkey,
-      displayName: data.displayName.present
-          ? data.displayName.value
-          : this.displayName,
-      avatarHash: data.avatarHash.present
-          ? data.avatarHash.value
-          : this.avatarHash,
       connectionCard: data.connectionCard.present
           ? data.connectionCard.value
           : this.connectionCard,
@@ -1005,8 +928,6 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
   String toString() {
     return (StringBuffer('FollowEntry(')
           ..write('pubkey: $pubkey, ')
-          ..write('displayName: $displayName, ')
-          ..write('avatarHash: $avatarHash, ')
           ..write('connectionCard: $connectionCard, ')
           ..write('feedKey: $feedKey, ')
           ..write('feedKeyEpoch: $feedKeyEpoch, ')
@@ -1023,8 +944,6 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
   @override
   int get hashCode => Object.hash(
     pubkey,
-    displayName,
-    avatarHash,
     connectionCard,
     $driftBlobEquality.hash(feedKey),
     feedKeyEpoch,
@@ -1040,8 +959,6 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
       identical(this, other) ||
       (other is FollowEntry &&
           other.pubkey == this.pubkey &&
-          other.displayName == this.displayName &&
-          other.avatarHash == this.avatarHash &&
           other.connectionCard == this.connectionCard &&
           $driftBlobEquality.equals(other.feedKey, this.feedKey) &&
           other.feedKeyEpoch == this.feedKeyEpoch &&
@@ -1055,8 +972,6 @@ class FollowEntry extends DataClass implements Insertable<FollowEntry> {
 
 class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
   final Value<String> pubkey;
-  final Value<String?> displayName;
-  final Value<String?> avatarHash;
   final Value<String> connectionCard;
   final Value<Uint8List> feedKey;
   final Value<int> feedKeyEpoch;
@@ -1069,8 +984,6 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
   final Value<int> rowid;
   const FollowEntriesCompanion({
     this.pubkey = const Value.absent(),
-    this.displayName = const Value.absent(),
-    this.avatarHash = const Value.absent(),
     this.connectionCard = const Value.absent(),
     this.feedKey = const Value.absent(),
     this.feedKeyEpoch = const Value.absent(),
@@ -1084,8 +997,6 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
   });
   FollowEntriesCompanion.insert({
     required String pubkey,
-    this.displayName = const Value.absent(),
-    this.avatarHash = const Value.absent(),
     required String connectionCard,
     required Uint8List feedKey,
     this.feedKeyEpoch = const Value.absent(),
@@ -1101,8 +1012,6 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
        feedKey = Value(feedKey);
   static Insertable<FollowEntry> custom({
     Expression<String>? pubkey,
-    Expression<String>? displayName,
-    Expression<String>? avatarHash,
     Expression<String>? connectionCard,
     Expression<Uint8List>? feedKey,
     Expression<int>? feedKeyEpoch,
@@ -1116,8 +1025,6 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
   }) {
     return RawValuesInsertable({
       if (pubkey != null) 'pubkey': pubkey,
-      if (displayName != null) 'display_name': displayName,
-      if (avatarHash != null) 'avatar_hash': avatarHash,
       if (connectionCard != null) 'connection_card': connectionCard,
       if (feedKey != null) 'feed_key': feedKey,
       if (feedKeyEpoch != null) 'feed_key_epoch': feedKeyEpoch,
@@ -1136,8 +1043,6 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
 
   FollowEntriesCompanion copyWith({
     Value<String>? pubkey,
-    Value<String?>? displayName,
-    Value<String?>? avatarHash,
     Value<String>? connectionCard,
     Value<Uint8List>? feedKey,
     Value<int>? feedKeyEpoch,
@@ -1151,8 +1056,6 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
   }) {
     return FollowEntriesCompanion(
       pubkey: pubkey ?? this.pubkey,
-      displayName: displayName ?? this.displayName,
-      avatarHash: avatarHash ?? this.avatarHash,
       connectionCard: connectionCard ?? this.connectionCard,
       feedKey: feedKey ?? this.feedKey,
       feedKeyEpoch: feedKeyEpoch ?? this.feedKeyEpoch,
@@ -1172,12 +1075,6 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
     final map = <String, Expression>{};
     if (pubkey.present) {
       map['pubkey'] = Variable<String>(pubkey.value);
-    }
-    if (displayName.present) {
-      map['display_name'] = Variable<String>(displayName.value);
-    }
-    if (avatarHash.present) {
-      map['avatar_hash'] = Variable<String>(avatarHash.value);
     }
     if (connectionCard.present) {
       map['connection_card'] = Variable<String>(connectionCard.value);
@@ -1220,8 +1117,6 @@ class FollowEntriesCompanion extends UpdateCompanion<FollowEntry> {
   String toString() {
     return (StringBuffer('FollowEntriesCompanion(')
           ..write('pubkey: $pubkey, ')
-          ..write('displayName: $displayName, ')
-          ..write('avatarHash: $avatarHash, ')
           ..write('connectionCard: $connectionCard, ')
           ..write('feedKey: $feedKey, ')
           ..write('feedKeyEpoch: $feedKeyEpoch, ')
@@ -3239,6 +3134,17 @@ class $OutboundQueueEntriesTable extends OutboundQueueEntries
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _itemTypeMeta = const VerificationMeta(
+    'itemType',
+  );
+  @override
+  late final GeneratedColumn<String> itemType = GeneratedColumn<String>(
+    'item_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3246,6 +3152,7 @@ class $OutboundQueueEntriesTable extends OutboundQueueEntries
     eventBlob,
     createdAt,
     retryCount,
+    itemType,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3295,6 +3202,12 @@ class $OutboundQueueEntriesTable extends OutboundQueueEntries
         retryCount.isAcceptableOrUnknown(data['retry_count']!, _retryCountMeta),
       );
     }
+    if (data.containsKey('item_type')) {
+      context.handle(
+        _itemTypeMeta,
+        itemType.isAcceptableOrUnknown(data['item_type']!, _itemTypeMeta),
+      );
+    }
     return context;
   }
 
@@ -3324,6 +3237,10 @@ class $OutboundQueueEntriesTable extends OutboundQueueEntries
         DriftSqlType.int,
         data['${effectivePrefix}retry_count'],
       )!,
+      itemType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}item_type'],
+      ),
     );
   }
 
@@ -3340,12 +3257,18 @@ class OutboundQueueEntry extends DataClass
   final Uint8List eventBlob;
   final int createdAt;
   final int retryCount;
+
+  /// Plan 17: the EnvelopeItem `type` this row ships as when drained. Null ⇒
+  /// `'event'` (back-compat with all pre-Plan-17 rows). Chatroom fan-out sets
+  /// `'room-key'` / `'room-event'`.
+  final String? itemType;
   const OutboundQueueEntry({
     required this.id,
     required this.targetPubkey,
     required this.eventBlob,
     required this.createdAt,
     required this.retryCount,
+    this.itemType,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3355,6 +3278,9 @@ class OutboundQueueEntry extends DataClass
     map['event_blob'] = Variable<Uint8List>(eventBlob);
     map['created_at'] = Variable<int>(createdAt);
     map['retry_count'] = Variable<int>(retryCount);
+    if (!nullToAbsent || itemType != null) {
+      map['item_type'] = Variable<String>(itemType);
+    }
     return map;
   }
 
@@ -3365,6 +3291,9 @@ class OutboundQueueEntry extends DataClass
       eventBlob: Value(eventBlob),
       createdAt: Value(createdAt),
       retryCount: Value(retryCount),
+      itemType: itemType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(itemType),
     );
   }
 
@@ -3379,6 +3308,7 @@ class OutboundQueueEntry extends DataClass
       eventBlob: serializer.fromJson<Uint8List>(json['eventBlob']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
       retryCount: serializer.fromJson<int>(json['retryCount']),
+      itemType: serializer.fromJson<String?>(json['itemType']),
     );
   }
   @override
@@ -3390,6 +3320,7 @@ class OutboundQueueEntry extends DataClass
       'eventBlob': serializer.toJson<Uint8List>(eventBlob),
       'createdAt': serializer.toJson<int>(createdAt),
       'retryCount': serializer.toJson<int>(retryCount),
+      'itemType': serializer.toJson<String?>(itemType),
     };
   }
 
@@ -3399,12 +3330,14 @@ class OutboundQueueEntry extends DataClass
     Uint8List? eventBlob,
     int? createdAt,
     int? retryCount,
+    Value<String?> itemType = const Value.absent(),
   }) => OutboundQueueEntry(
     id: id ?? this.id,
     targetPubkey: targetPubkey ?? this.targetPubkey,
     eventBlob: eventBlob ?? this.eventBlob,
     createdAt: createdAt ?? this.createdAt,
     retryCount: retryCount ?? this.retryCount,
+    itemType: itemType.present ? itemType.value : this.itemType,
   );
   OutboundQueueEntry copyWithCompanion(OutboundQueueEntriesCompanion data) {
     return OutboundQueueEntry(
@@ -3417,6 +3350,7 @@ class OutboundQueueEntry extends DataClass
       retryCount: data.retryCount.present
           ? data.retryCount.value
           : this.retryCount,
+      itemType: data.itemType.present ? data.itemType.value : this.itemType,
     );
   }
 
@@ -3427,7 +3361,8 @@ class OutboundQueueEntry extends DataClass
           ..write('targetPubkey: $targetPubkey, ')
           ..write('eventBlob: $eventBlob, ')
           ..write('createdAt: $createdAt, ')
-          ..write('retryCount: $retryCount')
+          ..write('retryCount: $retryCount, ')
+          ..write('itemType: $itemType')
           ..write(')'))
         .toString();
   }
@@ -3439,6 +3374,7 @@ class OutboundQueueEntry extends DataClass
     $driftBlobEquality.hash(eventBlob),
     createdAt,
     retryCount,
+    itemType,
   );
   @override
   bool operator ==(Object other) =>
@@ -3448,7 +3384,8 @@ class OutboundQueueEntry extends DataClass
           other.targetPubkey == this.targetPubkey &&
           $driftBlobEquality.equals(other.eventBlob, this.eventBlob) &&
           other.createdAt == this.createdAt &&
-          other.retryCount == this.retryCount);
+          other.retryCount == this.retryCount &&
+          other.itemType == this.itemType);
 }
 
 class OutboundQueueEntriesCompanion
@@ -3458,12 +3395,14 @@ class OutboundQueueEntriesCompanion
   final Value<Uint8List> eventBlob;
   final Value<int> createdAt;
   final Value<int> retryCount;
+  final Value<String?> itemType;
   const OutboundQueueEntriesCompanion({
     this.id = const Value.absent(),
     this.targetPubkey = const Value.absent(),
     this.eventBlob = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.retryCount = const Value.absent(),
+    this.itemType = const Value.absent(),
   });
   OutboundQueueEntriesCompanion.insert({
     this.id = const Value.absent(),
@@ -3471,6 +3410,7 @@ class OutboundQueueEntriesCompanion
     required Uint8List eventBlob,
     required int createdAt,
     this.retryCount = const Value.absent(),
+    this.itemType = const Value.absent(),
   }) : targetPubkey = Value(targetPubkey),
        eventBlob = Value(eventBlob),
        createdAt = Value(createdAt);
@@ -3480,6 +3420,7 @@ class OutboundQueueEntriesCompanion
     Expression<Uint8List>? eventBlob,
     Expression<int>? createdAt,
     Expression<int>? retryCount,
+    Expression<String>? itemType,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -3487,6 +3428,7 @@ class OutboundQueueEntriesCompanion
       if (eventBlob != null) 'event_blob': eventBlob,
       if (createdAt != null) 'created_at': createdAt,
       if (retryCount != null) 'retry_count': retryCount,
+      if (itemType != null) 'item_type': itemType,
     });
   }
 
@@ -3496,6 +3438,7 @@ class OutboundQueueEntriesCompanion
     Value<Uint8List>? eventBlob,
     Value<int>? createdAt,
     Value<int>? retryCount,
+    Value<String?>? itemType,
   }) {
     return OutboundQueueEntriesCompanion(
       id: id ?? this.id,
@@ -3503,6 +3446,7 @@ class OutboundQueueEntriesCompanion
       eventBlob: eventBlob ?? this.eventBlob,
       createdAt: createdAt ?? this.createdAt,
       retryCount: retryCount ?? this.retryCount,
+      itemType: itemType ?? this.itemType,
     );
   }
 
@@ -3524,6 +3468,9 @@ class OutboundQueueEntriesCompanion
     if (retryCount.present) {
       map['retry_count'] = Variable<int>(retryCount.value);
     }
+    if (itemType.present) {
+      map['item_type'] = Variable<String>(itemType.value);
+    }
     return map;
   }
 
@@ -3534,7 +3481,8 @@ class OutboundQueueEntriesCompanion
           ..write('targetPubkey: $targetPubkey, ')
           ..write('eventBlob: $eventBlob, ')
           ..write('createdAt: $createdAt, ')
-          ..write('retryCount: $retryCount')
+          ..write('retryCount: $retryCount, ')
+          ..write('itemType: $itemType')
           ..write(')'))
         .toString();
   }
@@ -6751,6 +6699,1534 @@ class VoiceRoomParticipantEntriesCompanion
   }
 }
 
+class $RoomEntriesTable extends RoomEntries
+    with TableInfo<$RoomEntriesTable, RoomEntry> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RoomEntriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _creatorPubkeyMeta = const VerificationMeta(
+    'creatorPubkey',
+  );
+  @override
+  late final GeneratedColumn<String> creatorPubkey = GeneratedColumn<String>(
+    'creator_pubkey',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lastActivityAtMeta = const VerificationMeta(
+    'lastActivityAt',
+  );
+  @override
+  late final GeneratedColumn<int> lastActivityAt = GeneratedColumn<int>(
+    'last_activity_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _roomKeyMeta = const VerificationMeta(
+    'roomKey',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> roomKey = GeneratedColumn<Uint8List>(
+    'room_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _roomKeyEpochMeta = const VerificationMeta(
+    'roomKeyEpoch',
+  );
+  @override
+  late final GeneratedColumn<int> roomKeyEpoch = GeneratedColumn<int>(
+    'room_key_epoch',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _roomKeyValidFromMeta = const VerificationMeta(
+    'roomKeyValidFrom',
+  );
+  @override
+  late final GeneratedColumn<int> roomKeyValidFrom = GeneratedColumn<int>(
+    'room_key_valid_from',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _roomMsgSeqCounterMeta = const VerificationMeta(
+    'roomMsgSeqCounter',
+  );
+  @override
+  late final GeneratedColumn<int> roomMsgSeqCounter = GeneratedColumn<int>(
+    'room_msg_seq_counter',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _membershipEpochMeta = const VerificationMeta(
+    'membershipEpoch',
+  );
+  @override
+  late final GeneratedColumn<int> membershipEpoch = GeneratedColumn<int>(
+    'membership_epoch',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _isMemberMeta = const VerificationMeta(
+    'isMember',
+  );
+  @override
+  late final GeneratedColumn<int> isMember = GeneratedColumn<int>(
+    'is_member',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _lastReadAtMeta = const VerificationMeta(
+    'lastReadAt',
+  );
+  @override
+  late final GeneratedColumn<int> lastReadAt = GeneratedColumn<int>(
+    'last_read_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    creatorPubkey,
+    createdAt,
+    lastActivityAt,
+    roomKey,
+    roomKeyEpoch,
+    roomKeyValidFrom,
+    roomMsgSeqCounter,
+    membershipEpoch,
+    isMember,
+    lastReadAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'room_entries';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<RoomEntry> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('creator_pubkey')) {
+      context.handle(
+        _creatorPubkeyMeta,
+        creatorPubkey.isAcceptableOrUnknown(
+          data['creator_pubkey']!,
+          _creatorPubkeyMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_creatorPubkeyMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('last_activity_at')) {
+      context.handle(
+        _lastActivityAtMeta,
+        lastActivityAt.isAcceptableOrUnknown(
+          data['last_activity_at']!,
+          _lastActivityAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_lastActivityAtMeta);
+    }
+    if (data.containsKey('room_key')) {
+      context.handle(
+        _roomKeyMeta,
+        roomKey.isAcceptableOrUnknown(data['room_key']!, _roomKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_roomKeyMeta);
+    }
+    if (data.containsKey('room_key_epoch')) {
+      context.handle(
+        _roomKeyEpochMeta,
+        roomKeyEpoch.isAcceptableOrUnknown(
+          data['room_key_epoch']!,
+          _roomKeyEpochMeta,
+        ),
+      );
+    }
+    if (data.containsKey('room_key_valid_from')) {
+      context.handle(
+        _roomKeyValidFromMeta,
+        roomKeyValidFrom.isAcceptableOrUnknown(
+          data['room_key_valid_from']!,
+          _roomKeyValidFromMeta,
+        ),
+      );
+    }
+    if (data.containsKey('room_msg_seq_counter')) {
+      context.handle(
+        _roomMsgSeqCounterMeta,
+        roomMsgSeqCounter.isAcceptableOrUnknown(
+          data['room_msg_seq_counter']!,
+          _roomMsgSeqCounterMeta,
+        ),
+      );
+    }
+    if (data.containsKey('membership_epoch')) {
+      context.handle(
+        _membershipEpochMeta,
+        membershipEpoch.isAcceptableOrUnknown(
+          data['membership_epoch']!,
+          _membershipEpochMeta,
+        ),
+      );
+    }
+    if (data.containsKey('is_member')) {
+      context.handle(
+        _isMemberMeta,
+        isMember.isAcceptableOrUnknown(data['is_member']!, _isMemberMeta),
+      );
+    }
+    if (data.containsKey('last_read_at')) {
+      context.handle(
+        _lastReadAtMeta,
+        lastReadAt.isAcceptableOrUnknown(
+          data['last_read_at']!,
+          _lastReadAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  RoomEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RoomEntry(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      creatorPubkey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}creator_pubkey'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastActivityAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_activity_at'],
+      )!,
+      roomKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}room_key'],
+      )!,
+      roomKeyEpoch: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}room_key_epoch'],
+      )!,
+      roomKeyValidFrom: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}room_key_valid_from'],
+      )!,
+      roomMsgSeqCounter: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}room_msg_seq_counter'],
+      )!,
+      membershipEpoch: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}membership_epoch'],
+      )!,
+      isMember: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}is_member'],
+      )!,
+      lastReadAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_read_at'],
+      )!,
+    );
+  }
+
+  @override
+  $RoomEntriesTable createAlias(String alias) {
+    return $RoomEntriesTable(attachedDatabase, alias);
+  }
+}
+
+class RoomEntry extends DataClass implements Insertable<RoomEntry> {
+  /// roomId = the id of the genesis `roomCreate` event.
+  final String id;
+  final String name;
+  final String creatorPubkey;
+  final int createdAt;
+
+  /// Retention key: last time a message/membership/call event touched the
+  /// room. NOT createdAt — a long-lived room stays alive on activity.
+  final int lastActivityAt;
+
+  /// Current room key (chain root), its epoch, and the time it took effect.
+  final Uint8List roomKey;
+  final int roomKeyEpoch;
+  final int roomKeyValidFrom;
+
+  /// Next msg_seq to allocate under the current room key.
+  final int roomMsgSeqCounter;
+
+  /// Monotonic membership version — a `roomMembership` is applied only if
+  /// its epoch is newer than this.
+  final int membershipEpoch;
+
+  /// 1 while the local user is a member; 0 after leaving/removal. Drives
+  /// retention (left rooms are evictable) and the room list.
+  final int isMember;
+
+  /// Local-only read cursor (unix seconds) for the unread badge.
+  final int lastReadAt;
+  const RoomEntry({
+    required this.id,
+    required this.name,
+    required this.creatorPubkey,
+    required this.createdAt,
+    required this.lastActivityAt,
+    required this.roomKey,
+    required this.roomKeyEpoch,
+    required this.roomKeyValidFrom,
+    required this.roomMsgSeqCounter,
+    required this.membershipEpoch,
+    required this.isMember,
+    required this.lastReadAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['creator_pubkey'] = Variable<String>(creatorPubkey);
+    map['created_at'] = Variable<int>(createdAt);
+    map['last_activity_at'] = Variable<int>(lastActivityAt);
+    map['room_key'] = Variable<Uint8List>(roomKey);
+    map['room_key_epoch'] = Variable<int>(roomKeyEpoch);
+    map['room_key_valid_from'] = Variable<int>(roomKeyValidFrom);
+    map['room_msg_seq_counter'] = Variable<int>(roomMsgSeqCounter);
+    map['membership_epoch'] = Variable<int>(membershipEpoch);
+    map['is_member'] = Variable<int>(isMember);
+    map['last_read_at'] = Variable<int>(lastReadAt);
+    return map;
+  }
+
+  RoomEntriesCompanion toCompanion(bool nullToAbsent) {
+    return RoomEntriesCompanion(
+      id: Value(id),
+      name: Value(name),
+      creatorPubkey: Value(creatorPubkey),
+      createdAt: Value(createdAt),
+      lastActivityAt: Value(lastActivityAt),
+      roomKey: Value(roomKey),
+      roomKeyEpoch: Value(roomKeyEpoch),
+      roomKeyValidFrom: Value(roomKeyValidFrom),
+      roomMsgSeqCounter: Value(roomMsgSeqCounter),
+      membershipEpoch: Value(membershipEpoch),
+      isMember: Value(isMember),
+      lastReadAt: Value(lastReadAt),
+    );
+  }
+
+  factory RoomEntry.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RoomEntry(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      creatorPubkey: serializer.fromJson<String>(json['creatorPubkey']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+      lastActivityAt: serializer.fromJson<int>(json['lastActivityAt']),
+      roomKey: serializer.fromJson<Uint8List>(json['roomKey']),
+      roomKeyEpoch: serializer.fromJson<int>(json['roomKeyEpoch']),
+      roomKeyValidFrom: serializer.fromJson<int>(json['roomKeyValidFrom']),
+      roomMsgSeqCounter: serializer.fromJson<int>(json['roomMsgSeqCounter']),
+      membershipEpoch: serializer.fromJson<int>(json['membershipEpoch']),
+      isMember: serializer.fromJson<int>(json['isMember']),
+      lastReadAt: serializer.fromJson<int>(json['lastReadAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'creatorPubkey': serializer.toJson<String>(creatorPubkey),
+      'createdAt': serializer.toJson<int>(createdAt),
+      'lastActivityAt': serializer.toJson<int>(lastActivityAt),
+      'roomKey': serializer.toJson<Uint8List>(roomKey),
+      'roomKeyEpoch': serializer.toJson<int>(roomKeyEpoch),
+      'roomKeyValidFrom': serializer.toJson<int>(roomKeyValidFrom),
+      'roomMsgSeqCounter': serializer.toJson<int>(roomMsgSeqCounter),
+      'membershipEpoch': serializer.toJson<int>(membershipEpoch),
+      'isMember': serializer.toJson<int>(isMember),
+      'lastReadAt': serializer.toJson<int>(lastReadAt),
+    };
+  }
+
+  RoomEntry copyWith({
+    String? id,
+    String? name,
+    String? creatorPubkey,
+    int? createdAt,
+    int? lastActivityAt,
+    Uint8List? roomKey,
+    int? roomKeyEpoch,
+    int? roomKeyValidFrom,
+    int? roomMsgSeqCounter,
+    int? membershipEpoch,
+    int? isMember,
+    int? lastReadAt,
+  }) => RoomEntry(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    creatorPubkey: creatorPubkey ?? this.creatorPubkey,
+    createdAt: createdAt ?? this.createdAt,
+    lastActivityAt: lastActivityAt ?? this.lastActivityAt,
+    roomKey: roomKey ?? this.roomKey,
+    roomKeyEpoch: roomKeyEpoch ?? this.roomKeyEpoch,
+    roomKeyValidFrom: roomKeyValidFrom ?? this.roomKeyValidFrom,
+    roomMsgSeqCounter: roomMsgSeqCounter ?? this.roomMsgSeqCounter,
+    membershipEpoch: membershipEpoch ?? this.membershipEpoch,
+    isMember: isMember ?? this.isMember,
+    lastReadAt: lastReadAt ?? this.lastReadAt,
+  );
+  RoomEntry copyWithCompanion(RoomEntriesCompanion data) {
+    return RoomEntry(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      creatorPubkey: data.creatorPubkey.present
+          ? data.creatorPubkey.value
+          : this.creatorPubkey,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastActivityAt: data.lastActivityAt.present
+          ? data.lastActivityAt.value
+          : this.lastActivityAt,
+      roomKey: data.roomKey.present ? data.roomKey.value : this.roomKey,
+      roomKeyEpoch: data.roomKeyEpoch.present
+          ? data.roomKeyEpoch.value
+          : this.roomKeyEpoch,
+      roomKeyValidFrom: data.roomKeyValidFrom.present
+          ? data.roomKeyValidFrom.value
+          : this.roomKeyValidFrom,
+      roomMsgSeqCounter: data.roomMsgSeqCounter.present
+          ? data.roomMsgSeqCounter.value
+          : this.roomMsgSeqCounter,
+      membershipEpoch: data.membershipEpoch.present
+          ? data.membershipEpoch.value
+          : this.membershipEpoch,
+      isMember: data.isMember.present ? data.isMember.value : this.isMember,
+      lastReadAt: data.lastReadAt.present
+          ? data.lastReadAt.value
+          : this.lastReadAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RoomEntry(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('creatorPubkey: $creatorPubkey, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastActivityAt: $lastActivityAt, ')
+          ..write('roomKey: $roomKey, ')
+          ..write('roomKeyEpoch: $roomKeyEpoch, ')
+          ..write('roomKeyValidFrom: $roomKeyValidFrom, ')
+          ..write('roomMsgSeqCounter: $roomMsgSeqCounter, ')
+          ..write('membershipEpoch: $membershipEpoch, ')
+          ..write('isMember: $isMember, ')
+          ..write('lastReadAt: $lastReadAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    creatorPubkey,
+    createdAt,
+    lastActivityAt,
+    $driftBlobEquality.hash(roomKey),
+    roomKeyEpoch,
+    roomKeyValidFrom,
+    roomMsgSeqCounter,
+    membershipEpoch,
+    isMember,
+    lastReadAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RoomEntry &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.creatorPubkey == this.creatorPubkey &&
+          other.createdAt == this.createdAt &&
+          other.lastActivityAt == this.lastActivityAt &&
+          $driftBlobEquality.equals(other.roomKey, this.roomKey) &&
+          other.roomKeyEpoch == this.roomKeyEpoch &&
+          other.roomKeyValidFrom == this.roomKeyValidFrom &&
+          other.roomMsgSeqCounter == this.roomMsgSeqCounter &&
+          other.membershipEpoch == this.membershipEpoch &&
+          other.isMember == this.isMember &&
+          other.lastReadAt == this.lastReadAt);
+}
+
+class RoomEntriesCompanion extends UpdateCompanion<RoomEntry> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String> creatorPubkey;
+  final Value<int> createdAt;
+  final Value<int> lastActivityAt;
+  final Value<Uint8List> roomKey;
+  final Value<int> roomKeyEpoch;
+  final Value<int> roomKeyValidFrom;
+  final Value<int> roomMsgSeqCounter;
+  final Value<int> membershipEpoch;
+  final Value<int> isMember;
+  final Value<int> lastReadAt;
+  final Value<int> rowid;
+  const RoomEntriesCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.creatorPubkey = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastActivityAt = const Value.absent(),
+    this.roomKey = const Value.absent(),
+    this.roomKeyEpoch = const Value.absent(),
+    this.roomKeyValidFrom = const Value.absent(),
+    this.roomMsgSeqCounter = const Value.absent(),
+    this.membershipEpoch = const Value.absent(),
+    this.isMember = const Value.absent(),
+    this.lastReadAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RoomEntriesCompanion.insert({
+    required String id,
+    required String name,
+    required String creatorPubkey,
+    required int createdAt,
+    required int lastActivityAt,
+    required Uint8List roomKey,
+    this.roomKeyEpoch = const Value.absent(),
+    this.roomKeyValidFrom = const Value.absent(),
+    this.roomMsgSeqCounter = const Value.absent(),
+    this.membershipEpoch = const Value.absent(),
+    this.isMember = const Value.absent(),
+    this.lastReadAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       creatorPubkey = Value(creatorPubkey),
+       createdAt = Value(createdAt),
+       lastActivityAt = Value(lastActivityAt),
+       roomKey = Value(roomKey);
+  static Insertable<RoomEntry> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? creatorPubkey,
+    Expression<int>? createdAt,
+    Expression<int>? lastActivityAt,
+    Expression<Uint8List>? roomKey,
+    Expression<int>? roomKeyEpoch,
+    Expression<int>? roomKeyValidFrom,
+    Expression<int>? roomMsgSeqCounter,
+    Expression<int>? membershipEpoch,
+    Expression<int>? isMember,
+    Expression<int>? lastReadAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (creatorPubkey != null) 'creator_pubkey': creatorPubkey,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastActivityAt != null) 'last_activity_at': lastActivityAt,
+      if (roomKey != null) 'room_key': roomKey,
+      if (roomKeyEpoch != null) 'room_key_epoch': roomKeyEpoch,
+      if (roomKeyValidFrom != null) 'room_key_valid_from': roomKeyValidFrom,
+      if (roomMsgSeqCounter != null) 'room_msg_seq_counter': roomMsgSeqCounter,
+      if (membershipEpoch != null) 'membership_epoch': membershipEpoch,
+      if (isMember != null) 'is_member': isMember,
+      if (lastReadAt != null) 'last_read_at': lastReadAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RoomEntriesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String>? creatorPubkey,
+    Value<int>? createdAt,
+    Value<int>? lastActivityAt,
+    Value<Uint8List>? roomKey,
+    Value<int>? roomKeyEpoch,
+    Value<int>? roomKeyValidFrom,
+    Value<int>? roomMsgSeqCounter,
+    Value<int>? membershipEpoch,
+    Value<int>? isMember,
+    Value<int>? lastReadAt,
+    Value<int>? rowid,
+  }) {
+    return RoomEntriesCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      creatorPubkey: creatorPubkey ?? this.creatorPubkey,
+      createdAt: createdAt ?? this.createdAt,
+      lastActivityAt: lastActivityAt ?? this.lastActivityAt,
+      roomKey: roomKey ?? this.roomKey,
+      roomKeyEpoch: roomKeyEpoch ?? this.roomKeyEpoch,
+      roomKeyValidFrom: roomKeyValidFrom ?? this.roomKeyValidFrom,
+      roomMsgSeqCounter: roomMsgSeqCounter ?? this.roomMsgSeqCounter,
+      membershipEpoch: membershipEpoch ?? this.membershipEpoch,
+      isMember: isMember ?? this.isMember,
+      lastReadAt: lastReadAt ?? this.lastReadAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (creatorPubkey.present) {
+      map['creator_pubkey'] = Variable<String>(creatorPubkey.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (lastActivityAt.present) {
+      map['last_activity_at'] = Variable<int>(lastActivityAt.value);
+    }
+    if (roomKey.present) {
+      map['room_key'] = Variable<Uint8List>(roomKey.value);
+    }
+    if (roomKeyEpoch.present) {
+      map['room_key_epoch'] = Variable<int>(roomKeyEpoch.value);
+    }
+    if (roomKeyValidFrom.present) {
+      map['room_key_valid_from'] = Variable<int>(roomKeyValidFrom.value);
+    }
+    if (roomMsgSeqCounter.present) {
+      map['room_msg_seq_counter'] = Variable<int>(roomMsgSeqCounter.value);
+    }
+    if (membershipEpoch.present) {
+      map['membership_epoch'] = Variable<int>(membershipEpoch.value);
+    }
+    if (isMember.present) {
+      map['is_member'] = Variable<int>(isMember.value);
+    }
+    if (lastReadAt.present) {
+      map['last_read_at'] = Variable<int>(lastReadAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RoomEntriesCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('creatorPubkey: $creatorPubkey, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastActivityAt: $lastActivityAt, ')
+          ..write('roomKey: $roomKey, ')
+          ..write('roomKeyEpoch: $roomKeyEpoch, ')
+          ..write('roomKeyValidFrom: $roomKeyValidFrom, ')
+          ..write('roomMsgSeqCounter: $roomMsgSeqCounter, ')
+          ..write('membershipEpoch: $membershipEpoch, ')
+          ..write('isMember: $isMember, ')
+          ..write('lastReadAt: $lastReadAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $RoomMemberEntriesTable extends RoomMemberEntries
+    with TableInfo<$RoomMemberEntriesTable, RoomMemberEntry> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RoomMemberEntriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _roomIdMeta = const VerificationMeta('roomId');
+  @override
+  late final GeneratedColumn<String> roomId = GeneratedColumn<String>(
+    'room_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pubkeyMeta = const VerificationMeta('pubkey');
+  @override
+  late final GeneratedColumn<String> pubkey = GeneratedColumn<String>(
+    'pubkey',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _displayNameMeta = const VerificationMeta(
+    'displayName',
+  );
+  @override
+  late final GeneratedColumn<String> displayName = GeneratedColumn<String>(
+    'display_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _addedAtMeta = const VerificationMeta(
+    'addedAt',
+  );
+  @override
+  late final GeneratedColumn<int> addedAt = GeneratedColumn<int>(
+    'added_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _removedAtMeta = const VerificationMeta(
+    'removedAt',
+  );
+  @override
+  late final GeneratedColumn<int> removedAt = GeneratedColumn<int>(
+    'removed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _roleMeta = const VerificationMeta('role');
+  @override
+  late final GeneratedColumn<String> role = GeneratedColumn<String>(
+    'role',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('member'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    roomId,
+    pubkey,
+    displayName,
+    addedAt,
+    removedAt,
+    role,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'room_member_entries';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<RoomMemberEntry> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('room_id')) {
+      context.handle(
+        _roomIdMeta,
+        roomId.isAcceptableOrUnknown(data['room_id']!, _roomIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_roomIdMeta);
+    }
+    if (data.containsKey('pubkey')) {
+      context.handle(
+        _pubkeyMeta,
+        pubkey.isAcceptableOrUnknown(data['pubkey']!, _pubkeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pubkeyMeta);
+    }
+    if (data.containsKey('display_name')) {
+      context.handle(
+        _displayNameMeta,
+        displayName.isAcceptableOrUnknown(
+          data['display_name']!,
+          _displayNameMeta,
+        ),
+      );
+    }
+    if (data.containsKey('added_at')) {
+      context.handle(
+        _addedAtMeta,
+        addedAt.isAcceptableOrUnknown(data['added_at']!, _addedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_addedAtMeta);
+    }
+    if (data.containsKey('removed_at')) {
+      context.handle(
+        _removedAtMeta,
+        removedAt.isAcceptableOrUnknown(data['removed_at']!, _removedAtMeta),
+      );
+    }
+    if (data.containsKey('role')) {
+      context.handle(
+        _roleMeta,
+        role.isAcceptableOrUnknown(data['role']!, _roleMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {roomId, pubkey};
+  @override
+  RoomMemberEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RoomMemberEntry(
+      roomId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}room_id'],
+      )!,
+      pubkey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pubkey'],
+      )!,
+      displayName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}display_name'],
+      ),
+      addedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}added_at'],
+      )!,
+      removedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}removed_at'],
+      ),
+      role: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}role'],
+      )!,
+    );
+  }
+
+  @override
+  $RoomMemberEntriesTable createAlias(String alias) {
+    return $RoomMemberEntriesTable(attachedDatabase, alias);
+  }
+}
+
+class RoomMemberEntry extends DataClass implements Insertable<RoomMemberEntry> {
+  final String roomId;
+  final String pubkey;
+  final String? displayName;
+  final int addedAt;
+  final int? removedAt;
+  final String role;
+  const RoomMemberEntry({
+    required this.roomId,
+    required this.pubkey,
+    this.displayName,
+    required this.addedAt,
+    this.removedAt,
+    required this.role,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['room_id'] = Variable<String>(roomId);
+    map['pubkey'] = Variable<String>(pubkey);
+    if (!nullToAbsent || displayName != null) {
+      map['display_name'] = Variable<String>(displayName);
+    }
+    map['added_at'] = Variable<int>(addedAt);
+    if (!nullToAbsent || removedAt != null) {
+      map['removed_at'] = Variable<int>(removedAt);
+    }
+    map['role'] = Variable<String>(role);
+    return map;
+  }
+
+  RoomMemberEntriesCompanion toCompanion(bool nullToAbsent) {
+    return RoomMemberEntriesCompanion(
+      roomId: Value(roomId),
+      pubkey: Value(pubkey),
+      displayName: displayName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(displayName),
+      addedAt: Value(addedAt),
+      removedAt: removedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(removedAt),
+      role: Value(role),
+    );
+  }
+
+  factory RoomMemberEntry.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RoomMemberEntry(
+      roomId: serializer.fromJson<String>(json['roomId']),
+      pubkey: serializer.fromJson<String>(json['pubkey']),
+      displayName: serializer.fromJson<String?>(json['displayName']),
+      addedAt: serializer.fromJson<int>(json['addedAt']),
+      removedAt: serializer.fromJson<int?>(json['removedAt']),
+      role: serializer.fromJson<String>(json['role']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'roomId': serializer.toJson<String>(roomId),
+      'pubkey': serializer.toJson<String>(pubkey),
+      'displayName': serializer.toJson<String?>(displayName),
+      'addedAt': serializer.toJson<int>(addedAt),
+      'removedAt': serializer.toJson<int?>(removedAt),
+      'role': serializer.toJson<String>(role),
+    };
+  }
+
+  RoomMemberEntry copyWith({
+    String? roomId,
+    String? pubkey,
+    Value<String?> displayName = const Value.absent(),
+    int? addedAt,
+    Value<int?> removedAt = const Value.absent(),
+    String? role,
+  }) => RoomMemberEntry(
+    roomId: roomId ?? this.roomId,
+    pubkey: pubkey ?? this.pubkey,
+    displayName: displayName.present ? displayName.value : this.displayName,
+    addedAt: addedAt ?? this.addedAt,
+    removedAt: removedAt.present ? removedAt.value : this.removedAt,
+    role: role ?? this.role,
+  );
+  RoomMemberEntry copyWithCompanion(RoomMemberEntriesCompanion data) {
+    return RoomMemberEntry(
+      roomId: data.roomId.present ? data.roomId.value : this.roomId,
+      pubkey: data.pubkey.present ? data.pubkey.value : this.pubkey,
+      displayName: data.displayName.present
+          ? data.displayName.value
+          : this.displayName,
+      addedAt: data.addedAt.present ? data.addedAt.value : this.addedAt,
+      removedAt: data.removedAt.present ? data.removedAt.value : this.removedAt,
+      role: data.role.present ? data.role.value : this.role,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RoomMemberEntry(')
+          ..write('roomId: $roomId, ')
+          ..write('pubkey: $pubkey, ')
+          ..write('displayName: $displayName, ')
+          ..write('addedAt: $addedAt, ')
+          ..write('removedAt: $removedAt, ')
+          ..write('role: $role')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(roomId, pubkey, displayName, addedAt, removedAt, role);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RoomMemberEntry &&
+          other.roomId == this.roomId &&
+          other.pubkey == this.pubkey &&
+          other.displayName == this.displayName &&
+          other.addedAt == this.addedAt &&
+          other.removedAt == this.removedAt &&
+          other.role == this.role);
+}
+
+class RoomMemberEntriesCompanion extends UpdateCompanion<RoomMemberEntry> {
+  final Value<String> roomId;
+  final Value<String> pubkey;
+  final Value<String?> displayName;
+  final Value<int> addedAt;
+  final Value<int?> removedAt;
+  final Value<String> role;
+  final Value<int> rowid;
+  const RoomMemberEntriesCompanion({
+    this.roomId = const Value.absent(),
+    this.pubkey = const Value.absent(),
+    this.displayName = const Value.absent(),
+    this.addedAt = const Value.absent(),
+    this.removedAt = const Value.absent(),
+    this.role = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RoomMemberEntriesCompanion.insert({
+    required String roomId,
+    required String pubkey,
+    this.displayName = const Value.absent(),
+    required int addedAt,
+    this.removedAt = const Value.absent(),
+    this.role = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : roomId = Value(roomId),
+       pubkey = Value(pubkey),
+       addedAt = Value(addedAt);
+  static Insertable<RoomMemberEntry> custom({
+    Expression<String>? roomId,
+    Expression<String>? pubkey,
+    Expression<String>? displayName,
+    Expression<int>? addedAt,
+    Expression<int>? removedAt,
+    Expression<String>? role,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (roomId != null) 'room_id': roomId,
+      if (pubkey != null) 'pubkey': pubkey,
+      if (displayName != null) 'display_name': displayName,
+      if (addedAt != null) 'added_at': addedAt,
+      if (removedAt != null) 'removed_at': removedAt,
+      if (role != null) 'role': role,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RoomMemberEntriesCompanion copyWith({
+    Value<String>? roomId,
+    Value<String>? pubkey,
+    Value<String?>? displayName,
+    Value<int>? addedAt,
+    Value<int?>? removedAt,
+    Value<String>? role,
+    Value<int>? rowid,
+  }) {
+    return RoomMemberEntriesCompanion(
+      roomId: roomId ?? this.roomId,
+      pubkey: pubkey ?? this.pubkey,
+      displayName: displayName ?? this.displayName,
+      addedAt: addedAt ?? this.addedAt,
+      removedAt: removedAt ?? this.removedAt,
+      role: role ?? this.role,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (roomId.present) {
+      map['room_id'] = Variable<String>(roomId.value);
+    }
+    if (pubkey.present) {
+      map['pubkey'] = Variable<String>(pubkey.value);
+    }
+    if (displayName.present) {
+      map['display_name'] = Variable<String>(displayName.value);
+    }
+    if (addedAt.present) {
+      map['added_at'] = Variable<int>(addedAt.value);
+    }
+    if (removedAt.present) {
+      map['removed_at'] = Variable<int>(removedAt.value);
+    }
+    if (role.present) {
+      map['role'] = Variable<String>(role.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RoomMemberEntriesCompanion(')
+          ..write('roomId: $roomId, ')
+          ..write('pubkey: $pubkey, ')
+          ..write('displayName: $displayName, ')
+          ..write('addedAt: $addedAt, ')
+          ..write('removedAt: $removedAt, ')
+          ..write('role: $role, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $RoomKeyHistoryEntriesTable extends RoomKeyHistoryEntries
+    with TableInfo<$RoomKeyHistoryEntriesTable, RoomKeyHistoryEntry> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RoomKeyHistoryEntriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _roomIdMeta = const VerificationMeta('roomId');
+  @override
+  late final GeneratedColumn<String> roomId = GeneratedColumn<String>(
+    'room_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _epochMeta = const VerificationMeta('epoch');
+  @override
+  late final GeneratedColumn<int> epoch = GeneratedColumn<int>(
+    'epoch',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _roomKeyMeta = const VerificationMeta(
+    'roomKey',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> roomKey = GeneratedColumn<Uint8List>(
+    'room_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _validFromMeta = const VerificationMeta(
+    'validFrom',
+  );
+  @override
+  late final GeneratedColumn<int> validFrom = GeneratedColumn<int>(
+    'valid_from',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _validUntilMeta = const VerificationMeta(
+    'validUntil',
+  );
+  @override
+  late final GeneratedColumn<int> validUntil = GeneratedColumn<int>(
+    'valid_until',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    roomId,
+    epoch,
+    roomKey,
+    validFrom,
+    validUntil,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'room_key_history_entries';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<RoomKeyHistoryEntry> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('room_id')) {
+      context.handle(
+        _roomIdMeta,
+        roomId.isAcceptableOrUnknown(data['room_id']!, _roomIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_roomIdMeta);
+    }
+    if (data.containsKey('epoch')) {
+      context.handle(
+        _epochMeta,
+        epoch.isAcceptableOrUnknown(data['epoch']!, _epochMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_epochMeta);
+    }
+    if (data.containsKey('room_key')) {
+      context.handle(
+        _roomKeyMeta,
+        roomKey.isAcceptableOrUnknown(data['room_key']!, _roomKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_roomKeyMeta);
+    }
+    if (data.containsKey('valid_from')) {
+      context.handle(
+        _validFromMeta,
+        validFrom.isAcceptableOrUnknown(data['valid_from']!, _validFromMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_validFromMeta);
+    }
+    if (data.containsKey('valid_until')) {
+      context.handle(
+        _validUntilMeta,
+        validUntil.isAcceptableOrUnknown(data['valid_until']!, _validUntilMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_validUntilMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {roomId, epoch};
+  @override
+  RoomKeyHistoryEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RoomKeyHistoryEntry(
+      roomId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}room_id'],
+      )!,
+      epoch: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}epoch'],
+      )!,
+      roomKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}room_key'],
+      )!,
+      validFrom: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}valid_from'],
+      )!,
+      validUntil: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}valid_until'],
+      )!,
+    );
+  }
+
+  @override
+  $RoomKeyHistoryEntriesTable createAlias(String alias) {
+    return $RoomKeyHistoryEntriesTable(attachedDatabase, alias);
+  }
+}
+
+class RoomKeyHistoryEntry extends DataClass
+    implements Insertable<RoomKeyHistoryEntry> {
+  final String roomId;
+  final int epoch;
+  final Uint8List roomKey;
+  final int validFrom;
+  final int validUntil;
+  const RoomKeyHistoryEntry({
+    required this.roomId,
+    required this.epoch,
+    required this.roomKey,
+    required this.validFrom,
+    required this.validUntil,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['room_id'] = Variable<String>(roomId);
+    map['epoch'] = Variable<int>(epoch);
+    map['room_key'] = Variable<Uint8List>(roomKey);
+    map['valid_from'] = Variable<int>(validFrom);
+    map['valid_until'] = Variable<int>(validUntil);
+    return map;
+  }
+
+  RoomKeyHistoryEntriesCompanion toCompanion(bool nullToAbsent) {
+    return RoomKeyHistoryEntriesCompanion(
+      roomId: Value(roomId),
+      epoch: Value(epoch),
+      roomKey: Value(roomKey),
+      validFrom: Value(validFrom),
+      validUntil: Value(validUntil),
+    );
+  }
+
+  factory RoomKeyHistoryEntry.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RoomKeyHistoryEntry(
+      roomId: serializer.fromJson<String>(json['roomId']),
+      epoch: serializer.fromJson<int>(json['epoch']),
+      roomKey: serializer.fromJson<Uint8List>(json['roomKey']),
+      validFrom: serializer.fromJson<int>(json['validFrom']),
+      validUntil: serializer.fromJson<int>(json['validUntil']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'roomId': serializer.toJson<String>(roomId),
+      'epoch': serializer.toJson<int>(epoch),
+      'roomKey': serializer.toJson<Uint8List>(roomKey),
+      'validFrom': serializer.toJson<int>(validFrom),
+      'validUntil': serializer.toJson<int>(validUntil),
+    };
+  }
+
+  RoomKeyHistoryEntry copyWith({
+    String? roomId,
+    int? epoch,
+    Uint8List? roomKey,
+    int? validFrom,
+    int? validUntil,
+  }) => RoomKeyHistoryEntry(
+    roomId: roomId ?? this.roomId,
+    epoch: epoch ?? this.epoch,
+    roomKey: roomKey ?? this.roomKey,
+    validFrom: validFrom ?? this.validFrom,
+    validUntil: validUntil ?? this.validUntil,
+  );
+  RoomKeyHistoryEntry copyWithCompanion(RoomKeyHistoryEntriesCompanion data) {
+    return RoomKeyHistoryEntry(
+      roomId: data.roomId.present ? data.roomId.value : this.roomId,
+      epoch: data.epoch.present ? data.epoch.value : this.epoch,
+      roomKey: data.roomKey.present ? data.roomKey.value : this.roomKey,
+      validFrom: data.validFrom.present ? data.validFrom.value : this.validFrom,
+      validUntil: data.validUntil.present
+          ? data.validUntil.value
+          : this.validUntil,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RoomKeyHistoryEntry(')
+          ..write('roomId: $roomId, ')
+          ..write('epoch: $epoch, ')
+          ..write('roomKey: $roomKey, ')
+          ..write('validFrom: $validFrom, ')
+          ..write('validUntil: $validUntil')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    roomId,
+    epoch,
+    $driftBlobEquality.hash(roomKey),
+    validFrom,
+    validUntil,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RoomKeyHistoryEntry &&
+          other.roomId == this.roomId &&
+          other.epoch == this.epoch &&
+          $driftBlobEquality.equals(other.roomKey, this.roomKey) &&
+          other.validFrom == this.validFrom &&
+          other.validUntil == this.validUntil);
+}
+
+class RoomKeyHistoryEntriesCompanion
+    extends UpdateCompanion<RoomKeyHistoryEntry> {
+  final Value<String> roomId;
+  final Value<int> epoch;
+  final Value<Uint8List> roomKey;
+  final Value<int> validFrom;
+  final Value<int> validUntil;
+  final Value<int> rowid;
+  const RoomKeyHistoryEntriesCompanion({
+    this.roomId = const Value.absent(),
+    this.epoch = const Value.absent(),
+    this.roomKey = const Value.absent(),
+    this.validFrom = const Value.absent(),
+    this.validUntil = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RoomKeyHistoryEntriesCompanion.insert({
+    required String roomId,
+    required int epoch,
+    required Uint8List roomKey,
+    required int validFrom,
+    required int validUntil,
+    this.rowid = const Value.absent(),
+  }) : roomId = Value(roomId),
+       epoch = Value(epoch),
+       roomKey = Value(roomKey),
+       validFrom = Value(validFrom),
+       validUntil = Value(validUntil);
+  static Insertable<RoomKeyHistoryEntry> custom({
+    Expression<String>? roomId,
+    Expression<int>? epoch,
+    Expression<Uint8List>? roomKey,
+    Expression<int>? validFrom,
+    Expression<int>? validUntil,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (roomId != null) 'room_id': roomId,
+      if (epoch != null) 'epoch': epoch,
+      if (roomKey != null) 'room_key': roomKey,
+      if (validFrom != null) 'valid_from': validFrom,
+      if (validUntil != null) 'valid_until': validUntil,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RoomKeyHistoryEntriesCompanion copyWith({
+    Value<String>? roomId,
+    Value<int>? epoch,
+    Value<Uint8List>? roomKey,
+    Value<int>? validFrom,
+    Value<int>? validUntil,
+    Value<int>? rowid,
+  }) {
+    return RoomKeyHistoryEntriesCompanion(
+      roomId: roomId ?? this.roomId,
+      epoch: epoch ?? this.epoch,
+      roomKey: roomKey ?? this.roomKey,
+      validFrom: validFrom ?? this.validFrom,
+      validUntil: validUntil ?? this.validUntil,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (roomId.present) {
+      map['room_id'] = Variable<String>(roomId.value);
+    }
+    if (epoch.present) {
+      map['epoch'] = Variable<int>(epoch.value);
+    }
+    if (roomKey.present) {
+      map['room_key'] = Variable<Uint8List>(roomKey.value);
+    }
+    if (validFrom.present) {
+      map['valid_from'] = Variable<int>(validFrom.value);
+    }
+    if (validUntil.present) {
+      map['valid_until'] = Variable<int>(validUntil.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RoomKeyHistoryEntriesCompanion(')
+          ..write('roomId: $roomId, ')
+          ..write('epoch: $epoch, ')
+          ..write('roomKey: $roomKey, ')
+          ..write('validFrom: $validFrom, ')
+          ..write('validUntil: $validUntil, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -6784,6 +8260,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final $VoiceRoomParticipantEntriesTable voiceRoomParticipantEntries =
       $VoiceRoomParticipantEntriesTable(this);
+  late final $RoomEntriesTable roomEntries = $RoomEntriesTable(this);
+  late final $RoomMemberEntriesTable roomMemberEntries =
+      $RoomMemberEntriesTable(this);
+  late final $RoomKeyHistoryEntriesTable roomKeyHistoryEntries =
+      $RoomKeyHistoryEntriesTable(this);
   late final IdentityDao identityDao = IdentityDao(this as AppDatabase);
   late final FollowsDao followsDao = FollowsDao(this as AppDatabase);
   late final EventsDao eventsDao = EventsDao(this as AppDatabase);
@@ -6804,6 +8285,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this as AppDatabase,
   );
   late final VoiceRoomsDao voiceRoomsDao = VoiceRoomsDao(this as AppDatabase);
+  late final RoomsDao roomsDao = RoomsDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -6824,6 +8306,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     pendingCardDistributionEntries,
     voiceRoomEntries,
     voiceRoomParticipantEntries,
+    roomEntries,
+    roomMemberEntries,
+    roomKeyHistoryEntries,
   ];
 }
 
@@ -7078,8 +8563,6 @@ typedef $$IdentityEntriesTableProcessedTableManager =
 typedef $$FollowEntriesTableCreateCompanionBuilder =
     FollowEntriesCompanion Function({
       required String pubkey,
-      Value<String?> displayName,
-      Value<String?> avatarHash,
       required String connectionCard,
       required Uint8List feedKey,
       Value<int> feedKeyEpoch,
@@ -7094,8 +8577,6 @@ typedef $$FollowEntriesTableCreateCompanionBuilder =
 typedef $$FollowEntriesTableUpdateCompanionBuilder =
     FollowEntriesCompanion Function({
       Value<String> pubkey,
-      Value<String?> displayName,
-      Value<String?> avatarHash,
       Value<String> connectionCard,
       Value<Uint8List> feedKey,
       Value<int> feedKeyEpoch,
@@ -7119,16 +8600,6 @@ class $$FollowEntriesTableFilterComposer
   });
   ColumnFilters<String> get pubkey => $composableBuilder(
     column: $table.pubkey,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get displayName => $composableBuilder(
-    column: $table.displayName,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get avatarHash => $composableBuilder(
-    column: $table.avatarHash,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7192,16 +8663,6 @@ class $$FollowEntriesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get displayName => $composableBuilder(
-    column: $table.displayName,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get avatarHash => $composableBuilder(
-    column: $table.avatarHash,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<String> get connectionCard => $composableBuilder(
     column: $table.connectionCard,
     builder: (column) => ColumnOrderings(column),
@@ -7259,16 +8720,6 @@ class $$FollowEntriesTableAnnotationComposer
   });
   GeneratedColumn<String> get pubkey =>
       $composableBuilder(column: $table.pubkey, builder: (column) => column);
-
-  GeneratedColumn<String> get displayName => $composableBuilder(
-    column: $table.displayName,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get avatarHash => $composableBuilder(
-    column: $table.avatarHash,
-    builder: (column) => column,
-  );
 
   GeneratedColumn<String> get connectionCard => $composableBuilder(
     column: $table.connectionCard,
@@ -7344,8 +8795,6 @@ class $$FollowEntriesTableTableManager
           updateCompanionCallback:
               ({
                 Value<String> pubkey = const Value.absent(),
-                Value<String?> displayName = const Value.absent(),
-                Value<String?> avatarHash = const Value.absent(),
                 Value<String> connectionCard = const Value.absent(),
                 Value<Uint8List> feedKey = const Value.absent(),
                 Value<int> feedKeyEpoch = const Value.absent(),
@@ -7358,8 +8807,6 @@ class $$FollowEntriesTableTableManager
                 Value<int> rowid = const Value.absent(),
               }) => FollowEntriesCompanion(
                 pubkey: pubkey,
-                displayName: displayName,
-                avatarHash: avatarHash,
                 connectionCard: connectionCard,
                 feedKey: feedKey,
                 feedKeyEpoch: feedKeyEpoch,
@@ -7374,8 +8821,6 @@ class $$FollowEntriesTableTableManager
           createCompanionCallback:
               ({
                 required String pubkey,
-                Value<String?> displayName = const Value.absent(),
-                Value<String?> avatarHash = const Value.absent(),
                 required String connectionCard,
                 required Uint8List feedKey,
                 Value<int> feedKeyEpoch = const Value.absent(),
@@ -7388,8 +8833,6 @@ class $$FollowEntriesTableTableManager
                 Value<int> rowid = const Value.absent(),
               }) => FollowEntriesCompanion.insert(
                 pubkey: pubkey,
-                displayName: displayName,
-                avatarHash: avatarHash,
                 connectionCard: connectionCard,
                 feedKey: feedKey,
                 feedKeyEpoch: feedKeyEpoch,
@@ -8465,6 +9908,7 @@ typedef $$OutboundQueueEntriesTableCreateCompanionBuilder =
       required Uint8List eventBlob,
       required int createdAt,
       Value<int> retryCount,
+      Value<String?> itemType,
     });
 typedef $$OutboundQueueEntriesTableUpdateCompanionBuilder =
     OutboundQueueEntriesCompanion Function({
@@ -8473,6 +9917,7 @@ typedef $$OutboundQueueEntriesTableUpdateCompanionBuilder =
       Value<Uint8List> eventBlob,
       Value<int> createdAt,
       Value<int> retryCount,
+      Value<String?> itemType,
     });
 
 class $$OutboundQueueEntriesTableFilterComposer
@@ -8506,6 +9951,11 @@ class $$OutboundQueueEntriesTableFilterComposer
 
   ColumnFilters<int> get retryCount => $composableBuilder(
     column: $table.retryCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get itemType => $composableBuilder(
+    column: $table.itemType,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -8543,6 +9993,11 @@ class $$OutboundQueueEntriesTableOrderingComposer
     column: $table.retryCount,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get itemType => $composableBuilder(
+    column: $table.itemType,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$OutboundQueueEntriesTableAnnotationComposer
@@ -8572,6 +10027,9 @@ class $$OutboundQueueEntriesTableAnnotationComposer
     column: $table.retryCount,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get itemType =>
+      $composableBuilder(column: $table.itemType, builder: (column) => column);
 }
 
 class $$OutboundQueueEntriesTableTableManager
@@ -8622,12 +10080,14 @@ class $$OutboundQueueEntriesTableTableManager
                 Value<Uint8List> eventBlob = const Value.absent(),
                 Value<int> createdAt = const Value.absent(),
                 Value<int> retryCount = const Value.absent(),
+                Value<String?> itemType = const Value.absent(),
               }) => OutboundQueueEntriesCompanion(
                 id: id,
                 targetPubkey: targetPubkey,
                 eventBlob: eventBlob,
                 createdAt: createdAt,
                 retryCount: retryCount,
+                itemType: itemType,
               ),
           createCompanionCallback:
               ({
@@ -8636,12 +10096,14 @@ class $$OutboundQueueEntriesTableTableManager
                 required Uint8List eventBlob,
                 required int createdAt,
                 Value<int> retryCount = const Value.absent(),
+                Value<String?> itemType = const Value.absent(),
               }) => OutboundQueueEntriesCompanion.insert(
                 id: id,
                 targetPubkey: targetPubkey,
                 eventBlob: eventBlob,
                 createdAt: createdAt,
                 retryCount: retryCount,
+                itemType: itemType,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -10484,6 +11946,801 @@ typedef $$VoiceRoomParticipantEntriesTableProcessedTableManager =
       VoiceRoomParticipantEntry,
       PrefetchHooks Function()
     >;
+typedef $$RoomEntriesTableCreateCompanionBuilder =
+    RoomEntriesCompanion Function({
+      required String id,
+      required String name,
+      required String creatorPubkey,
+      required int createdAt,
+      required int lastActivityAt,
+      required Uint8List roomKey,
+      Value<int> roomKeyEpoch,
+      Value<int> roomKeyValidFrom,
+      Value<int> roomMsgSeqCounter,
+      Value<int> membershipEpoch,
+      Value<int> isMember,
+      Value<int> lastReadAt,
+      Value<int> rowid,
+    });
+typedef $$RoomEntriesTableUpdateCompanionBuilder =
+    RoomEntriesCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<String> creatorPubkey,
+      Value<int> createdAt,
+      Value<int> lastActivityAt,
+      Value<Uint8List> roomKey,
+      Value<int> roomKeyEpoch,
+      Value<int> roomKeyValidFrom,
+      Value<int> roomMsgSeqCounter,
+      Value<int> membershipEpoch,
+      Value<int> isMember,
+      Value<int> lastReadAt,
+      Value<int> rowid,
+    });
+
+class $$RoomEntriesTableFilterComposer
+    extends Composer<_$AppDatabase, $RoomEntriesTable> {
+  $$RoomEntriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get creatorPubkey => $composableBuilder(
+    column: $table.creatorPubkey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastActivityAt => $composableBuilder(
+    column: $table.lastActivityAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get roomKey => $composableBuilder(
+    column: $table.roomKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get roomKeyEpoch => $composableBuilder(
+    column: $table.roomKeyEpoch,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get roomKeyValidFrom => $composableBuilder(
+    column: $table.roomKeyValidFrom,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get roomMsgSeqCounter => $composableBuilder(
+    column: $table.roomMsgSeqCounter,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get membershipEpoch => $composableBuilder(
+    column: $table.membershipEpoch,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get isMember => $composableBuilder(
+    column: $table.isMember,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastReadAt => $composableBuilder(
+    column: $table.lastReadAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$RoomEntriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $RoomEntriesTable> {
+  $$RoomEntriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get creatorPubkey => $composableBuilder(
+    column: $table.creatorPubkey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastActivityAt => $composableBuilder(
+    column: $table.lastActivityAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get roomKey => $composableBuilder(
+    column: $table.roomKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get roomKeyEpoch => $composableBuilder(
+    column: $table.roomKeyEpoch,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get roomKeyValidFrom => $composableBuilder(
+    column: $table.roomKeyValidFrom,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get roomMsgSeqCounter => $composableBuilder(
+    column: $table.roomMsgSeqCounter,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get membershipEpoch => $composableBuilder(
+    column: $table.membershipEpoch,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get isMember => $composableBuilder(
+    column: $table.isMember,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastReadAt => $composableBuilder(
+    column: $table.lastReadAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$RoomEntriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RoomEntriesTable> {
+  $$RoomEntriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get creatorPubkey => $composableBuilder(
+    column: $table.creatorPubkey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get lastActivityAt => $composableBuilder(
+    column: $table.lastActivityAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get roomKey =>
+      $composableBuilder(column: $table.roomKey, builder: (column) => column);
+
+  GeneratedColumn<int> get roomKeyEpoch => $composableBuilder(
+    column: $table.roomKeyEpoch,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get roomKeyValidFrom => $composableBuilder(
+    column: $table.roomKeyValidFrom,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get roomMsgSeqCounter => $composableBuilder(
+    column: $table.roomMsgSeqCounter,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get membershipEpoch => $composableBuilder(
+    column: $table.membershipEpoch,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get isMember =>
+      $composableBuilder(column: $table.isMember, builder: (column) => column);
+
+  GeneratedColumn<int> get lastReadAt => $composableBuilder(
+    column: $table.lastReadAt,
+    builder: (column) => column,
+  );
+}
+
+class $$RoomEntriesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $RoomEntriesTable,
+          RoomEntry,
+          $$RoomEntriesTableFilterComposer,
+          $$RoomEntriesTableOrderingComposer,
+          $$RoomEntriesTableAnnotationComposer,
+          $$RoomEntriesTableCreateCompanionBuilder,
+          $$RoomEntriesTableUpdateCompanionBuilder,
+          (
+            RoomEntry,
+            BaseReferences<_$AppDatabase, $RoomEntriesTable, RoomEntry>,
+          ),
+          RoomEntry,
+          PrefetchHooks Function()
+        > {
+  $$RoomEntriesTableTableManager(_$AppDatabase db, $RoomEntriesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RoomEntriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RoomEntriesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$RoomEntriesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> creatorPubkey = const Value.absent(),
+                Value<int> createdAt = const Value.absent(),
+                Value<int> lastActivityAt = const Value.absent(),
+                Value<Uint8List> roomKey = const Value.absent(),
+                Value<int> roomKeyEpoch = const Value.absent(),
+                Value<int> roomKeyValidFrom = const Value.absent(),
+                Value<int> roomMsgSeqCounter = const Value.absent(),
+                Value<int> membershipEpoch = const Value.absent(),
+                Value<int> isMember = const Value.absent(),
+                Value<int> lastReadAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RoomEntriesCompanion(
+                id: id,
+                name: name,
+                creatorPubkey: creatorPubkey,
+                createdAt: createdAt,
+                lastActivityAt: lastActivityAt,
+                roomKey: roomKey,
+                roomKeyEpoch: roomKeyEpoch,
+                roomKeyValidFrom: roomKeyValidFrom,
+                roomMsgSeqCounter: roomMsgSeqCounter,
+                membershipEpoch: membershipEpoch,
+                isMember: isMember,
+                lastReadAt: lastReadAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required String creatorPubkey,
+                required int createdAt,
+                required int lastActivityAt,
+                required Uint8List roomKey,
+                Value<int> roomKeyEpoch = const Value.absent(),
+                Value<int> roomKeyValidFrom = const Value.absent(),
+                Value<int> roomMsgSeqCounter = const Value.absent(),
+                Value<int> membershipEpoch = const Value.absent(),
+                Value<int> isMember = const Value.absent(),
+                Value<int> lastReadAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RoomEntriesCompanion.insert(
+                id: id,
+                name: name,
+                creatorPubkey: creatorPubkey,
+                createdAt: createdAt,
+                lastActivityAt: lastActivityAt,
+                roomKey: roomKey,
+                roomKeyEpoch: roomKeyEpoch,
+                roomKeyValidFrom: roomKeyValidFrom,
+                roomMsgSeqCounter: roomMsgSeqCounter,
+                membershipEpoch: membershipEpoch,
+                isMember: isMember,
+                lastReadAt: lastReadAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$RoomEntriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $RoomEntriesTable,
+      RoomEntry,
+      $$RoomEntriesTableFilterComposer,
+      $$RoomEntriesTableOrderingComposer,
+      $$RoomEntriesTableAnnotationComposer,
+      $$RoomEntriesTableCreateCompanionBuilder,
+      $$RoomEntriesTableUpdateCompanionBuilder,
+      (RoomEntry, BaseReferences<_$AppDatabase, $RoomEntriesTable, RoomEntry>),
+      RoomEntry,
+      PrefetchHooks Function()
+    >;
+typedef $$RoomMemberEntriesTableCreateCompanionBuilder =
+    RoomMemberEntriesCompanion Function({
+      required String roomId,
+      required String pubkey,
+      Value<String?> displayName,
+      required int addedAt,
+      Value<int?> removedAt,
+      Value<String> role,
+      Value<int> rowid,
+    });
+typedef $$RoomMemberEntriesTableUpdateCompanionBuilder =
+    RoomMemberEntriesCompanion Function({
+      Value<String> roomId,
+      Value<String> pubkey,
+      Value<String?> displayName,
+      Value<int> addedAt,
+      Value<int?> removedAt,
+      Value<String> role,
+      Value<int> rowid,
+    });
+
+class $$RoomMemberEntriesTableFilterComposer
+    extends Composer<_$AppDatabase, $RoomMemberEntriesTable> {
+  $$RoomMemberEntriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get roomId => $composableBuilder(
+    column: $table.roomId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get pubkey => $composableBuilder(
+    column: $table.pubkey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get addedAt => $composableBuilder(
+    column: $table.addedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get removedAt => $composableBuilder(
+    column: $table.removedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get role => $composableBuilder(
+    column: $table.role,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$RoomMemberEntriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $RoomMemberEntriesTable> {
+  $$RoomMemberEntriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get roomId => $composableBuilder(
+    column: $table.roomId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get pubkey => $composableBuilder(
+    column: $table.pubkey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get addedAt => $composableBuilder(
+    column: $table.addedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get removedAt => $composableBuilder(
+    column: $table.removedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get role => $composableBuilder(
+    column: $table.role,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$RoomMemberEntriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RoomMemberEntriesTable> {
+  $$RoomMemberEntriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get roomId =>
+      $composableBuilder(column: $table.roomId, builder: (column) => column);
+
+  GeneratedColumn<String> get pubkey =>
+      $composableBuilder(column: $table.pubkey, builder: (column) => column);
+
+  GeneratedColumn<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get addedAt =>
+      $composableBuilder(column: $table.addedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get removedAt =>
+      $composableBuilder(column: $table.removedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get role =>
+      $composableBuilder(column: $table.role, builder: (column) => column);
+}
+
+class $$RoomMemberEntriesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $RoomMemberEntriesTable,
+          RoomMemberEntry,
+          $$RoomMemberEntriesTableFilterComposer,
+          $$RoomMemberEntriesTableOrderingComposer,
+          $$RoomMemberEntriesTableAnnotationComposer,
+          $$RoomMemberEntriesTableCreateCompanionBuilder,
+          $$RoomMemberEntriesTableUpdateCompanionBuilder,
+          (
+            RoomMemberEntry,
+            BaseReferences<
+              _$AppDatabase,
+              $RoomMemberEntriesTable,
+              RoomMemberEntry
+            >,
+          ),
+          RoomMemberEntry,
+          PrefetchHooks Function()
+        > {
+  $$RoomMemberEntriesTableTableManager(
+    _$AppDatabase db,
+    $RoomMemberEntriesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RoomMemberEntriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RoomMemberEntriesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$RoomMemberEntriesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> roomId = const Value.absent(),
+                Value<String> pubkey = const Value.absent(),
+                Value<String?> displayName = const Value.absent(),
+                Value<int> addedAt = const Value.absent(),
+                Value<int?> removedAt = const Value.absent(),
+                Value<String> role = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RoomMemberEntriesCompanion(
+                roomId: roomId,
+                pubkey: pubkey,
+                displayName: displayName,
+                addedAt: addedAt,
+                removedAt: removedAt,
+                role: role,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String roomId,
+                required String pubkey,
+                Value<String?> displayName = const Value.absent(),
+                required int addedAt,
+                Value<int?> removedAt = const Value.absent(),
+                Value<String> role = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RoomMemberEntriesCompanion.insert(
+                roomId: roomId,
+                pubkey: pubkey,
+                displayName: displayName,
+                addedAt: addedAt,
+                removedAt: removedAt,
+                role: role,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$RoomMemberEntriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $RoomMemberEntriesTable,
+      RoomMemberEntry,
+      $$RoomMemberEntriesTableFilterComposer,
+      $$RoomMemberEntriesTableOrderingComposer,
+      $$RoomMemberEntriesTableAnnotationComposer,
+      $$RoomMemberEntriesTableCreateCompanionBuilder,
+      $$RoomMemberEntriesTableUpdateCompanionBuilder,
+      (
+        RoomMemberEntry,
+        BaseReferences<_$AppDatabase, $RoomMemberEntriesTable, RoomMemberEntry>,
+      ),
+      RoomMemberEntry,
+      PrefetchHooks Function()
+    >;
+typedef $$RoomKeyHistoryEntriesTableCreateCompanionBuilder =
+    RoomKeyHistoryEntriesCompanion Function({
+      required String roomId,
+      required int epoch,
+      required Uint8List roomKey,
+      required int validFrom,
+      required int validUntil,
+      Value<int> rowid,
+    });
+typedef $$RoomKeyHistoryEntriesTableUpdateCompanionBuilder =
+    RoomKeyHistoryEntriesCompanion Function({
+      Value<String> roomId,
+      Value<int> epoch,
+      Value<Uint8List> roomKey,
+      Value<int> validFrom,
+      Value<int> validUntil,
+      Value<int> rowid,
+    });
+
+class $$RoomKeyHistoryEntriesTableFilterComposer
+    extends Composer<_$AppDatabase, $RoomKeyHistoryEntriesTable> {
+  $$RoomKeyHistoryEntriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get roomId => $composableBuilder(
+    column: $table.roomId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get epoch => $composableBuilder(
+    column: $table.epoch,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get roomKey => $composableBuilder(
+    column: $table.roomKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get validFrom => $composableBuilder(
+    column: $table.validFrom,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get validUntil => $composableBuilder(
+    column: $table.validUntil,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$RoomKeyHistoryEntriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $RoomKeyHistoryEntriesTable> {
+  $$RoomKeyHistoryEntriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get roomId => $composableBuilder(
+    column: $table.roomId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get epoch => $composableBuilder(
+    column: $table.epoch,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get roomKey => $composableBuilder(
+    column: $table.roomKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get validFrom => $composableBuilder(
+    column: $table.validFrom,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get validUntil => $composableBuilder(
+    column: $table.validUntil,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$RoomKeyHistoryEntriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RoomKeyHistoryEntriesTable> {
+  $$RoomKeyHistoryEntriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get roomId =>
+      $composableBuilder(column: $table.roomId, builder: (column) => column);
+
+  GeneratedColumn<int> get epoch =>
+      $composableBuilder(column: $table.epoch, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get roomKey =>
+      $composableBuilder(column: $table.roomKey, builder: (column) => column);
+
+  GeneratedColumn<int> get validFrom =>
+      $composableBuilder(column: $table.validFrom, builder: (column) => column);
+
+  GeneratedColumn<int> get validUntil => $composableBuilder(
+    column: $table.validUntil,
+    builder: (column) => column,
+  );
+}
+
+class $$RoomKeyHistoryEntriesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $RoomKeyHistoryEntriesTable,
+          RoomKeyHistoryEntry,
+          $$RoomKeyHistoryEntriesTableFilterComposer,
+          $$RoomKeyHistoryEntriesTableOrderingComposer,
+          $$RoomKeyHistoryEntriesTableAnnotationComposer,
+          $$RoomKeyHistoryEntriesTableCreateCompanionBuilder,
+          $$RoomKeyHistoryEntriesTableUpdateCompanionBuilder,
+          (
+            RoomKeyHistoryEntry,
+            BaseReferences<
+              _$AppDatabase,
+              $RoomKeyHistoryEntriesTable,
+              RoomKeyHistoryEntry
+            >,
+          ),
+          RoomKeyHistoryEntry,
+          PrefetchHooks Function()
+        > {
+  $$RoomKeyHistoryEntriesTableTableManager(
+    _$AppDatabase db,
+    $RoomKeyHistoryEntriesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RoomKeyHistoryEntriesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$RoomKeyHistoryEntriesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$RoomKeyHistoryEntriesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> roomId = const Value.absent(),
+                Value<int> epoch = const Value.absent(),
+                Value<Uint8List> roomKey = const Value.absent(),
+                Value<int> validFrom = const Value.absent(),
+                Value<int> validUntil = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RoomKeyHistoryEntriesCompanion(
+                roomId: roomId,
+                epoch: epoch,
+                roomKey: roomKey,
+                validFrom: validFrom,
+                validUntil: validUntil,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String roomId,
+                required int epoch,
+                required Uint8List roomKey,
+                required int validFrom,
+                required int validUntil,
+                Value<int> rowid = const Value.absent(),
+              }) => RoomKeyHistoryEntriesCompanion.insert(
+                roomId: roomId,
+                epoch: epoch,
+                roomKey: roomKey,
+                validFrom: validFrom,
+                validUntil: validUntil,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$RoomKeyHistoryEntriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $RoomKeyHistoryEntriesTable,
+      RoomKeyHistoryEntry,
+      $$RoomKeyHistoryEntriesTableFilterComposer,
+      $$RoomKeyHistoryEntriesTableOrderingComposer,
+      $$RoomKeyHistoryEntriesTableAnnotationComposer,
+      $$RoomKeyHistoryEntriesTableCreateCompanionBuilder,
+      $$RoomKeyHistoryEntriesTableUpdateCompanionBuilder,
+      (
+        RoomKeyHistoryEntry,
+        BaseReferences<
+          _$AppDatabase,
+          $RoomKeyHistoryEntriesTable,
+          RoomKeyHistoryEntry
+        >,
+      ),
+      RoomKeyHistoryEntry,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -10546,4 +12803,10 @@ class $AppDatabaseManager {
         _db,
         _db.voiceRoomParticipantEntries,
       );
+  $$RoomEntriesTableTableManager get roomEntries =>
+      $$RoomEntriesTableTableManager(_db, _db.roomEntries);
+  $$RoomMemberEntriesTableTableManager get roomMemberEntries =>
+      $$RoomMemberEntriesTableTableManager(_db, _db.roomMemberEntries);
+  $$RoomKeyHistoryEntriesTableTableManager get roomKeyHistoryEntries =>
+      $$RoomKeyHistoryEntriesTableTableManager(_db, _db.roomKeyHistoryEntries);
 }

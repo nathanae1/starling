@@ -834,3 +834,140 @@ final class ReactionServiceProvider
 }
 
 String _$reactionServiceHash() => r'd1f0c6141b6ec35b0a8bc17e16f45a292712375a';
+
+@ProviderFor(roomKeyRotationService)
+final roomKeyRotationServiceProvider = RoomKeyRotationServiceProvider._();
+
+final class RoomKeyRotationServiceProvider
+    extends
+        $FunctionalProvider<
+          RoomKeyRotationService,
+          RoomKeyRotationService,
+          RoomKeyRotationService
+        >
+    with $Provider<RoomKeyRotationService> {
+  RoomKeyRotationServiceProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'roomKeyRotationServiceProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$roomKeyRotationServiceHash();
+
+  @$internal
+  @override
+  $ProviderElement<RoomKeyRotationService> $createElement(
+    $ProviderPointer pointer,
+  ) => $ProviderElement(pointer);
+
+  @override
+  RoomKeyRotationService create(Ref ref) {
+    return roomKeyRotationService(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(RoomKeyRotationService value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<RoomKeyRotationService>(value),
+    );
+  }
+}
+
+String _$roomKeyRotationServiceHash() =>
+    r'a3bfcaf2cd4a5020fc6f76faee34a90dd8a7ad4c';
+
+@ProviderFor(roomService)
+final roomServiceProvider = RoomServiceProvider._();
+
+final class RoomServiceProvider
+    extends $FunctionalProvider<RoomService, RoomService, RoomService>
+    with $Provider<RoomService> {
+  RoomServiceProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'roomServiceProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$roomServiceHash();
+
+  @$internal
+  @override
+  $ProviderElement<RoomService> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  RoomService create(Ref ref) {
+    return roomService(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(RoomService value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<RoomService>(value),
+    );
+  }
+}
+
+String _$roomServiceHash() => r'21768899a99daf1ef1728a063492f7df7d22d72e';
+
+@ProviderFor(roomMessageService)
+final roomMessageServiceProvider = RoomMessageServiceProvider._();
+
+final class RoomMessageServiceProvider
+    extends
+        $FunctionalProvider<
+          RoomMessageService,
+          RoomMessageService,
+          RoomMessageService
+        >
+    with $Provider<RoomMessageService> {
+  RoomMessageServiceProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'roomMessageServiceProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$roomMessageServiceHash();
+
+  @$internal
+  @override
+  $ProviderElement<RoomMessageService> $createElement(
+    $ProviderPointer pointer,
+  ) => $ProviderElement(pointer);
+
+  @override
+  RoomMessageService create(Ref ref) {
+    return roomMessageService(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(RoomMessageService value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<RoomMessageService>(value),
+    );
+  }
+}
+
+String _$roomMessageServiceHash() =>
+    r'3f0ab8db7c02b4224910c6182be3b8c5241ebc94';

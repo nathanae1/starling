@@ -170,8 +170,13 @@ class EventsDao extends DatabaseAccessor<AppDatabase> with _$EventsDaoMixin {
 
     final q = select(eventEntries);
     q.where((e) {
+      // Exclude Plan 17 chatroom kinds (100-103) from the broadcast/re-serve
+      // seam: they're membership-scoped (room key), so an own roomMessage —
+      // or an incoming one whose ref is our roomCreate — must never be
+      // re-encrypted under our feed key and handed to followers.
       Expression<bool> condition =
-          e.pubkey.equals(ownerPubkey) | e.refId.isInQuery(ownEventIds);
+          (e.pubkey.equals(ownerPubkey) | e.refId.isInQuery(ownEventIds)) &
+          (e.kind.isSmallerThanValue(100) | e.kind.isBiggerThanValue(103));
       if (since != null) {
         condition = condition & e.createdAt.isBiggerOrEqualValue(since);
       }

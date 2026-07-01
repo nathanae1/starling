@@ -6,7 +6,6 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../models/models.dart';
 import '../services/types.dart';
 import 'feed_provider.dart';
-import 'service_providers.dart';
 
 part 'search_provider.g.dart';
 
@@ -52,12 +51,9 @@ Future<SearchResults> searchResults(Ref ref) async {
   if (query.isEmpty) {
     return const SearchResults(events: [], follows: []);
   }
-  // Subscribe synchronously before any await — using `ref` after an await
-  // is illegal if the provider was invalidated during the await.
-  final feedFuture = ref.watch(feedProvider.future);
-  final storage = ref.watch(storageServiceProvider);
-  final feed = await feedFuture;
-  final allFollows = await storage.getFollows();
+  // Subscribe synchronously before the await — using `ref` after an await is
+  // illegal if the provider was invalidated during it.
+  final feed = await ref.watch(feedProvider.future);
 
   final matchedEvents = feed.where((e) {
     if (e.content.isEmpty) return false;
@@ -65,10 +61,9 @@ Future<SearchResults> searchResults(Ref ref) async {
     return caption.contains(query);
   }).toList();
 
-  final matchedFollows = allFollows.where((f) {
-    final name = (f.displayName ?? '').toLowerCase();
-    return name.contains(query);
-  }).toList();
-
-  return SearchResults(events: matchedEvents, follows: matchedFollows);
+  // Friend-name matching previously read the follow row's cached display name,
+  // which is vestigial — a friend's name now comes from their kind=2 profile
+  // (followProfileProvider), not the follow row. Resolving profile names in
+  // search is a separate enhancement; until then friend results stay empty.
+  return SearchResults(events: matchedEvents, follows: const []);
 }

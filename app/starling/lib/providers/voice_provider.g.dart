@@ -150,7 +150,7 @@ final class RoomManagerProvider
   }
 }
 
-String _$roomManagerHash() => r'332d26319fdd80e255a6cb4117fc2fac17e14384';
+String _$roomManagerHash() => r'6b28c5c562d613660ca5d64ee15fcdec48e4aa96';
 
 /// Live voice-room state for the UI; null when idle. Replays the manager's
 /// current state to each subscriber before streaming updates, so a screen

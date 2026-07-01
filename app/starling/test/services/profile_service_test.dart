@@ -164,6 +164,20 @@ void main() {
     await f.close();
   });
 
+  test('over-length bio is clamped to kBioMaxLength in the event', () async {
+    final f = await _build(crypto);
+    // Defensive clamp guards the service boundary regardless of the editor's
+    // input cap. ASCII 'a' → one grapheme == one code unit, so length checks
+    // are exact here.
+    final longBio = 'a' * (kBioMaxLength + 25);
+    await f.service.publishProfile(displayName: 'Sam', bio: longBio);
+    final ev = await f.storage.getLatestProfile(f.pubkey);
+    final bio = decodeProfileContent(ev!.content)!.bio!;
+    expect(bio.length, kBioMaxLength);
+    expect(bio, 'a' * kBioMaxLength);
+    await f.close();
+  });
+
   test('with avatar: stores a 256² blob + MediaRef whose hash == avatar_hash, '
       'decryptable under the event msg_seq', () async {
     final f = await _build(crypto);

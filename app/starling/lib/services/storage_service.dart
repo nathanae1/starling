@@ -77,6 +77,15 @@ abstract class StorageService {
   /// Null for received events and for own events from before schema v2.
   Future<Uint8List?> getEncryptedPayload(String id);
 
+  /// Persist a RECEIVED event AND its wire-format `EncryptedEvent` bytes,
+  /// marked not-own (isOwn=0). Plan 17 room ingest uses this so a member can
+  /// re-serve / replay room messages later (bounded backfill now; full pull
+  /// in Phase H). The receive-side counterpart to [saveOwnEventWithEncrypted].
+  Future<void> saveIncomingEventWithEncrypted(
+    Event event,
+    Uint8List encryptedPayload,
+  );
+
   Future<void> deleteEvent(String id);
 
   /// Feed events (own + all followed), ordered by created_at DESC.
@@ -249,6 +258,50 @@ abstract class StorageService {
   /// Delete rooms older than [maxAgeSeconds]. Returns rooms removed.
   Future<int> evictOldVoiceRooms(int maxAgeSeconds);
 
+  // --- Chatrooms (Plan 17, durable rooms) ---
+
+  /// Upsert the full room row (create, key rotation, seq bump, membership
+  /// epoch, isMember). Read-modify-write callers hold a publish lock.
+  Future<void> saveRoom(Room room);
+
+  Future<Room?> getRoom(String id);
+
+  /// All rooms, newest-activity first. Callers filter `isMember`.
+  Future<List<Room>> getRooms();
+
+  /// Bump a room's retention/activity clock. Concurrency-safe targeted write
+  /// (ingest calls this without the publish lock).
+  Future<void> updateRoomActivity(String roomId, int timestamp);
+
+  /// Local-only read cursor for the unread badge.
+  Future<void> setRoomLastRead(String roomId, int timestamp);
+
+  Future<void> saveRoomMember(RoomMember member);
+
+  /// Stamp a member as removed (soft delete; row is retained for history).
+  Future<void> setRoomMemberRemoved(String roomId, String pubkey, int removedAt);
+
+  /// All member rows for [roomId] (active and removed). Callers filter
+  /// `isActive` for fan-out / member counts.
+  Future<List<RoomMember>> getRoomMembers(String roomId);
+
+  /// Archive a retired room key with its active window (rotation on remove).
+  Future<void> appendRoomKeyHistory(
+    String roomId, {
+    required Uint8List roomKey,
+    required int epoch,
+    required int validFrom,
+    required int validUntil,
+  });
+
+  /// Retired keys for [roomId], oldest first — decrypt fallbacks for messages
+  /// authored before the room's most recent rotation.
+  Future<List<RetiredRoomKey>> getRoomKeyHistory(String roomId);
+
+  /// Evict LEFT rooms (`isMember == 0`) idle past [maxIdleSeconds], plus their
+  /// members + key history. Never evicts joined rooms. Returns rooms removed.
+  Future<int> evictInactiveRooms(int maxIdleSeconds);
+
   // --- Follow requests ---
 
   Future<List<FollowRequest>> getInboundRequests();
@@ -293,6 +346,15 @@ abstract class StorageService {
   // --- Outbound queue ---
 
   Future<void> enqueue(String targetPubkey, Uint8List eventBlob);
+
+  /// Plan 17: enqueue a typed outbound item. [itemType] becomes the
+  /// EnvelopeItem `type` the drain ships it as (`'room-key'`/`'room-event'`),
+  /// so chatroom fan-out rides the same directed-delivery queue as events.
+  Future<void> enqueueTyped(
+    String targetPubkey,
+    Uint8List blob,
+    String itemType,
+  );
 
   Future<List<QueuedEvent>> dequeue(String targetPubkey);
 

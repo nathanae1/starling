@@ -80,4 +80,43 @@ void main() {
     expect(find.byType(TextField), findsNothing);
     expect(container.read(searchQueryProvider), equals(''));
   });
+
+  testWidgets('syncing + pulling shows the "Loading feeds…" label',
+      (tester) async {
+    final container = ProviderContainer(overrides: [
+      syncStatusProvider.overrideWithValue(
+        const SyncStatus(
+          state: SyncState.syncing,
+          direction: SyncDirection.pulling,
+        ),
+      ),
+    ]);
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(_harness(container));
+    // Not pumpAndSettle — the syncing dot pulses forever.
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.text('Loading feeds…'), findsOneWidget);
+    expect(find.text('Publishing…'), findsNothing);
+  });
+
+  testWidgets('syncing + pushing shows the "Publishing…" label',
+      (tester) async {
+    final container = ProviderContainer(overrides: [
+      syncStatusProvider.overrideWithValue(
+        const SyncStatus(
+          state: SyncState.syncing,
+          direction: SyncDirection.pushing,
+        ),
+      ),
+    ]);
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(_harness(container));
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.text('Publishing…'), findsOneWidget);
+    expect(find.text('Loading feeds…'), findsNothing);
+  });
 }

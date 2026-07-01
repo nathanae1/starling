@@ -230,6 +230,78 @@ void main() {
       await sub.cancel();
       await h.service.endSession();
     });
+
+    test('connection quality reports good for a clean link', () async {
+      final h = _Harness(interval: const Duration(milliseconds: 10));
+      await h.service.startSession('r');
+      await h.service.createOffer('peerB');
+      h.created.single.statsReports = [
+        StatsReport('ir', 'inbound-rtp', 0, {
+          'packetsLost': 0,
+          'packetsReceived': 100,
+          'jitter': 0.001,
+        }),
+        StatsReport('cp', 'candidate-pair', 0, {
+          'nominated': true,
+          'currentRoundTripTime': 0.05,
+        }),
+      ];
+      final q = await h.service.connectionQuality.first
+          .timeout(const Duration(seconds: 2));
+      expect(q['peerB'], ConnectionQuality.good);
+      await h.service.endSession();
+    });
+
+    test('connection quality reports poor under heavy packet loss', () async {
+      final h = _Harness(interval: const Duration(milliseconds: 10));
+      await h.service.startSession('r');
+      await h.service.createOffer('peerB');
+      // Subscribe BEFORE seeding stats so the first emission is the cumulative
+      // classification, before per-interval deltas zero the loss out. The 2s
+      // timeout keeps it deterministic even under a congested full-suite run.
+      final firstQuality = h.service.connectionQuality.first;
+      h.created.single.statsReports = [
+        StatsReport('ir', 'inbound-rtp', 0, {
+          'packetsLost': 20,
+          'packetsReceived': 80,
+        }),
+      ];
+      final q = await firstQuality.timeout(const Duration(seconds: 2));
+      expect(q['peerB'], ConnectionQuality.poor);
+      await h.service.endSession();
+    });
+
+    test('connection quality reports fair for moderate loss', () async {
+      final h = _Harness(interval: const Duration(milliseconds: 10));
+      await h.service.startSession('r');
+      await h.service.createOffer('peerB');
+      final firstQuality = h.service.connectionQuality.first;
+      h.created.single.statsReports = [
+        StatsReport('ir', 'inbound-rtp', 0, {
+          'packetsLost': 5,
+          'packetsReceived': 95,
+        }),
+      ];
+      final q = await firstQuality.timeout(const Duration(seconds: 2));
+      expect(q['peerB'], ConnectionQuality.fair);
+      await h.service.endSession();
+    });
+
+    test('a peer with no RTP sample is absent from quality', () async {
+      final h = _Harness(interval: const Duration(milliseconds: 10));
+      await h.service.startSession('r');
+      await h.service.createOffer('peerB');
+      // Only an audio level, no inbound-rtp packet counters → no quality.
+      h.created.single.statsReports = [
+        StatsReport('1', 'inbound-rtp', 0, {'audioLevel': 0.5}),
+      ];
+      var emitted = false;
+      final sub = h.service.connectionQuality.listen((_) => emitted = true);
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      await sub.cancel();
+      expect(emitted, isFalse);
+      await h.service.endSession();
+    });
   });
 }
 

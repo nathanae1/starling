@@ -151,7 +151,7 @@ class _RecoveryPhraseScreenState extends ConsumerState<RecoveryPhraseScreen> {
                   ref
                       .read(onboardingControllerProvider.notifier)
                       .clearRecoveryPhrase();
-                  context.go('/feed');
+                  context.go('/onboarding/done');
                 },
               ),
             ],

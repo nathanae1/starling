@@ -37,7 +37,7 @@ class _RestoreScreenState extends ConsumerState<RestoreScreen> {
           .read(onboardingControllerProvider.notifier)
           .restoreIdentity(_words);
       if (!mounted) return;
-      context.go('/feed');
+      context.go('/onboarding/done');
     } catch (e) {
       if (!mounted) return;
       setState(() {

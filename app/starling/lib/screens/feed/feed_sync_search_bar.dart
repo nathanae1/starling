@@ -100,7 +100,7 @@ class _FeedSyncSearchBarState extends ConsumerState<FeedSyncSearchBar> {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: SyncDot(state: status.state),
+          child: SyncDot(state: status.state, direction: status.direction),
         ),
         const SizedBox(width: 10),
         Flexible(
@@ -200,7 +200,9 @@ class _FeedSyncSearchBarState extends ConsumerState<FeedSyncSearchBar> {
         }
         return 'Last synced just now';
       case SyncState.syncing:
-        return 'Syncing…';
+        return status.direction == SyncDirection.pushing
+            ? 'Publishing…'
+            : 'Loading feeds…';
       case SyncState.offline:
         return 'Offline — tap to retry';
     }

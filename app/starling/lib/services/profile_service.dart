@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:characters/characters.dart';
+
 import '../models/models.dart';
 import '../models/profile_content.dart';
 import '../models/protocol_version.dart';
@@ -13,6 +15,12 @@ import 'media_service.dart';
 import 'post_fanout_service.dart';
 import 'storage_service.dart';
 import 'types.dart';
+
+/// Hard cap on profile bio length, in grapheme clusters. Enforced at input by
+/// the editor's `StarlingTextarea` and defensively re-clamped in
+/// [ProfileService.publishProfile] so the kind=2 event body honors it
+/// regardless of entry point.
+const kBioMaxLength = 280;
 
 abstract class ProfileService {
   /// Publish a kind=2 profile event carrying [displayName], optional [bio],
@@ -111,6 +119,13 @@ class DefaultProfileService implements ProfileService {
       ];
     }
 
+    // Defensive re-clamp: the editor caps input at [kBioMaxLength] graphemes,
+    // but this service is a public boundary (also reachable via onboarding), so
+    // guarantee the invariant here rather than trusting the caller.
+    final safeBio = bio != null && bio.characters.length > kBioMaxLength
+        ? bio.characters.take(kBioMaxLength).toString()
+        : bio;
+
     final unsigned = Event(
       version: kStarlingProtocolVersion,
       id: '',
@@ -120,7 +135,7 @@ class DefaultProfileService implements ProfileService {
       ref: null,
       content: encodeProfileContent(
         name: displayName,
-        bio: bio,
+        bio: safeBio,
         avatarHash: avatarHash,
       ),
       media: media,

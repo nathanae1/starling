@@ -42,6 +42,7 @@ class Libp2pStreamServer {
     required Directory appSupportDir,
     required Future<Identity?> Function() identityLookup,
     required FollowService Function() followServiceLookup,
+    Future<Uint8List?> Function()? ownSecretKeyLookup,
   }) : _libp2p = libp2p,
        _storage = storage,
        _contentKey = contentKey,
@@ -49,7 +50,8 @@ class Libp2pStreamServer {
        _clock = clock,
        _appSupportDir = appSupportDir,
        _identityLookup = identityLookup,
-       _followServiceLookup = followServiceLookup;
+       _followServiceLookup = followServiceLookup,
+       _ownSecretKeyLookup = ownSecretKeyLookup;
 
   final Libp2pService _libp2p;
   final StorageService _storage;
@@ -59,6 +61,10 @@ class Libp2pStreamServer {
   final Directory _appSupportDir;
   final Future<Identity?> Function() _identityLookup;
   final FollowService Function() _followServiceLookup;
+
+  /// Plan 17: enables `room-key`/`room-event` ingestion over the libp2p push
+  /// path (rooms can be delivered on whichever transport reaches the peer).
+  final Future<Uint8List?> Function()? _ownSecretKeyLookup;
 
   bool _started = false;
 
@@ -162,11 +168,20 @@ class Libp2pStreamServer {
   Future<Uint8List> _handleEventsPush(Uint8List req) async {
     if (req.isEmpty) return Uint8List(0);
     final envelope = Envelope.fromBytes(req);
+    Identity? identity;
+    Uint8List? ownSecretKey;
+    if (_ownSecretKeyLookup != null) {
+      identity = await _identityLookup();
+      ownSecretKey = await _ownSecretKeyLookup!();
+    }
     await ingestPushedEnvelope(
       storage: _storage,
       contentKey: _contentKey,
       clock: _clock,
       envelope: envelope,
+      crypto: _crypto,
+      identity: identity,
+      ownSecretKey: ownSecretKey,
     );
     return Uint8List(0);
   }

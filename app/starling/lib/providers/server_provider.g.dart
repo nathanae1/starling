@@ -43,7 +43,7 @@ final class HttpServerControllerProvider
 }
 
 String _$httpServerControllerHash() =>
-    r'a899bf035570dfa4d0ee06096f0103532dc4b451';
+    r'4889733437e1c38548ef6be30666eaec9a8e467a';
 
 /// Lifecycle owner for the embedded [StarlingHttpServer]. The published
 /// state is the bound port (or `null` while pre-onboarding / stopped),

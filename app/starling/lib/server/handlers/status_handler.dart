@@ -19,10 +19,13 @@ Handler statusHandler({
     }
     final ownEvents = await storage.getEvents(pubkey: identity.pubkey);
     final mediaUsed = await storage.getMediaCacheSize();
+    // Exclude chatroom kinds (100-103) from the public event count so a
+    // peer can't infer room activity from /status (Plan 17).
+    final feedEventCount = ownEvents.where((e) => !e.kind.isRoomScoped).length;
     final body = jsonEncode({
       'pubkey': identity.pubkey,
       'version': kStarlingProtocolVersion,
-      'event_count': ownEvents.length,
+      'event_count': feedEventCount,
       'media_storage_used': mediaUsed,
     });
     return Response.ok(

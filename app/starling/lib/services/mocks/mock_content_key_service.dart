@@ -100,4 +100,23 @@ class MockContentKeyService implements ContentKeyService {
     final encrypted = encryptEvent(signed, _mockFeedKey, 0, msgSeq);
     return (signed: signed, encrypted: encrypted);
   }
+
+  @override
+  ({Event signed, EncryptedEvent encrypted}) signAndEncryptForRoom(
+    Event event, {
+    required Uint8List roomKey,
+    required int roomEpoch,
+    required int roomMsgSeq,
+  }) {
+    // Deterministic stand-in: sign like the mock broadcast path but encrypt
+    // under the supplied room key/epoch/seq so tests exercise the room chain.
+    final id = computeEventId(event);
+    final signed = event.copyWith(
+      id: id,
+      sig: Uint8List.fromList(List.filled(64, 0xBB)),
+      msgSeq: roomMsgSeq,
+    );
+    final encrypted = encryptEvent(signed, roomKey, roomEpoch, roomMsgSeq);
+    return (signed: signed, encrypted: encrypted);
+  }
 }

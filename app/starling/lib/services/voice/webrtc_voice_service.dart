@@ -42,8 +42,12 @@ class WebRtcVoiceService implements VoiceService {
   final _localIce = StreamController<VoiceIceCandidate>.broadcast();
   final _peerStateCtrl = StreamController<VoicePeerState>.broadcast();
   final _audioLevelCtrl = StreamController<Map<String, double>>.broadcast();
+  final _qualityCtrl =
+      StreamController<Map<String, ConnectionQuality>>.broadcast();
 
   final Map<String, RTCPeerConnection> _peers = {};
+  // Per-peer previous cumulative RTP counters, for per-interval loss deltas.
+  final Map<String, _QualitySample> _qualitySamples = {};
   MediaStream? _localStream;
   Map<String, dynamic>? _rtcConfig;
   Timer? _levelTimer;
@@ -58,6 +62,9 @@ class WebRtcVoiceService implements VoiceService {
   Stream<VoicePeerState> get peerStates => _peerStateCtrl.stream;
   @override
   Stream<Map<String, double>> get audioLevels => _audioLevelCtrl.stream;
+  @override
+  Stream<Map<String, ConnectionQuality>> get connectionQuality =>
+      _qualityCtrl.stream;
   @override
   bool get micMuted => _micMuted;
   @override
@@ -149,6 +156,7 @@ class WebRtcVoiceService implements VoiceService {
   @override
   Future<void> removePeer(String peerPubkey) async {
     final pc = _peers.remove(peerPubkey);
+    _qualitySamples.remove(peerPubkey);
     if (pc == null) return;
     try {
       await pc.close();
@@ -165,6 +173,7 @@ class WebRtcVoiceService implements VoiceService {
       } catch (_) {}
     }
     _peers.clear();
+    _qualitySamples.clear();
     final stream = _localStream;
     _localStream = null;
     if (stream != null) {
@@ -247,22 +256,112 @@ class WebRtcVoiceService implements VoiceService {
     }
   }
 
+  // Connection-quality thresholds (tunable). `loss` is a per-interval fraction;
+  // `rtt`/`jitter` are seconds (WebRTC stats units).
+  static const _lossGood = 0.02;
+  static const _lossPoor = 0.08;
+  static const _rttGood = 0.20;
+  static const _rttPoor = 0.40;
+  static const _jitterGood = 0.03;
+
   Future<void> _pollLevels() async {
-    if (_peers.isEmpty || _audioLevelCtrl.isClosed) return;
+    if (_peers.isEmpty) return;
     final levels = <String, double>{};
+    final quality = <String, ConnectionQuality>{};
     for (final entry in _peers.entries) {
       try {
+        // One getStats() per peer feeds BOTH speaking detection and link
+        // quality — deliberately no second poll loop.
         final reports = await entry.value.getStats();
         var best = 0.0;
+        int? packetsLost;
+        int? packetsReceived;
+        double? jitter;
+        double? rtt;
         for (final r in reports) {
-          final v = r.values['audioLevel'];
-          if (v is num && v.toDouble() > best) best = v.toDouble();
+          final v = r.values;
+          final level = v['audioLevel'];
+          if (level is num && level.toDouble() > best) best = level.toDouble();
+
+          if (r.type == 'inbound-rtp') {
+            // Voice-only mesh → the sole inbound-rtp stream is the peer's audio.
+            final pl = v['packetsLost'];
+            final pr = v['packetsReceived'];
+            final j = v['jitter'];
+            if (pl is num) packetsLost = pl.toInt();
+            if (pr is num) packetsReceived = pr.toInt();
+            if (j is num) jitter = j.toDouble();
+          } else if (r.type == 'candidate-pair') {
+            final crtt = v['currentRoundTripTime'];
+            if (crtt is num && (v['nominated'] == true || rtt == null)) {
+              rtt = crtt.toDouble();
+            }
+          } else if (r.type == 'remote-inbound-rtp') {
+            final rr = v['roundTripTime'];
+            if (rr is num) rtt ??= rr.toDouble();
+          }
         }
         if (best > 0) levels[entry.key] = best;
+        final q = _computeQuality(
+          entry.key,
+          packetsLost: packetsLost,
+          packetsReceived: packetsReceived,
+          jitter: jitter,
+          rtt: rtt,
+        );
+        if (q != null) quality[entry.key] = q;
       } catch (_) {}
     }
     if (levels.isNotEmpty && !_audioLevelCtrl.isClosed) {
       _audioLevelCtrl.add(levels);
     }
+    if (quality.isNotEmpty && !_qualityCtrl.isClosed) {
+      _qualityCtrl.add(quality);
+    }
   }
+
+  /// Maps this interval's RTP stats to a [ConnectionQuality] using per-interval
+  /// loss deltas (a connect-time burst shouldn't pin a peer to "poor"). Returns
+  /// null until the peer has a usable inbound-rtp sample.
+  ConnectionQuality? _computeQuality(
+    String peer, {
+    int? packetsLost,
+    int? packetsReceived,
+    double? jitter,
+    double? rtt,
+  }) {
+    if (packetsLost == null || packetsReceived == null) return null;
+    final prev = _qualitySamples[peer];
+    _qualitySamples[peer] = _QualitySample(
+      packetsLost: packetsLost,
+      packetsReceived: packetsReceived,
+    );
+    // First sample → cumulative; thereafter → delta since the last poll.
+    final dLost = prev == null ? packetsLost : packetsLost - prev.packetsLost;
+    final dRecv = prev == null
+        ? packetsReceived
+        : packetsReceived - prev.packetsReceived;
+    final lost = dLost < 0 ? 0 : dLost;
+    final recv = dRecv < 0 ? 0 : dRecv;
+    final total = lost + recv;
+    final loss = total == 0 ? 0.0 : lost / total;
+
+    if (loss >= _lossPoor || (rtt != null && rtt >= _rttPoor)) {
+      return ConnectionQuality.poor;
+    }
+    if (loss < _lossGood &&
+        (rtt == null || rtt < _rttGood) &&
+        (jitter == null || jitter < _jitterGood)) {
+      return ConnectionQuality.good;
+    }
+    return ConnectionQuality.fair;
+  }
+}
+
+/// Snapshot of a peer's cumulative RTP counters from the previous poll, so the
+/// next poll can compute per-interval loss.
+class _QualitySample {
+  _QualitySample({required this.packetsLost, required this.packetsReceived});
+  final int packetsLost;
+  final int packetsReceived;
 }

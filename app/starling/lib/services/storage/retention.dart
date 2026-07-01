@@ -12,6 +12,7 @@ class RetentionPolicy {
     this.graceLastViewedSeconds = 7 * 24 * 60 * 60,
     this.maxMediaBytes = 2 * 1024 * 1024 * 1024,
     this.maxVoiceRoomAgeSeconds = 7 * 24 * 60 * 60,
+    this.maxRoomIdleSeconds = 90 * 24 * 60 * 60,
   });
 
   /// Events older than this and not pinned/own/saved/recently-viewed are
@@ -27,6 +28,10 @@ class RetentionPolicy {
 
   /// Voice-room history rows older than this are pruned. Default: 7 days.
   final int maxVoiceRoomAgeSeconds;
+
+  /// LEFT chatrooms (`isMember=0`) idle past this are evicted. Joined rooms
+  /// are never evicted regardless of age. Default: 90 days.
+  final int maxRoomIdleSeconds;
 }
 
 class RetentionResult {
@@ -34,11 +39,13 @@ class RetentionResult {
     required this.eventsEvicted,
     required this.mediaEvicted,
     this.voiceRoomsEvicted = 0,
+    this.roomsEvicted = 0,
   });
 
   final int eventsEvicted;
   final int mediaEvicted;
   final int voiceRoomsEvicted;
+  final int roomsEvicted;
 }
 
 /// Run-once-per-launch retention pass.
@@ -87,10 +94,16 @@ class RetentionService {
       _policy.maxVoiceRoomAgeSeconds,
     );
 
+    // LEFT chatrooms idle past the window (joined rooms are immune). Runs
+    // after event eviction, which never touches a joined room's `isSaved=1`
+    // messages.
+    final rooms = await _storage.evictInactiveRooms(_policy.maxRoomIdleSeconds);
+
     return RetentionResult(
       eventsEvicted: events,
       mediaEvicted: removed.length,
       voiceRoomsEvicted: voiceRooms,
+      roomsEvicted: rooms,
     );
   }
 

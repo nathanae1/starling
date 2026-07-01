@@ -5,13 +5,21 @@ import '../theme/starling_theme.dart';
 
 enum SyncState { synced, syncing, offline }
 
+/// Direction of an in-flight sync, used to split the [SyncState.syncing] glyph
+/// and label into "Loading feeds…" (pulling friends' posts in) vs "Publishing…"
+/// (pushing the user's own post out). Null = generic syncing (no direction).
+enum SyncDirection { pulling, pushing }
+
 /// Status indicator for the feed sync row. Conveys state through a distinct
 /// glyph *and* color (not color alone, which is invisible to color-blind
 /// users) and carries a screen-reader label. The syncing state pulses to
 /// signal in-flight work.
 class SyncDot extends StatefulWidget {
-  const SyncDot({super.key, required this.state});
+  const SyncDot({super.key, required this.state, this.direction});
   final SyncState state;
+
+  /// Only meaningful while [state] is [SyncState.syncing].
+  final SyncDirection? direction;
 
   @override
   State<SyncDot> createState() => _SyncDotState();
@@ -66,13 +74,21 @@ class _SyncDotState extends State<SyncDot> with SingleTickerProviderStateMixin {
 
   IconData _glyphFor() => switch (widget.state) {
     SyncState.synced => LucideIcons.check,
-    SyncState.syncing => LucideIcons.refreshCw,
+    SyncState.syncing => switch (widget.direction) {
+      SyncDirection.pushing => LucideIcons.arrowUp,
+      SyncDirection.pulling => LucideIcons.arrowDown,
+      null => LucideIcons.refreshCw,
+    },
     SyncState.offline => LucideIcons.cloudOff,
   };
 
   String _semanticsFor() => switch (widget.state) {
     SyncState.synced => 'Synced',
-    SyncState.syncing => 'Syncing',
+    SyncState.syncing => switch (widget.direction) {
+      SyncDirection.pushing => 'Publishing',
+      SyncDirection.pulling => 'Loading feeds',
+      null => 'Syncing',
+    },
     SyncState.offline => 'Offline',
   };
 

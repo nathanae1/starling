@@ -72,6 +72,7 @@ class StarlingTextarea extends StatelessWidget {
     this.onChanged,
     this.minLines = 4,
     this.maxLines = 8,
+    this.maxLength,
   });
 
   final TextEditingController? controller;
@@ -79,6 +80,12 @@ class StarlingTextarea extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final int minLines;
   final int maxLines;
+
+  /// Hard character cap enforced on input (counts grapheme clusters, matching
+  /// `String.characters.length`). Callers that render their own counter should
+  /// pass this so the field and the counter agree; the built-in counter is
+  /// suppressed to avoid a duplicate.
+  final int? maxLength;
 
   @override
   Widget build(BuildContext context) {
@@ -88,6 +95,10 @@ class StarlingTextarea extends StatelessWidget {
       onChanged: onChanged,
       minLines: minLines,
       maxLines: maxLines,
+      maxLength: maxLength,
+      buildCounter:
+          (_, {required currentLength, required maxLength, required isFocused}) =>
+              null,
       cursorColor: starling.colors.sage,
       style: starling.typography.body,
       decoration: InputDecoration(

@@ -69,4 +69,18 @@ abstract class ContentKeyService {
     Audience audience, {
     required int msgSeq,
   });
+
+  /// Plan 17: sign an event with the author's key but encrypt it under a
+  /// membership-scoped [roomKey] (not the author's feed key), using a
+  /// per-room MegOLM chain `([roomKey], [roomEpoch], [roomMsgSeq])`. Signing
+  /// (author identity) and encryption (room key) stay cleanly separated;
+  /// the returned `signed` event carries [roomMsgSeq] on its `msgSeq` field
+  /// for local persistence. The caller (holding a room-scoped publish lock)
+  /// allocates a monotonic [roomMsgSeq] from the room's `roomMsgSeqCounter`.
+  ({Event signed, EncryptedEvent encrypted}) signAndEncryptForRoom(
+    Event event, {
+    required Uint8List roomKey,
+    required int roomEpoch,
+    required int roomMsgSeq,
+  });
 }

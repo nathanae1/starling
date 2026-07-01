@@ -207,6 +207,15 @@ class MockStorageService implements StorageService {
       _encryptedPayloads[id];
 
   @override
+  Future<void> saveIncomingEventWithEncrypted(
+    Event event,
+    Uint8List encryptedPayload,
+  ) async {
+    _events[event.id] = event;
+    _encryptedPayloads[event.id] = encryptedPayload;
+  }
+
+  @override
   Future<void> deleteEvent(String id) async {
     _events.remove(id);
     _encryptedPayloads.remove(id);
@@ -276,6 +285,8 @@ class MockStorageService implements StorageService {
         .map((e) => e.id)
         .toSet();
     var results = _events.values.where((e) {
+      // Mirror the drift exclusion: chatroom kinds (100-103) never broadcast.
+      if (e.kind.isRoomScoped) return false;
       return e.pubkey == ownerPubkey ||
           (e.ref != null && ownIds.contains(e.ref));
     }).toList();
@@ -667,6 +678,109 @@ class MockStorageService implements StorageService {
     return stale.length;
   }
 
+  // --- Chatrooms (Plan 17) ---
+
+  final Map<String, Room> _rooms = {};
+  final Map<String, Map<String, RoomMember>> _roomMembers = {};
+  final Map<String, List<RetiredRoomKey>> _roomKeyHistory = {};
+
+  @override
+  Future<void> saveRoom(Room room) async {
+    _rooms[room.id] = room;
+  }
+
+  @override
+  Future<Room?> getRoom(String id) async => _rooms[id];
+
+  @override
+  Future<List<Room>> getRooms() async {
+    final rooms = _rooms.values.toList()
+      ..sort((a, b) => b.lastActivityAt.compareTo(a.lastActivityAt));
+    return rooms;
+  }
+
+  @override
+  Future<void> updateRoomActivity(String roomId, int timestamp) async {
+    final r = _rooms[roomId];
+    if (r != null) _rooms[roomId] = r.copyWith(lastActivityAt: timestamp);
+  }
+
+  @override
+  Future<void> setRoomLastRead(String roomId, int timestamp) async {
+    final r = _rooms[roomId];
+    if (r != null) _rooms[roomId] = r.copyWith(lastReadAt: timestamp);
+  }
+
+  @override
+  Future<void> saveRoomMember(RoomMember member) async {
+    (_roomMembers[member.roomId] ??= {})[member.pubkey] = member;
+  }
+
+  @override
+  Future<void> setRoomMemberRemoved(
+    String roomId,
+    String pubkey,
+    int removedAt,
+  ) async {
+    final m = _roomMembers[roomId]?[pubkey];
+    if (m != null) {
+      _roomMembers[roomId]![pubkey] = RoomMember(
+        roomId: m.roomId,
+        pubkey: m.pubkey,
+        displayName: m.displayName,
+        addedAt: m.addedAt,
+        removedAt: removedAt,
+        role: m.role,
+      );
+    }
+  }
+
+  @override
+  Future<List<RoomMember>> getRoomMembers(String roomId) async =>
+      _roomMembers[roomId]?.values.toList() ?? const [];
+
+  @override
+  Future<void> appendRoomKeyHistory(
+    String roomId, {
+    required Uint8List roomKey,
+    required int epoch,
+    required int validFrom,
+    required int validUntil,
+  }) async {
+    (_roomKeyHistory[roomId] ??= []).add(
+      RetiredRoomKey(
+        roomKey: roomKey,
+        epoch: epoch,
+        validFrom: validFrom,
+        validUntil: validUntil,
+      ),
+    );
+  }
+
+  @override
+  Future<List<RetiredRoomKey>> getRoomKeyHistory(String roomId) async {
+    final list = _roomKeyHistory[roomId];
+    if (list == null) return const [];
+    final sorted = [...list]
+      ..sort((a, b) => a.validFrom.compareTo(b.validFrom));
+    return sorted;
+  }
+
+  @override
+  Future<int> evictInactiveRooms(int maxIdleSeconds) async {
+    final cutoff =
+        DateTime.now().millisecondsSinceEpoch ~/ 1000 - maxIdleSeconds;
+    final stale = _rooms.values
+        .where((r) => !r.isMember && r.lastActivityAt < cutoff)
+        .toList();
+    for (final r in stale) {
+      _rooms.remove(r.id);
+      _roomMembers.remove(r.id);
+      _roomKeyHistory.remove(r.id);
+    }
+    return stale.length;
+  }
+
   // --- Follow requests ---
 
   @override
@@ -814,6 +928,23 @@ class MockStorageService implements StorageService {
   }
 
   @override
+  Future<void> enqueueTyped(
+    String targetPubkey,
+    Uint8List blob,
+    String itemType,
+  ) async {
+    _queue.add(
+      QueuedEvent(
+        id: _nextQueueId++,
+        targetPubkey: targetPubkey,
+        eventBlob: blob,
+        createdAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        itemType: itemType,
+      ),
+    );
+  }
+
+  @override
   Future<List<QueuedEvent>> dequeue(String targetPubkey) async =>
       _queue.where((q) => q.targetPubkey == targetPubkey).toList();
 
@@ -828,6 +959,7 @@ class MockStorageService implements StorageService {
         eventBlob: old.eventBlob,
         createdAt: old.createdAt,
         retryCount: old.retryCount + 1,
+        itemType: old.itemType,
       );
     }
   }

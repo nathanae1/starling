@@ -51,7 +51,7 @@ class CallOverlay extends ConsumerWidget {
                     ),
                   ),
                   Text(
-                    'Tap to return',
+                    state.anyReconnecting ? 'Reconnecting…' : 'Tap to return',
                     style: starling.typography.small.copyWith(
                       color: const Color(0xFFFDFBF5),
                     ),

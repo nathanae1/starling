@@ -8,8 +8,10 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../models/voice_room.dart';
 import '../../providers/follows_provider.dart';
+import '../../providers/service_providers.dart';
 import '../../providers/voice_provider.dart';
 import '../../theme/starling_theme.dart';
+import '../../utils/feature_flags.dart';
 import '../../widgets/avatar.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/inputs.dart';
@@ -23,7 +25,9 @@ class CreateRoomScreen extends ConsumerStatefulWidget {
 }
 
 class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
-  final _name = TextEditingController(text: 'Voice room');
+  final _name = TextEditingController(
+    text: kChatroomsEnabled ? 'Room' : 'Voice room',
+  );
   final _selected = <String>{};
   bool _starting = false;
 
@@ -33,7 +37,32 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
     super.dispose();
   }
 
-  Future<void> _start() async {
+  Future<void> _start() =>
+      kChatroomsEnabled ? _createChatroom() : _startVoiceRoom();
+
+  /// Plan 17: create a durable chatroom (no mic, no invitee cap) and open it.
+  Future<void> _createChatroom() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final router = GoRouter.of(context);
+    setState(() => _starting = true);
+    try {
+      final roomId = await ref
+          .read(roomServiceProvider)
+          .createRoom(
+            name: _name.text.trim().isEmpty ? 'Room' : _name.text.trim(),
+            memberPubkeys: _selected.toList(),
+          );
+      unawaited(router.pushReplacement('/voice/room/$roomId'));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _starting = false);
+      messenger.showSnackBar(
+        SnackBar(content: Text('Couldn\'t create the room: $e')),
+      );
+    }
+  }
+
+  Future<void> _startVoiceRoom() async {
     final messenger = ScaffoldMessenger.of(context);
     final router = GoRouter.of(context);
     final status = await Permission.microphone.request();
@@ -67,7 +96,7 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
     setState(() {
       if (_selected.contains(pubkey)) {
         _selected.remove(pubkey);
-      } else if (_selected.length < kMaxRoomInvitees) {
+      } else if (kChatroomsEnabled || _selected.length < kMaxRoomInvitees) {
         _selected.add(pubkey);
       }
     });
@@ -99,10 +128,15 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
                 children: [
                   const StarlingFieldLabel('Room name'),
                   const SizedBox(height: 8),
-                  StarlingInput(controller: _name, placeholder: 'Voice room'),
+                  StarlingInput(
+                    controller: _name,
+                    placeholder: kChatroomsEnabled ? 'Room' : 'Voice room',
+                  ),
                   const SizedBox(height: 24),
                   StarlingFieldLabel(
-                    'Invite friends (${_selected.length}/$kMaxRoomInvitees)',
+                    kChatroomsEnabled
+                        ? 'Add members (${_selected.length})'
+                        : 'Invite friends (${_selected.length}/$kMaxRoomInvitees)',
                   ),
                   const SizedBox(height: 8),
                   mutuals.when(
@@ -131,9 +165,10 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
                         children: [
                           for (final f in follows)
                             _ContactRow(
-                              name: f.displayName ?? f.pubkey.substring(0, 8),
+                              name: f.pubkey.substring(0, 8),
                               selected: _selected.contains(f.pubkey),
                               disabled:
+                                  !kChatroomsEnabled &&
                                   !_selected.contains(f.pubkey) &&
                                   _selected.length >= kMaxRoomInvitees,
                               onTap: () => _toggle(f.pubkey),
@@ -148,7 +183,9 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
               child: PrimaryButton(
-                label: _starting ? 'Starting…' : 'Start room',
+                label: _starting
+                    ? (kChatroomsEnabled ? 'Creating…' : 'Starting…')
+                    : (kChatroomsEnabled ? 'Create room' : 'Start room'),
                 block: true,
                 onPressed: (_starting || _selected.isEmpty) ? null : _start,
               ),

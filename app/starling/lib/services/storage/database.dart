@@ -14,6 +14,7 @@ import 'daos/key_rotation_dao.dart';
 import 'daos/media_cache_dao.dart';
 import 'daos/outbound_queue_dao.dart';
 import 'daos/paired_relay_dao.dart';
+import 'daos/rooms_dao.dart';
 import 'daos/unknown_items_dao.dart';
 import 'daos/voice_rooms_dao.dart';
 import 'tables/events_table.dart';
@@ -28,6 +29,9 @@ import 'tables/outbound_queue_table.dart';
 import 'tables/paired_relay_table.dart';
 import 'tables/pending_card_distributions_table.dart';
 import 'tables/pending_key_distributions_table.dart';
+import 'tables/room_key_history_table.dart';
+import 'tables/room_members_table.dart';
+import 'tables/rooms_table.dart';
 import 'tables/unknown_envelope_items_table.dart';
 import 'tables/voice_room_participants_table.dart';
 import 'tables/voice_rooms_table.dart';
@@ -51,6 +55,9 @@ part 'database.g.dart';
     PendingCardDistributionEntries,
     VoiceRoomEntries,
     VoiceRoomParticipantEntries,
+    RoomEntries,
+    RoomMemberEntries,
+    RoomKeyHistoryEntries,
   ],
   daos: [
     IdentityDao,
@@ -63,6 +70,7 @@ part 'database.g.dart';
     KeyRotationDao,
     PairedRelayDao,
     VoiceRoomsDao,
+    RoomsDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -79,7 +87,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -176,6 +184,23 @@ class AppDatabase extends _$AppDatabase {
         // rooms, never feed events). Pruned after 7 days.
         await m.createTable(voiceRoomEntries);
         await m.createTable(voiceRoomParticipantEntries);
+      }
+      if (from < 9) {
+        // Plan 17: durable chatrooms. Room identity/keys/roster tables plus
+        // a typed outbound-queue column so room-key/room-event items fan out
+        // over the existing directed-delivery queue.
+        await m.createTable(roomEntries);
+        await m.createTable(roomMemberEntries);
+        await m.createTable(roomKeyHistoryEntries);
+        await m.addColumn(outboundQueueEntries, outboundQueueEntries.itemType);
+      }
+      if (from < 10) {
+        // Drop the vestigial follow name/avatar columns (always null; a
+        // friend's name + avatar come from their kind=2 profile, resolved via
+        // followProfileProvider). Data-preserving: TableMigration recreates
+        // follow_entries from the new schema, copying every remaining column
+        // and row — NEVER a DROP TABLE, which would wipe the friend list.
+        await m.alterTable(TableMigration(followEntries));
       }
     },
   );

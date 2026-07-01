@@ -23,10 +23,9 @@ class FriendActionsSheet extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Text(
-            follow.displayName ??
-                (follow.pubkey.length > 8
-                    ? follow.pubkey.substring(0, 8)
-                    : follow.pubkey),
+            follow.pubkey.length > 8
+                ? follow.pubkey.substring(0, 8)
+                : follow.pubkey,
             style: starling.typography.h3,
             textAlign: TextAlign.center,
           ),
@@ -55,7 +54,7 @@ class FriendActionsSheet extends ConsumerWidget {
         .read(storageServiceProvider)
         .isAcceptedFollower(follow.pubkey);
     if (!context.mounted) return;
-    final name = follow.displayName ?? 'this friend';
+    const name = 'this friend';
     final body = isAlsoFollower
         ? 'You will stop receiving posts from $name, and they will no '
               'longer receive your future posts.'

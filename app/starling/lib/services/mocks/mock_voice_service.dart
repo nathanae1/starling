@@ -10,6 +10,8 @@ class MockVoiceService implements VoiceService {
   final _localIce = StreamController<VoiceIceCandidate>.broadcast();
   final _peerStateCtrl = StreamController<VoicePeerState>.broadcast();
   final _audioLevelCtrl = StreamController<Map<String, double>>.broadcast();
+  final _qualityCtrl =
+      StreamController<Map<String, ConnectionQuality>>.broadcast();
 
   bool _micMuted = false;
   bool _speakerMode = false;
@@ -35,6 +37,9 @@ class MockVoiceService implements VoiceService {
   Stream<VoicePeerState> get peerStates => _peerStateCtrl.stream;
   @override
   Stream<Map<String, double>> get audioLevels => _audioLevelCtrl.stream;
+  @override
+  Stream<Map<String, ConnectionQuality>> get connectionQuality =>
+      _qualityCtrl.stream;
   @override
   bool get micMuted => _micMuted;
   @override
@@ -106,4 +111,7 @@ class MockVoiceService implements VoiceService {
 
   void emitAudioLevels(Map<String, double> levels) =>
       _audioLevelCtrl.add(levels);
+
+  void emitConnectionQuality(Map<String, ConnectionQuality> quality) =>
+      _qualityCtrl.add(quality);
 }

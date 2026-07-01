@@ -1,7 +1,6 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:starling/models/signaling_message.dart';
 import 'package:starling/models/voice_room.dart';
 import 'package:starling/services/clock.dart';
 import 'package:starling/services/crypto/crockford_base32.dart';
@@ -187,5 +186,87 @@ void main() {
     final bParticipantA = b.manager.currentState!.room.participants
         .firstWhere((p) => p.pubkey == pkA);
     expect(bParticipantA.isMuted, isTrue);
+  });
+
+  test('a peer reconnecting flips the call-wide anyReconnecting flag',
+      () async {
+    final room = await a.manager.createRoom(name: 'Chat', inviteePubkeys: [pkB]);
+    await _pump();
+    await b.manager.acceptInvite(room.id);
+    await _pump();
+
+    expect(a.manager.currentState!.anyReconnecting, isFalse);
+
+    a.voice.emitPeerState(pkB, ParticipantConnectionState.reconnecting);
+    await _pump();
+    expect(a.manager.currentState!.anyReconnecting, isTrue);
+
+    a.voice.emitPeerState(pkB, ParticipantConnectionState.connected);
+    await _pump();
+    expect(a.manager.currentState!.anyReconnecting, isFalse);
+  });
+
+  test('connection quality from the engine propagates to the participant',
+      () async {
+    final room = await a.manager.createRoom(name: 'Chat', inviteePubkeys: [pkB]);
+    await _pump();
+    await b.manager.acceptInvite(room.id);
+    await _pump();
+
+    a.voice.emitConnectionQuality({pkB: ConnectionQuality.poor});
+    await _pump();
+
+    final participantB = a.manager.currentState!.room.participants
+        .firstWhere((p) => p.pubkey == pkB);
+    expect(participantB.quality, ConnectionQuality.poor);
+  });
+
+  test('startRoomCall pings every member; the live mesh caps at 4', () async {
+    // A chatroom of 5 (A + B,C,D,E). The text room is unbounded, but the live
+    // call stays a ≤4 mesh: the 5th to join is declined 'full'.
+    final pkC = _pk(3), pkD = _pk(4), pkE = _pk(5);
+    final c = _Peer(pkC, crypto);
+    final d = _Peer(pkD, crypto);
+    final e = _Peer(pkE, crypto);
+    for (final peer in [b, c, d, e]) {
+      a.signaling.link(peer.signaling);
+      await a.makeMutual(peer.pubkey);
+      await peer.makeMutual(pkA);
+    }
+
+    final invites = <String, int>{};
+    for (final peer in [b, c, d, e]) {
+      peer.manager.incomingInvites.listen((_) {
+        invites[peer.pubkey] = (invites[peer.pubkey] ?? 0) + 1;
+      });
+    }
+
+    final room = await a.manager.startRoomCall(
+      chatroomId: 'chat-1',
+      name: 'Big room',
+      memberPubkeys: [pkB, pkC, pkD, pkE],
+    );
+    await _pump();
+
+    // Every member is pinged (the only presence broadcast).
+    expect(invites.keys, containsAll([pkB, pkC, pkD, pkE]));
+
+    // Fill the mesh to the cap, then a 5th tries to join.
+    await b.manager.acceptInvite(room.id);
+    await _pump();
+    await c.manager.acceptInvite(room.id);
+    await _pump();
+    await d.manager.acceptInvite(room.id);
+    await _pump();
+    await e.manager.acceptInvite(room.id);
+    await _pump();
+
+    final aConnected = {...a.voice.offeredPeers, ...a.voice.answeredPeers};
+    expect(aConnected, containsAll([pkB, pkC, pkD]));
+    expect(
+      aConnected.contains(pkE),
+      isFalse,
+      reason: 'the 5th joiner is declined full — no mesh connection with it',
+    );
   });
 }

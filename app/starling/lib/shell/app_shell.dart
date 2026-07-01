@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../providers/follow_requests_provider.dart';
+import '../providers/room_provider.dart';
 import '../providers/sync_provider.dart';
 import '../providers/voice_provider.dart';
 import '../services/background/foreground_service_controller.dart';
@@ -62,6 +63,10 @@ class AppShell extends ConsumerWidget {
     final starling = StarlingTheme.of(context);
     final inboundCount =
         ref.watch(inboundRequestsStreamProvider).value?.length ?? 0;
+    // Plan 17: unread chatroom activity badge on the Rooms tab.
+    final unreadRooms = kChatroomsEnabled
+        ? (ref.watch(unreadRoomsCountProvider).value ?? 0)
+        : 0;
     // Hide the compose FAB while a voice call is active so it can't collide
     // with the CallOverlay banner pinned above the tab bar.
     final inCall =
@@ -112,7 +117,10 @@ class AppShell extends ConsumerWidget {
       bottomNavigationBar: StarlingBottomTabBar(
         current: _current,
         onTap: (t) => _onTap(context, ref, t),
-        badges: {StarlingTab.friends: inboundCount},
+        badges: {
+          StarlingTab.friends: inboundCount,
+          if (unreadRooms > 0) StarlingTab.rooms: unreadRooms,
+        },
       ),
     );
   }

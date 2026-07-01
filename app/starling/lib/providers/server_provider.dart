@@ -2,6 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../server/http_server.dart';
 import '../services/signaling/ws_signaling_service.dart';
+import '../services/storage/keychain_manager.dart';
 import 'app_paths_provider.dart';
 import 'follow_provider.dart';
 import 'identity_provider.dart';
@@ -49,6 +50,8 @@ class HttpServerController extends _$HttpServerController {
       //   ownEndpoints → httpServerController → followService → ownEndpoints.
       // followService is only needed at /follow-accept request time.
       followServiceLookup: () => ref.read(followServiceProvider),
+      // Plan 17: lets POST /events unseal room keys sealed to us.
+      ownSecretKeyLookup: () => KeychainManager().loadIdentitySecretKey(),
     );
     await server.start();
     _server = server;

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
@@ -57,6 +58,7 @@ class StarlingHttpServer {
     required void Function(SignalingChannel channel) signalingInboundHandler,
     FollowService? followService,
     FollowService? Function()? followServiceLookup,
+    Future<Uint8List?> Function()? ownSecretKeyLookup,
     int maxBindAttempts = 5,
     int rateLimitPerMinute = 120,
     int maxBodyBytes = 1024 * 1024,
@@ -73,6 +75,7 @@ class StarlingHttpServer {
         crypto: crypto,
         signalingInboundHandler: signalingInboundHandler,
         followServiceLookup: lookup,
+        ownSecretKeyLookup: ownSecretKeyLookup,
       ),
       clock: clock,
       maxBindAttempts: maxBindAttempts,
@@ -157,6 +160,7 @@ Router _buildSocialRouter({
   required CryptoService crypto,
   required void Function(SignalingChannel channel) signalingInboundHandler,
   required FollowService? Function() followServiceLookup,
+  Future<Uint8List?> Function()? ownSecretKeyLookup,
 }) {
   final router = Router();
   router.get(
@@ -181,7 +185,14 @@ Router _buildSocialRouter({
   );
   router.post(
     '/events',
-    eventsPushHandler(storage: storage, contentKey: contentKey, clock: clock),
+    eventsPushHandler(
+      storage: storage,
+      contentKey: contentKey,
+      clock: clock,
+      crypto: crypto,
+      identityLookup: identityLookup,
+      ownSecretKeyLookup: ownSecretKeyLookup,
+    ),
   );
   router.get(
     '/media/<hash>',

@@ -212,8 +212,6 @@ class PairedRelay {
 class Follow {
   const Follow({
     required this.pubkey,
-    this.displayName,
-    this.avatarHash,
     required this.connectionCard,
     required this.feedKey,
     this.feedKeyEpoch = 0,
@@ -225,13 +223,6 @@ class Follow {
     this.status = 'active',
   });
   final String pubkey;
-  // Vestigial: never populated. A friend's live name + avatar come from their
-  // latest kind=2 profile event, resolved via `followProfileProvider` — the
-  // `follows` row carries no name/avatar. `ingestFollowAccept` builds a Follow
-  // without these and `copyWith` can't set them, so both are always null. Kept
-  // only to avoid a schema migration; do not read them in UI.
-  final String? displayName;
-  final String? avatarHash;
   final String connectionCard; // serialized JSON
   final Uint8List feedKey;
   final int feedKeyEpoch;
@@ -269,8 +260,6 @@ class Follow {
     String? status,
   }) => Follow(
     pubkey: pubkey,
-    displayName: displayName,
-    avatarHash: avatarHash,
     connectionCard: connectionCard ?? this.connectionCard,
     feedKey: feedKey ?? this.feedKey,
     feedKeyEpoch: feedKeyEpoch ?? this.feedKeyEpoch,
@@ -346,12 +335,126 @@ class QueuedEvent {
     required this.eventBlob,
     required this.createdAt,
     this.retryCount = 0,
+    this.itemType,
   });
   final int id;
   final String targetPubkey;
   final Uint8List eventBlob;
   final int createdAt;
   final int retryCount;
+
+  /// Plan 17: the EnvelopeItem `type` this row ships as when drained. Null ⇒
+  /// `'event'` (all pre-Plan-17 rows). Chatroom fan-out sets
+  /// `'room-key'` / `'room-event'` so the drain forwards the blob verbatim.
+  final String? itemType;
+}
+
+// --- Chatrooms (Plan 17) ---
+
+/// A durable chatroom. The per-room analogue of the identity's feed-key
+/// fields: its own membership-scoped key/epoch/message-seq counter. Text
+/// messages live in `event_entries` (kinds 102/103, `ref = id`).
+class Room {
+  const Room({
+    required this.id,
+    required this.name,
+    required this.creatorPubkey,
+    required this.createdAt,
+    required this.lastActivityAt,
+    required this.roomKey,
+    required this.roomKeyEpoch,
+    required this.roomKeyValidFrom,
+    required this.roomMsgSeqCounter,
+    required this.membershipEpoch,
+    required this.isMember,
+    this.lastReadAt = 0,
+  });
+
+  /// roomId = the id of the genesis `roomCreate` event.
+  final String id;
+  final String name;
+  final String creatorPubkey;
+  final int createdAt;
+
+  /// Retention key — last activity, NOT createdAt.
+  final int lastActivityAt;
+
+  /// Current room key (chain root), its epoch, and the time it took effect.
+  final Uint8List roomKey;
+  final int roomKeyEpoch;
+  final int roomKeyValidFrom;
+
+  /// Next msg_seq to allocate under the current room key.
+  final int roomMsgSeqCounter;
+
+  /// Monotonic membership version — a roomMembership applies only if newer.
+  final int membershipEpoch;
+
+  /// Whether the local user is currently a member (drives retention + UI).
+  final bool isMember;
+
+  /// Local-only read cursor (unix seconds) for the unread badge.
+  final int lastReadAt;
+
+  Room copyWith({
+    String? name,
+    int? lastActivityAt,
+    Uint8List? roomKey,
+    int? roomKeyEpoch,
+    int? roomKeyValidFrom,
+    int? roomMsgSeqCounter,
+    int? membershipEpoch,
+    bool? isMember,
+    int? lastReadAt,
+  }) => Room(
+    id: id,
+    name: name ?? this.name,
+    creatorPubkey: creatorPubkey,
+    createdAt: createdAt,
+    lastActivityAt: lastActivityAt ?? this.lastActivityAt,
+    roomKey: roomKey ?? this.roomKey,
+    roomKeyEpoch: roomKeyEpoch ?? this.roomKeyEpoch,
+    roomKeyValidFrom: roomKeyValidFrom ?? this.roomKeyValidFrom,
+    roomMsgSeqCounter: roomMsgSeqCounter ?? this.roomMsgSeqCounter,
+    membershipEpoch: membershipEpoch ?? this.membershipEpoch,
+    isMember: isMember ?? this.isMember,
+    lastReadAt: lastReadAt ?? this.lastReadAt,
+  );
+}
+
+/// A chatroom member row. `removedAt == null` ⇒ currently active.
+class RoomMember {
+  const RoomMember({
+    required this.roomId,
+    required this.pubkey,
+    this.displayName,
+    required this.addedAt,
+    this.removedAt,
+    this.role = 'member',
+  });
+  final String roomId;
+  final String pubkey;
+  final String? displayName;
+  final int addedAt;
+  final int? removedAt;
+  final String role;
+
+  bool get isActive => removedAt == null;
+}
+
+/// A retired room key with the half-open `[validFrom, validUntil)` window it
+/// was active. Lets messages authored before a rotation stay decryptable.
+class RetiredRoomKey {
+  const RetiredRoomKey({
+    required this.roomKey,
+    required this.epoch,
+    required this.validFrom,
+    required this.validUntil,
+  });
+  final Uint8List roomKey;
+  final int epoch;
+  final int validFrom;
+  final int validUntil;
 }
 
 // --- Signaling types (Plan 16 — Voice Chatrooms) ---

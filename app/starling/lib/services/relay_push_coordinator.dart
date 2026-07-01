@@ -121,6 +121,9 @@ class RelayPushCoordinator {
     final events = await _storage.getEvents(pubkey: ctx.pubkey);
     final missingItems = <RelayPushItem>[];
     for (final e in events) {
+      // Chatroom kinds (100-103) are membership-scoped — never hand them to
+      // the relay, which re-serves the owner's feed to followers (Plan 17).
+      if (e.kind.isRoomScoped) continue;
       if (present.contains(e.id)) continue;
       // Own events authored before schema v2 have no stored wire payload
       // and are skipped (the Relay can't serve what we can't hand it

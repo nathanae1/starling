@@ -42,7 +42,10 @@ Future<OutboundDrainResult> drainOutboundQueueForPeer({
   final envelope = Envelope(
     version: kStarlingProtocolVersion,
     items: queued
-        .map((q) => EnvelopeItem(type: 'event', payload: q.eventBlob))
+        // Plan 17: rows carry an explicit `itemType` ('room-key'/'room-event');
+        // null means a plain feed 'event' (all pre-Plan-17 rows). Ship each
+        // row under its own type so chatroom fan-out rides this same queue.
+        .map((q) => EnvelopeItem(type: q.itemType ?? 'event', payload: q.eventBlob))
         .toList(growable: false),
   );
 

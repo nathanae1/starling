@@ -62,8 +62,6 @@ PendingKeyDistribution pendingKeyDistributionFromRow(
 
 Follow followFromRow(FollowEntry row) => Follow(
   pubkey: row.pubkey,
-  displayName: row.displayName,
-  avatarHash: row.avatarHash,
   connectionCard: row.connectionCard,
   feedKey: row.feedKey,
   feedKeyEpoch: row.feedKeyEpoch,
@@ -78,8 +76,6 @@ Follow followFromRow(FollowEntry row) => Follow(
 FollowEntriesCompanion followToCompanion(Follow follow) =>
     FollowEntriesCompanion.insert(
       pubkey: follow.pubkey,
-      displayName: Value(follow.displayName),
-      avatarHash: Value(follow.avatarHash),
       connectionCard: follow.connectionCard,
       feedKey: follow.feedKey,
       feedKeyEpoch: Value(follow.feedKeyEpoch),
@@ -205,6 +201,40 @@ QueuedEvent queuedEventFromRow(OutboundQueueEntry row) => QueuedEvent(
   eventBlob: row.eventBlob,
   createdAt: row.createdAt,
   retryCount: row.retryCount,
+  itemType: row.itemType,
+);
+
+// --- Chatrooms (Plan 17) ---
+
+Room roomFromRow(RoomEntry row) => Room(
+  id: row.id,
+  name: row.name,
+  creatorPubkey: row.creatorPubkey,
+  createdAt: row.createdAt,
+  lastActivityAt: row.lastActivityAt,
+  roomKey: row.roomKey,
+  roomKeyEpoch: row.roomKeyEpoch,
+  roomKeyValidFrom: row.roomKeyValidFrom,
+  roomMsgSeqCounter: row.roomMsgSeqCounter,
+  membershipEpoch: row.membershipEpoch,
+  isMember: row.isMember == 1,
+  lastReadAt: row.lastReadAt,
+);
+
+RoomMember roomMemberFromRow(RoomMemberEntry row) => RoomMember(
+  roomId: row.roomId,
+  pubkey: row.pubkey,
+  displayName: row.displayName,
+  addedAt: row.addedAt,
+  removedAt: row.removedAt,
+  role: row.role,
+);
+
+RetiredRoomKey retiredRoomKeyFromRow(RoomKeyHistoryEntry row) => RetiredRoomKey(
+  roomKey: row.roomKey,
+  epoch: row.epoch,
+  validFrom: row.validFrom,
+  validUntil: row.validUntil,
 );
 
 // --- Extensions ---

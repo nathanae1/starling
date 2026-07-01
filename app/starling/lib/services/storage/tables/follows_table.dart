@@ -2,8 +2,6 @@ import 'package:drift/drift.dart';
 
 class FollowEntries extends Table {
   TextColumn get pubkey => text()();
-  TextColumn get displayName => text().nullable()();
-  TextColumn get avatarHash => text().nullable()();
   TextColumn get connectionCard => text()();
   BlobColumn get feedKey => blob()();
   IntColumn get feedKeyEpoch => integer().withDefault(const Constant(0))();

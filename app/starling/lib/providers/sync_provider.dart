@@ -106,6 +106,7 @@ Future<Libp2pStreamServer> libp2pStreamServer(Ref ref) async {
     appSupportDir: appSupportDir,
     identityLookup: storage.getIdentity,
     followServiceLookup: () => ref.read(followServiceProvider),
+    ownSecretKeyLookup: () => KeychainManager().loadIdentitySecretKey(),
   );
 }
 

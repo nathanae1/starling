@@ -46,7 +46,6 @@ void main() {
   group('follows', () {
     Follow makeFollow(String pk) => Follow(
           pubkey: pk,
-          displayName: 'User $pk',
           connectionCard: '{"pubkey":"$pk"}',
           feedKey: Uint8List.fromList(List.filled(32, 0xBB)),
         );

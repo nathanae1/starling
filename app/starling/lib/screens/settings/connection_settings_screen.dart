@@ -311,9 +311,7 @@ class _PeerTile extends ConsumerWidget {
     final profileAsync = ref.watch(followProfileProvider(follow.pubkey));
     final name = profileAsync.maybeWhen(
       data: (p) => p.displayName,
-      orElse: () => follow.displayName?.trim().isNotEmpty == true
-          ? follow.displayName!.trim()
-          : shortStarlingAddress(follow.pubkey),
+      orElse: () => shortStarlingAddress(follow.pubkey),
     );
 
     final lan = reachability?.transports[PeerTransport.lan];

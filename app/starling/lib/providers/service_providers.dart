@@ -22,8 +22,12 @@ import '../services/mocks/mock_storage_service.dart';
 import '../services/mocks/mock_tor_service.dart';
 import '../services/network_service.dart';
 import '../services/reaction_service.dart';
+import '../services/room_key_rotation_service.dart';
+import '../services/room_message_service.dart';
+import '../services/room_service.dart';
 import '../services/save_service.dart';
 import '../services/signaling_service.dart';
+import '../services/storage/keychain_manager.dart';
 import '../services/storage_service.dart';
 import '../services/tor_service.dart';
 
@@ -135,6 +139,41 @@ CommentService commentService(Ref ref) => DefaultCommentService(
 
 @riverpod
 ReactionService reactionService(Ref ref) => DefaultReactionService(
+  contentKey: ref.watch(contentKeyServiceProvider),
+  storage: ref.watch(storageServiceProvider),
+  clock: ref.watch(clockProvider),
+  identityLookup: () => ref.read(storageServiceProvider).getIdentity(),
+  publishLock: ref.watch(publishLockProvider),
+);
+
+// --- Chatrooms (Plan 17) ---
+
+@riverpod
+RoomKeyRotationService roomKeyRotationService(Ref ref) =>
+    DefaultRoomKeyRotationService(
+      crypto: ref.watch(cryptoServiceProvider),
+      contentKey: ref.watch(contentKeyServiceProvider),
+      storage: ref.watch(storageServiceProvider),
+      clock: ref.watch(clockProvider),
+      identityLookup: () => ref.read(storageServiceProvider).getIdentity(),
+      ownSecretKeyLookup: () => KeychainManager().loadIdentitySecretKey(),
+      publishLock: ref.watch(publishLockProvider),
+    );
+
+@riverpod
+RoomService roomService(Ref ref) => DefaultRoomService(
+  crypto: ref.watch(cryptoServiceProvider),
+  contentKey: ref.watch(contentKeyServiceProvider),
+  storage: ref.watch(storageServiceProvider),
+  clock: ref.watch(clockProvider),
+  identityLookup: () => ref.read(storageServiceProvider).getIdentity(),
+  ownSecretKeyLookup: () => KeychainManager().loadIdentitySecretKey(),
+  rotationService: ref.watch(roomKeyRotationServiceProvider),
+  publishLock: ref.watch(publishLockProvider),
+);
+
+@riverpod
+RoomMessageService roomMessageService(Ref ref) => DefaultRoomMessageService(
   contentKey: ref.watch(contentKeyServiceProvider),
   storage: ref.watch(storageServiceProvider),
   clock: ref.watch(clockProvider),

@@ -174,4 +174,23 @@ class PairwiseContentKeyService implements ContentKeyService {
 
     return (signed: signed, encrypted: encrypted);
   }
+
+  @override
+  ({Event signed, EncryptedEvent encrypted}) signAndEncryptForRoom(
+    Event event, {
+    required Uint8List roomKey,
+    required int roomEpoch,
+    required int roomMsgSeq,
+  }) {
+    // Identical to the broadcast path, except the chain root is the caller-
+    // supplied room key rather than our own feed key from the cache. The
+    // author still signs with their own Ed25519 secret key — membership
+    // scoping comes from the encryption key, authorship from the signature.
+    final id = computeEventId(event);
+    final idBytes = crockfordBase32Decode(id);
+    final sig = _crypto.sign(_ownSecretKey, idBytes);
+    final signed = event.copyWith(id: id, sig: sig, msgSeq: roomMsgSeq);
+    final encrypted = encryptEvent(signed, roomKey, roomEpoch, roomMsgSeq);
+    return (signed: signed, encrypted: encrypted);
+  }
 }

@@ -134,6 +134,21 @@ class DriftStorageService implements StorageService {
       _db.eventsDao.getEncryptedPayload(id);
 
   @override
+  Future<void> saveIncomingEventWithEncrypted(
+    Event event,
+    Uint8List encryptedPayload,
+  ) async {
+    await _db.eventsDao.upsertEvent(
+      eventToCompanion(
+        event,
+        isOwn: false,
+        fetchedAt: _clock.nowUnixSeconds(),
+        encryptedPayload: encryptedPayload,
+      ),
+    );
+  }
+
+  @override
   Future<void> deleteEvent(String id) => _db.eventsDao.deleteEvent(id);
 
   @override
@@ -435,6 +450,100 @@ class DriftStorageService implements StorageService {
     return _db.voiceRoomsDao.evictOlderThan(cutoff);
   }
 
+  // --- Chatrooms (Plan 17) ---
+
+  @override
+  Future<void> saveRoom(Room room) => _db.roomsDao.upsertRoom(
+    RoomEntriesCompanion.insert(
+      id: room.id,
+      name: room.name,
+      creatorPubkey: room.creatorPubkey,
+      createdAt: room.createdAt,
+      lastActivityAt: room.lastActivityAt,
+      roomKey: room.roomKey,
+      roomKeyEpoch: Value(room.roomKeyEpoch),
+      roomKeyValidFrom: Value(room.roomKeyValidFrom),
+      roomMsgSeqCounter: Value(room.roomMsgSeqCounter),
+      membershipEpoch: Value(room.membershipEpoch),
+      isMember: Value(room.isMember ? 1 : 0),
+      lastReadAt: Value(room.lastReadAt),
+    ),
+  );
+
+  @override
+  Future<Room?> getRoom(String id) async {
+    final row = await _db.roomsDao.getRoom(id);
+    return row == null ? null : roomFromRow(row);
+  }
+
+  @override
+  Future<List<Room>> getRooms() async {
+    final rows = await _db.roomsDao.getRooms();
+    return rows.map(roomFromRow).toList();
+  }
+
+  @override
+  Future<void> updateRoomActivity(String roomId, int timestamp) =>
+      _db.roomsDao.updateRoomActivity(roomId, timestamp);
+
+  @override
+  Future<void> setRoomLastRead(String roomId, int timestamp) =>
+      _db.roomsDao.setRoomLastRead(roomId, timestamp);
+
+  @override
+  Future<void> saveRoomMember(RoomMember member) => _db.roomsDao.upsertMember(
+    RoomMemberEntriesCompanion.insert(
+      roomId: member.roomId,
+      pubkey: member.pubkey,
+      displayName: Value(member.displayName),
+      addedAt: member.addedAt,
+      removedAt: Value(member.removedAt),
+      role: Value(member.role),
+    ),
+  );
+
+  @override
+  Future<void> setRoomMemberRemoved(
+    String roomId,
+    String pubkey,
+    int removedAt,
+  ) => _db.roomsDao.setMemberRemoved(roomId, pubkey, removedAt);
+
+  @override
+  Future<List<RoomMember>> getRoomMembers(String roomId) async {
+    final rows = await _db.roomsDao.getMembers(roomId);
+    return rows.map(roomMemberFromRow).toList();
+  }
+
+  @override
+  Future<void> appendRoomKeyHistory(
+    String roomId, {
+    required Uint8List roomKey,
+    required int epoch,
+    required int validFrom,
+    required int validUntil,
+  }) => _db.roomsDao.appendKeyHistory(
+    RoomKeyHistoryEntriesCompanion.insert(
+      roomId: roomId,
+      epoch: epoch,
+      roomKey: roomKey,
+      validFrom: validFrom,
+      validUntil: validUntil,
+    ),
+  );
+
+  @override
+  Future<List<RetiredRoomKey>> getRoomKeyHistory(String roomId) async {
+    final rows = await _db.roomsDao.getKeyHistory(roomId);
+    return rows.map(retiredRoomKeyFromRow).toList();
+  }
+
+  @override
+  Future<int> evictInactiveRooms(int maxIdleSeconds) {
+    final cutoff = _clock.nowUnixSeconds() - maxIdleSeconds;
+    return _db.roomsDao.evictInactiveRooms(cutoff);
+  }
+
   // --- Follow requests ---
 
   @override
@@ -569,6 +678,20 @@ class DriftStorageService implements StorageService {
           createdAt: _clock.nowUnixSeconds(),
         ),
       );
+
+  @override
+  Future<void> enqueueTyped(
+    String targetPubkey,
+    Uint8List blob,
+    String itemType,
+  ) => _db.outboundQueueDao.enqueue(
+    OutboundQueueEntriesCompanion.insert(
+      targetPubkey: targetPubkey,
+      eventBlob: blob,
+      createdAt: _clock.nowUnixSeconds(),
+      itemType: Value(itemType),
+    ),
+  );
 
   @override
   Future<List<QueuedEvent>> dequeue(String targetPubkey) async {

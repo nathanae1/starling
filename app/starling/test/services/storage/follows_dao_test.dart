@@ -19,7 +19,6 @@ void main() {
         pubkey: pubkey,
         connectionCard: '{"pubkey":"$pubkey","endpoints":[]}',
         feedKey: Uint8List.fromList(List.filled(32, 0xAA)),
-        displayName: Value('User $pubkey'),
         status: Value(status),
       );
 
@@ -29,7 +28,6 @@ void main() {
     final follow = await db.followsDao.getFollow('pk-1');
     expect(follow, isNotNull);
     expect(follow!.pubkey, equals('pk-1'));
-    expect(follow.displayName, equals('User pk-1'));
     expect(follow.status, equals('active'));
   });
 
