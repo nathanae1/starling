@@ -51,16 +51,13 @@ Widget _app(ProviderContainer container) {
       GoRoute(
         path: '/compose',
         parentNavigatorKey: rootKey,
-        pageBuilder: (_, _) => const MaterialPage(
-          fullscreenDialog: true,
-          child: ComposeScreen(),
-        ),
+        pageBuilder: (_, _) =>
+            const MaterialPage(fullscreenDialog: true, child: ComposeScreen()),
         routes: [
           GoRoute(
             path: 'preview',
             parentNavigatorKey: rootKey,
-            pageBuilder: (_, _) =>
-                const MaterialPage(child: PreviewScreen()),
+            pageBuilder: (_, _) => const MaterialPage(child: PreviewScreen()),
           ),
         ],
       ),
@@ -90,7 +87,9 @@ Future<void> _openPreview(
   ProviderContainer container, {
   String caption = 'hello',
 }) async {
-  container.read(composeControllerProvider.notifier).debugSeedState(
+  container
+      .read(composeControllerProvider.notifier)
+      .debugSeedState(
         ComposeState(
           photoBytes: _tinyJpeg(),
           caption: caption,
@@ -110,12 +109,13 @@ Future<void> _openPreview(
 }
 
 void main() {
-  testWidgets('renders the photo and caption from compose state',
-      (tester) async {
+  testWidgets('renders the photo and caption from compose state', (
+    tester,
+  ) async {
     final stub = _StubPostService();
-    final container = ProviderContainer(overrides: [
-      postServiceProvider.overrideWithValue(stub),
-    ]);
+    final container = ProviderContainer(
+      overrides: [postServiceProvider.overrideWithValue(stub)],
+    );
     addTearDown(container.dispose);
 
     await tester.runAsync(() async {
@@ -131,9 +131,9 @@ void main() {
 
   testWidgets('Back to edit pops back to compose', (tester) async {
     final stub = _StubPostService();
-    final container = ProviderContainer(overrides: [
-      postServiceProvider.overrideWithValue(stub),
-    ]);
+    final container = ProviderContainer(
+      overrides: [postServiceProvider.overrideWithValue(stub)],
+    );
     addTearDown(container.dispose);
 
     await tester.runAsync(() async {
@@ -150,12 +150,13 @@ void main() {
     expect(container.read(composeControllerProvider).caption, 'hello');
   });
 
-  testWidgets('Post invokes createPost, clears compose, and pops to home',
-      (tester) async {
+  testWidgets('Post invokes createPost, clears compose, and pops to home', (
+    tester,
+  ) async {
     final stub = _StubPostService();
-    final container = ProviderContainer(overrides: [
-      postServiceProvider.overrideWithValue(stub),
-    ]);
+    final container = ProviderContainer(
+      overrides: [postServiceProvider.overrideWithValue(stub)],
+    );
     addTearDown(container.dispose);
 
     await tester.runAsync(() async {
@@ -172,12 +173,13 @@ void main() {
     expect(find.text('home'), findsOneWidget);
   });
 
-  testWidgets('Post error leaves user on preview with a retry message',
-      (tester) async {
+  testWidgets('Post error leaves user on preview with a retry message', (
+    tester,
+  ) async {
     final stub = _StubPostService(shouldThrow: true);
-    final container = ProviderContainer(overrides: [
-      postServiceProvider.overrideWithValue(stub),
-    ]);
+    final container = ProviderContainer(
+      overrides: [postServiceProvider.overrideWithValue(stub)],
+    );
     addTearDown(container.dispose);
 
     await tester.runAsync(() async {

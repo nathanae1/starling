@@ -131,16 +131,16 @@ Future<Uint8List> buildManifestResponseBytes({
 
   final fetched =
       (await storage.getEvents(
-        pubkey: identity.pubkey,
-        since: since,
-        until: until,
-        untilId: untilId,
-        limit: pageLimit + 1,
-      ))
-      // Chatroom kinds (100-103) are membership-scoped and must not appear in
-      // the feed manifest followers pull (Plan 17 isolation).
-      .where((e) => !e.kind.isRoomScoped)
-      .toList();
+            pubkey: identity.pubkey,
+            since: since,
+            until: until,
+            untilId: untilId,
+            limit: pageLimit + 1,
+          ))
+          // Chatroom kinds (100-103) are membership-scoped and must not appear in
+          // the feed manifest followers pull (Plan 17 isolation).
+          .where((e) => !e.kind.isRoomScoped)
+          .toList();
   final hasOlder = fetched.length > pageLimit;
   final events = hasOlder ? fetched.sublist(0, pageLimit) : fetched;
 

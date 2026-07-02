@@ -21,12 +21,11 @@ OnionPublisher _publisher(
   _CountingTor tor, {
   required List<String> addrs,
   Future<void> Function()? ensureTorInit,
-}) =>
-    OnionPublisher(
-      ensureTorInit: ensureTorInit ?? () async {},
-      tor: () => tor,
-      onAddress: addrs.add,
-    );
+}) => OnionPublisher(
+  ensureTorInit: ensureTorInit ?? () async {},
+  tor: () => tor,
+  onAddress: addrs.add,
+);
 
 void main() {
   test('publishes on first request; same port is idempotent', () {

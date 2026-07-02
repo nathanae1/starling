@@ -20,18 +20,13 @@ void main() {
   SignalingMessage makeMessage({
     required String senderPubkey,
     int? timestamp,
-  }) =>
-      SignalingMessage(
-        type: SignalingMessageType.libp2pConnect,
-        roomId: '',
-        senderPubkey: senderPubkey,
-        payload: const {
-          'peer_id': 'QmTestPeerId',
-          'punch_at_unix_ms': 0,
-        },
-        timestamp: timestamp ??
-            (DateTime.now().millisecondsSinceEpoch ~/ 1000),
-      );
+  }) => SignalingMessage(
+    type: SignalingMessageType.libp2pConnect,
+    roomId: '',
+    senderPubkey: senderPubkey,
+    payload: const {'peer_id': 'QmTestPeerId', 'punch_at_unix_ms': 0},
+    timestamp: timestamp ?? (DateTime.now().millisecondsSinceEpoch ~/ 1000),
+  );
 
   test('wrap → unwrap round-trip recovers the inner message', () async {
     final sender = await crypto.generateKeyPair();

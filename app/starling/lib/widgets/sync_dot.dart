@@ -3,7 +3,15 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/starling_theme.dart';
 
-enum SyncState { synced, syncing, offline }
+/// The status vocabulary, per Plan 18's locked decisions:
+///   - [connecting] — Tor is still bootstrapping and no peer is reachable
+///     yet; the app is coming online, not broken.
+///   - [synced] — up to date.
+///   - [syncing] — a run is in flight (see [SyncDirection]).
+///   - [offline] — no friend reachable on *any* transport (LAN, Tor,
+///     libp2p), not just mDNS.
+///   - [problem] — the last sync run errored while peers were reachable.
+enum SyncState { synced, syncing, connecting, offline, problem }
 
 /// Direction of an in-flight sync, used to split the [SyncState.syncing] glyph
 /// and label into "Loading feeds…" (pulling friends' posts in) vs "Publishing…"
@@ -46,11 +54,16 @@ class _SyncDotState extends State<SyncDot> with SingleTickerProviderStateMixin {
     }
   }
 
+  /// Pulse while work is in flight — syncing and connecting both read as
+  /// "something is happening", the others are steady states.
+  bool get _pulsing =>
+      widget.state == SyncState.syncing || widget.state == SyncState.connecting;
+
   /// Only run the controller when the dot is actually pulsing. A
   /// permanently-repeating controller blocks `pumpAndSettle` in widget
   /// tests and burns frames in production for steady-state UIs.
   void _syncToState() {
-    if (widget.state == SyncState.syncing) {
+    if (_pulsing) {
       if (!_ctrl.isAnimating) {
         _ctrl.repeat(reverse: true);
       }
@@ -69,7 +82,9 @@ class _SyncDotState extends State<SyncDot> with SingleTickerProviderStateMixin {
   Color _colorFor(StarlingTheme starling) => switch (widget.state) {
     SyncState.synced => starling.colors.success,
     SyncState.syncing => starling.colors.sage,
+    SyncState.connecting => starling.colors.sage,
     SyncState.offline => starling.colors.stone,
+    SyncState.problem => starling.colors.warning,
   };
 
   IconData _glyphFor() => switch (widget.state) {
@@ -79,7 +94,9 @@ class _SyncDotState extends State<SyncDot> with SingleTickerProviderStateMixin {
       SyncDirection.pulling => LucideIcons.arrowDown,
       null => LucideIcons.refreshCw,
     },
+    SyncState.connecting => LucideIcons.loader,
     SyncState.offline => LucideIcons.cloudOff,
+    SyncState.problem => LucideIcons.triangleAlert,
   };
 
   String _semanticsFor() => switch (widget.state) {
@@ -89,7 +106,9 @@ class _SyncDotState extends State<SyncDot> with SingleTickerProviderStateMixin {
       SyncDirection.pulling => 'Loading feeds',
       null => 'Syncing',
     },
+    SyncState.connecting => 'Connecting',
     SyncState.offline => 'Offline',
+    SyncState.problem => 'Sync problem',
   };
 
   @override
@@ -98,7 +117,7 @@ class _SyncDotState extends State<SyncDot> with SingleTickerProviderStateMixin {
     final glyph = Icon(_glyphFor(), size: 14, color: _colorFor(starling));
 
     Widget content = glyph;
-    if (widget.state == SyncState.syncing) {
+    if (_pulsing) {
       content = AnimatedBuilder(
         animation: _ctrl,
         builder: (context, child) {

@@ -10,8 +10,11 @@ import '../../providers/feed_provider.dart';
 import '../../providers/follow_profile_provider.dart';
 import '../../providers/follow_provider.dart';
 import '../../providers/follows_provider.dart';
+import '../../providers/minute_ticker_provider.dart';
 import '../../providers/service_providers.dart';
+import '../../sync/peer_reachability_provider.dart';
 import '../../theme/starling_theme.dart';
+import '../../utils/friendly_error.dart';
 import '../../utils/time_ago.dart';
 import '../../widgets/avatar.dart';
 import '../../widgets/buttons.dart';
@@ -61,7 +64,7 @@ class OtherProfileScreen extends ConsumerWidget {
                 error: (e, _) => Padding(
                   padding: const EdgeInsets.all(24),
                   child: Text(
-                    '$e',
+                    friendlyError(e, tag: 'profile'),
                     style: starling.typography.small.copyWith(
                       color: starling.colors.danger,
                     ),
@@ -81,7 +84,7 @@ class OtherProfileScreen extends ConsumerWidget {
                 child: Padding(
                   padding: const EdgeInsets.all(24),
                   child: Text(
-                    '$e',
+                    friendlyError(e, tag: 'profile'),
                     style: starling.typography.small.copyWith(
                       color: starling.colors.danger,
                     ),
@@ -131,7 +134,13 @@ class _IdentityBlock extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final starling = StarlingTheme.of(context);
     final now = ref.watch(clockProvider).nowUnixSeconds();
-    final reachable = lastSyncedAt > 0 && now - lastSyncedAt < 60;
+    // Re-render each minute so the last-seen labels stay honest.
+    ref.watch(minuteTickerProvider);
+    // Live per-transport reachability (LAN + Tor + libp2p), not the stale
+    // "synced within the last minute" heuristic.
+    final reachability =
+        ref.watch(peerReachabilityStateProvider).value ?? const {};
+    final reachable = reachability[pubkey]?.isReachable ?? false;
     final statusText = reachable
         ? '● Reachable'
         : lastSyncedAt > 0

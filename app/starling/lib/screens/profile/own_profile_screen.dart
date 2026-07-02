@@ -9,6 +9,7 @@ import '../../providers/follows_provider.dart';
 import '../../providers/identity_provider.dart';
 import '../../providers/own_profile_provider.dart';
 import '../../theme/starling_theme.dart';
+import '../../utils/friendly_error.dart';
 import '../../widgets/avatar.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/encrypted_avatar.dart';
@@ -47,7 +48,8 @@ class OwnProfileScreen extends ConsumerWidget {
                   return _IdentityBlock(profile: profile, pubkey: pubkey);
                 },
                 loading: () => const _IdentityBlockSkeleton(),
-                error: (e, _) => _ErrorBlock(message: '$e'),
+                error: (e, _) =>
+                    _ErrorBlock(message: friendlyError(e, tag: 'profile')),
               ),
             ),
             SliverToBoxAdapter(
@@ -70,8 +72,9 @@ class OwnProfileScreen extends ConsumerWidget {
                   child: Center(child: CircularProgressIndicator()),
                 ),
               ),
-              error: (e, _) =>
-                  SliverToBoxAdapter(child: _ErrorBlock(message: '$e')),
+              error: (e, _) => SliverToBoxAdapter(
+                child: _ErrorBlock(message: friendlyError(e, tag: 'profile')),
+              ),
             ),
           ],
         ),

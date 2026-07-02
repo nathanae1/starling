@@ -28,10 +28,7 @@ void main() {
     });
 
     test('empty extensions round-trips', () {
-      final item = EnvelopeItem(
-        type: 'commit',
-        payload: Uint8List(0),
-      );
+      final item = EnvelopeItem(type: 'commit', payload: Uint8List(0));
       final decoded = EnvelopeItem.fromBytes(item.toBytes());
       expect(decoded.extensions, isEmpty);
       expect(decoded, equals(item));
@@ -43,10 +40,7 @@ void main() {
       final envelope = Envelope(
         version: '2026-03-24',
         items: [
-          EnvelopeItem(
-            type: 'event',
-            payload: Uint8List.fromList([1, 2, 3]),
-          ),
+          EnvelopeItem(type: 'event', payload: Uint8List.fromList([1, 2, 3])),
         ],
       );
       final decoded = Envelope.fromBytes(envelope.toBytes());
@@ -59,18 +53,9 @@ void main() {
       final envelope = Envelope(
         version: '2026-03-24',
         items: [
-          EnvelopeItem(
-            type: 'event',
-            payload: Uint8List.fromList([1]),
-          ),
-          EnvelopeItem(
-            type: 'commit',
-            payload: Uint8List.fromList([2]),
-          ),
-          EnvelopeItem(
-            type: 'receipt',
-            payload: Uint8List.fromList([3]),
-          ),
+          EnvelopeItem(type: 'event', payload: Uint8List.fromList([1])),
+          EnvelopeItem(type: 'commit', payload: Uint8List.fromList([2])),
+          EnvelopeItem(type: 'receipt', payload: Uint8List.fromList([3])),
         ],
       );
       final decoded = Envelope.fromBytes(envelope.toBytes());
@@ -80,10 +65,7 @@ void main() {
     });
 
     test('round-trips with empty items', () {
-      const envelope = Envelope(
-        version: '2026-03-24',
-        items: [],
-      );
+      const envelope = Envelope(version: '2026-03-24', items: []);
       final decoded = Envelope.fromBytes(envelope.toBytes());
       expect(decoded.items, isEmpty);
       expect(decoded, equals(envelope));
@@ -92,15 +74,16 @@ void main() {
     test('preserves envelope-level extensions', () {
       final envelope = Envelope(
         version: '2026-03-24',
-        items: [
-          EnvelopeItem(type: 'event', payload: Uint8List(0)),
-        ],
+        items: [EnvelopeItem(type: 'event', payload: Uint8List(0))],
         extensions: {
           'routing': Uint8List.fromList([1, 2, 3]),
         },
       );
       final decoded = Envelope.fromBytes(envelope.toBytes());
-      expect(decoded.extensions['routing'], equals(Uint8List.fromList([1, 2, 3])));
+      expect(
+        decoded.extensions['routing'],
+        equals(Uint8List.fromList([1, 2, 3])),
+      );
       expect(decoded, equals(envelope));
     });
 
@@ -112,14 +95,19 @@ void main() {
           EnvelopeItem(
             type: 'unknown-future-type',
             payload: Uint8List.fromList([20, 30]),
-            extensions: {'meta': Uint8List.fromList([40])},
+            extensions: {
+              'meta': Uint8List.fromList([40]),
+            },
           ),
         ],
       );
       final decoded = Envelope.fromBytes(envelope.toBytes());
       expect(decoded.items[0].type, equals('event'));
       expect(decoded.items[1].type, equals('unknown-future-type'));
-      expect(decoded.items[1].extensions['meta'], equals(Uint8List.fromList([40])));
+      expect(
+        decoded.items[1].extensions['meta'],
+        equals(Uint8List.fromList([40])),
+      );
     });
   });
 }

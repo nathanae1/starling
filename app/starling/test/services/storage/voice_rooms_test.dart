@@ -19,22 +19,30 @@ void main() {
 
   test('round-trips a room with participants, newest first', () async {
     final now = nowSecs();
-    await storage.saveVoiceRoom(VoiceRoom(
-      id: 'r1',
-      name: 'Morning call',
-      creatorPubkey: 'ALICE',
-      createdAt: now - 100,
-    ));
+    await storage.saveVoiceRoom(
+      VoiceRoom(
+        id: 'r1',
+        name: 'Morning call',
+        creatorPubkey: 'ALICE',
+        createdAt: now - 100,
+      ),
+    );
     await storage.saveVoiceRoomParticipant('r1', 'ALICE', joinedAt: now - 100);
-    await storage.saveVoiceRoomParticipant('r1', 'BOB',
-        displayName: 'Bob', joinedAt: now - 90);
+    await storage.saveVoiceRoomParticipant(
+      'r1',
+      'BOB',
+      displayName: 'Bob',
+      joinedAt: now - 90,
+    );
 
-    await storage.saveVoiceRoom(VoiceRoom(
-      id: 'r2',
-      name: 'Later call',
-      creatorPubkey: 'ALICE',
-      createdAt: now,
-    ));
+    await storage.saveVoiceRoom(
+      VoiceRoom(
+        id: 'r2',
+        name: 'Later call',
+        creatorPubkey: 'ALICE',
+        createdAt: now,
+      ),
+    );
 
     final rooms = await storage.getRecentVoiceRooms(limit: 10);
     expect(rooms.map((r) => r.id), ['r2', 'r1'], reason: 'newest first');
@@ -50,12 +58,9 @@ void main() {
 
   test('updateVoiceRoomEnded stamps the end time', () async {
     final now = nowSecs();
-    await storage.saveVoiceRoom(VoiceRoom(
-      id: 'r1',
-      name: 'Call',
-      creatorPubkey: 'ALICE',
-      createdAt: now,
-    ));
+    await storage.saveVoiceRoom(
+      VoiceRoom(id: 'r1', name: 'Call', creatorPubkey: 'ALICE', createdAt: now),
+    );
     await storage.updateVoiceRoomEnded('r1', now + 60);
 
     final room = (await storage.getRecentVoiceRooms()).single;
@@ -63,31 +68,38 @@ void main() {
     expect(room.isActive, isFalse);
   });
 
-  test('evictOldVoiceRooms prunes rooms past the age cap, keeps recent', () async {
-    final now = nowSecs();
-    const week = 7 * 24 * 60 * 60;
-    await storage.saveVoiceRoom(VoiceRoom(
-      id: 'old',
-      name: 'Old',
-      creatorPubkey: 'A',
-      createdAt: now - week - 3600,
-    ));
-    await storage.saveVoiceRoomParticipant('old', 'A', joinedAt: now - week);
-    await storage.saveVoiceRoom(VoiceRoom(
-      id: 'fresh',
-      name: 'Fresh',
-      creatorPubkey: 'A',
-      createdAt: now - 3600,
-    ));
+  test(
+    'evictOldVoiceRooms prunes rooms past the age cap, keeps recent',
+    () async {
+      final now = nowSecs();
+      const week = 7 * 24 * 60 * 60;
+      await storage.saveVoiceRoom(
+        VoiceRoom(
+          id: 'old',
+          name: 'Old',
+          creatorPubkey: 'A',
+          createdAt: now - week - 3600,
+        ),
+      );
+      await storage.saveVoiceRoomParticipant('old', 'A', joinedAt: now - week);
+      await storage.saveVoiceRoom(
+        VoiceRoom(
+          id: 'fresh',
+          name: 'Fresh',
+          creatorPubkey: 'A',
+          createdAt: now - 3600,
+        ),
+      );
 
-    final removed = await storage.evictOldVoiceRooms(week);
-    expect(removed, 1);
+      final removed = await storage.evictOldVoiceRooms(week);
+      expect(removed, 1);
 
-    final rooms = await storage.getRecentVoiceRooms();
-    expect(rooms.map((r) => r.id), ['fresh']);
+      final rooms = await storage.getRecentVoiceRooms();
+      expect(rooms.map((r) => r.id), ['fresh']);
 
-    // Participants of the evicted room are gone too.
-    final freshParts = rooms.single.participants;
-    expect(freshParts, isEmpty);
-  });
+      // Participants of the evicted room are gone too.
+      final freshParts = rooms.single.participants;
+      expect(freshParts, isEmpty);
+    },
+  );
 }

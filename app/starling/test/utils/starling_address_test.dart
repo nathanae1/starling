@@ -21,10 +21,7 @@ void main() {
   });
 
   test('pubkeyFromStarlingAddress rejects the invite scheme', () {
-    expect(
-      pubkeyFromStarlingAddress('starling://connect?card=AAAA'),
-      isNull,
-    );
+    expect(pubkeyFromStarlingAddress('starling://connect?card=AAAA'), isNull);
   });
 
   test('pubkeyFromStarlingAddress rejects wrong scheme', () {

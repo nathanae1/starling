@@ -13,6 +13,7 @@ import '../../providers/media_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../services/media/encrypted_media_paths.dart';
 import '../../theme/starling_theme.dart';
+import '../../utils/friendly_error.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/starling_alert_dialog.dart';
 
@@ -123,7 +124,7 @@ class _StorageSettingsScreenState extends ConsumerState<StorageSettingsScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
+      ).showSnackBar(SnackBar(content: Text(friendlyError(e, tag: 'export'))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -177,7 +178,7 @@ class _StorageSettingsScreenState extends ConsumerState<StorageSettingsScreen> {
                       child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: Text(
-                          '${snap.error}',
+                          friendlyError(snap.error!, tag: 'storage'),
                           style: starling.typography.small.copyWith(
                             color: starling.colors.danger,
                           ),

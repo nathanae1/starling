@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 
 import 'package:drift/drift.dart' hide isNull, isNotNull;
@@ -23,20 +22,19 @@ void main() {
     bool isSaved = false,
     int? lastViewed,
     String? mediaRefsJson,
-  }) =>
-      EventEntriesCompanion.insert(
-        id: id,
-        pubkey: isOwn ? 'me' : 'other',
-        createdAt: createdAt,
-        kind: 1,
-        content: Uint8List.fromList([1]),
-        sig: Uint8List.fromList(List.filled(64, 0)),
-        fetchedAt: createdAt,
-        isOwn: Value(isOwn ? 1 : 0),
-        isSaved: Value(isSaved ? 1 : 0),
-        lastViewed: Value(lastViewed),
-        mediaRefs: Value(mediaRefsJson),
-      );
+  }) => EventEntriesCompanion.insert(
+    id: id,
+    pubkey: isOwn ? 'me' : 'other',
+    createdAt: createdAt,
+    kind: 1,
+    content: Uint8List.fromList([1]),
+    sig: Uint8List.fromList(List.filled(64, 0)),
+    fetchedAt: createdAt,
+    isOwn: Value(isOwn ? 1 : 0),
+    isSaved: Value(isSaved ? 1 : 0),
+    lastViewed: Value(lastViewed),
+    mediaRefs: Value(mediaRefsJson),
+  );
 
   group('evictOldEvents', () {
     test('evicts old non-own events', () async {
@@ -84,9 +82,7 @@ void main() {
       await db.eventsDao.upsertEvent(
         makeEvent('viewed-recently', createdAt: old, lastViewed: recentView),
       );
-      await db.eventsDao.upsertEvent(
-        makeEvent('not-viewed', createdAt: old),
-      );
+      await db.eventsDao.upsertEvent(makeEvent('not-viewed', createdAt: old));
 
       final evicted = await db.eventsDao.evictOldEvents(
         30 * 24 * 60 * 60,
@@ -168,10 +164,9 @@ void main() {
       // Limit 800 against 2100 total ⇒ must evict ~1300; "pinned" is the
       // oldest by lastAccessed but should be skipped, so the next-oldest
       // non-pinned ("old-other") goes first, then "recent-other" if needed.
-      final removed = await db.mediaCacheDao.evictOverLimitExcluding(
-        800,
-        {'pinned'},
-      );
+      final removed = await db.mediaCacheDao.evictOverLimitExcluding(800, {
+        'pinned',
+      });
 
       final removedHashes = removed.map((e) => e.hash).toSet();
       expect(removedHashes.contains('pinned'), isFalse);
@@ -204,30 +199,35 @@ void main() {
   });
 
   group('getPinnedMediaRefsJson', () {
-    test('returns rows where isSaved=1 or isOwn=1 and mediaRefs is set',
-        () async {
-      String mediaJson(String hash) => jsonEncode([
-            {'hash': hash, 'plaintext_size': 1, 'mime': 'image/jpeg'},
-          ]);
+    test(
+      'returns rows where isSaved=1 or isOwn=1 and mediaRefs is set',
+      () async {
+        String mediaJson(String hash) => jsonEncode([
+          {'hash': hash, 'plaintext_size': 1, 'mime': 'image/jpeg'},
+        ]);
 
-      await db.eventsDao.upsertEvent(makeEvent(
-        'own-with-media',
-        isOwn: true,
-        mediaRefsJson: mediaJson('own-hash'),
-      ));
-      await db.eventsDao.upsertEvent(makeEvent(
-        'saved-with-media',
-        isSaved: true,
-        mediaRefsJson: mediaJson('saved-hash'),
-      ));
-      await db.eventsDao.upsertEvent(makeEvent(
-        'random-with-media',
-        mediaRefsJson: mediaJson('drop-hash'),
-      ));
-      await db.eventsDao.upsertEvent(makeEvent('plain-text-only'));
+        await db.eventsDao.upsertEvent(
+          makeEvent(
+            'own-with-media',
+            isOwn: true,
+            mediaRefsJson: mediaJson('own-hash'),
+          ),
+        );
+        await db.eventsDao.upsertEvent(
+          makeEvent(
+            'saved-with-media',
+            isSaved: true,
+            mediaRefsJson: mediaJson('saved-hash'),
+          ),
+        );
+        await db.eventsDao.upsertEvent(
+          makeEvent('random-with-media', mediaRefsJson: mediaJson('drop-hash')),
+        );
+        await db.eventsDao.upsertEvent(makeEvent('plain-text-only'));
 
-      final pinned = await db.eventsDao.getPinnedMediaRefsJson();
-      expect(pinned.length, equals(2));
-    });
+        final pinned = await db.eventsDao.getPinnedMediaRefsJson();
+        expect(pinned.length, equals(2));
+      },
+    );
   });
 }

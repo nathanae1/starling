@@ -29,22 +29,26 @@ void main() {
     const clock = _FixedClock(1000);
     final storage = DriftStorageService(db, clock);
 
-    await db.identityDao.upsertIdentity(IdentityEntriesCompanion.insert(
-      pubkey: 'alice-pk',
-      feedKey: Uint8List(32),
-      recoveryPhrase: const Value(null),
-      createdAt: 1000,
-    ));
+    await db.identityDao.upsertIdentity(
+      IdentityEntriesCompanion.insert(
+        pubkey: 'alice-pk',
+        feedKey: Uint8List(32),
+        recoveryPhrase: const Value(null),
+        createdAt: 1000,
+      ),
+    );
 
     final mdns = MockMdnsService();
     addTearDown(mdns.dispose);
 
-    final container = ProviderContainer(overrides: [
-      storageServiceProvider.overrideWithValue(storage),
-      mdnsServiceProvider.overrideWithValue(mdns),
-      // Fake the server port directly so we don't need a real shelf bind.
-      httpServerControllerProvider.overrideWith(_StubHttpServer.new),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        storageServiceProvider.overrideWithValue(storage),
+        mdnsServiceProvider.overrideWithValue(mdns),
+        // Fake the server port directly so we don't need a real shelf bind.
+        httpServerControllerProvider.overrideWith(_StubHttpServer.new),
+      ],
+    );
     addTearDown(container.dispose);
 
     // Wait for identity + server-port to settle.
@@ -62,21 +66,25 @@ void main() {
     addTearDown(db.close);
     const clock = _FixedClock(1000);
     final storage = DriftStorageService(db, clock);
-    await db.identityDao.upsertIdentity(IdentityEntriesCompanion.insert(
-      pubkey: 'alice-pk',
-      feedKey: Uint8List(32),
-      recoveryPhrase: const Value(null),
-      createdAt: 1000,
-    ));
+    await db.identityDao.upsertIdentity(
+      IdentityEntriesCompanion.insert(
+        pubkey: 'alice-pk',
+        feedKey: Uint8List(32),
+        recoveryPhrase: const Value(null),
+        createdAt: 1000,
+      ),
+    );
 
     final mdns = MockMdnsService();
     addTearDown(mdns.dispose);
 
-    final container = ProviderContainer(overrides: [
-      storageServiceProvider.overrideWithValue(storage),
-      mdnsServiceProvider.overrideWithValue(mdns),
-      httpServerControllerProvider.overrideWith(_StubHttpServer.new),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        storageServiceProvider.overrideWithValue(storage),
+        mdnsServiceProvider.overrideWithValue(mdns),
+        httpServerControllerProvider.overrideWith(_StubHttpServer.new),
+      ],
+    );
     addTearDown(container.dispose);
 
     await container.read(identityControllerProvider.future);
@@ -88,15 +96,12 @@ void main() {
     addTearDown(sub.close);
     await container.read(discoveryControllerProvider.future);
 
-    mdns.setPeer(const LanPeer(
-      pubkey: 'bob-pk',
-      host: '10.0.0.5',
-      port: 49001,
-    ));
+    mdns.setPeer(
+      const LanPeer(pubkey: 'bob-pk', host: '10.0.0.5', port: 49001),
+    );
 
     await pumpEventQueue();
-    final state =
-        container.read(discoveryControllerProvider).value ?? const {};
+    final state = container.read(discoveryControllerProvider).value ?? const {};
     expect(state, contains('bob-pk'));
   });
 
@@ -105,21 +110,25 @@ void main() {
     addTearDown(db.close);
     const clock = _FixedClock(1000);
     final storage = DriftStorageService(db, clock);
-    await db.identityDao.upsertIdentity(IdentityEntriesCompanion.insert(
-      pubkey: 'alice-pk',
-      feedKey: Uint8List(32),
-      recoveryPhrase: const Value(null),
-      createdAt: 1000,
-    ));
+    await db.identityDao.upsertIdentity(
+      IdentityEntriesCompanion.insert(
+        pubkey: 'alice-pk',
+        feedKey: Uint8List(32),
+        recoveryPhrase: const Value(null),
+        createdAt: 1000,
+      ),
+    );
 
     final mdns = MockMdnsService();
     addTearDown(mdns.dispose);
 
-    final container = ProviderContainer(overrides: [
-      storageServiceProvider.overrideWithValue(storage),
-      mdnsServiceProvider.overrideWithValue(mdns),
-      httpServerControllerProvider.overrideWith(_StubHttpServer.new),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        storageServiceProvider.overrideWithValue(storage),
+        mdnsServiceProvider.overrideWithValue(mdns),
+        httpServerControllerProvider.overrideWith(_StubHttpServer.new),
+      ],
+    );
     await container.read(identityControllerProvider.future);
     await container.read(httpServerControllerProvider.future);
     final sub = container.listen(discoveryControllerProvider, (_, _) {});

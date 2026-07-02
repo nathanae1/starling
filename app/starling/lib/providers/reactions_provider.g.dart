@@ -8,18 +8,25 @@ part of 'reactions_provider.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
+/// Plan 18 C1: reactive — an inbound like (or unlike tombstone) from any
+/// storage path re-emits without invalidation.
 
 @ProviderFor(reactions)
 final reactionsProvider = ReactionsFamily._();
+
+/// Plan 18 C1: reactive — an inbound like (or unlike tombstone) from any
+/// storage path re-emits without invalidation.
 
 final class ReactionsProvider
     extends
         $FunctionalProvider<
           AsyncValue<ReactionSummary>,
           ReactionSummary,
-          FutureOr<ReactionSummary>
+          Stream<ReactionSummary>
         >
-    with $FutureModifier<ReactionSummary>, $FutureProvider<ReactionSummary> {
+    with $FutureModifier<ReactionSummary>, $StreamProvider<ReactionSummary> {
+  /// Plan 18 C1: reactive — an inbound like (or unlike tombstone) from any
+  /// storage path re-emits without invalidation.
   ReactionsProvider._({
     required ReactionsFamily super.from,
     required String super.argument,
@@ -43,12 +50,12 @@ final class ReactionsProvider
 
   @$internal
   @override
-  $FutureProviderElement<ReactionSummary> $createElement(
+  $StreamProviderElement<ReactionSummary> $createElement(
     $ProviderPointer pointer,
-  ) => $FutureProviderElement(pointer);
+  ) => $StreamProviderElement(pointer);
 
   @override
-  FutureOr<ReactionSummary> create(Ref ref) {
+  Stream<ReactionSummary> create(Ref ref) {
     final argument = this.argument as String;
     return reactions(ref, argument);
   }
@@ -64,10 +71,13 @@ final class ReactionsProvider
   }
 }
 
-String _$reactionsHash() => r'2814bb84b12ec38aff61bf9c558da36124a1c02b';
+String _$reactionsHash() => r'3f0c6a09ad2c9d9f3565784608bca94c38427a39';
+
+/// Plan 18 C1: reactive — an inbound like (or unlike tombstone) from any
+/// storage path re-emits without invalidation.
 
 final class ReactionsFamily extends $Family
-    with $FunctionalFamilyOverride<FutureOr<ReactionSummary>, String> {
+    with $FunctionalFamilyOverride<Stream<ReactionSummary>, String> {
   ReactionsFamily._()
     : super(
         retry: null,
@@ -76,6 +86,9 @@ final class ReactionsFamily extends $Family
         $allTransitiveDependencies: null,
         isAutoDispose: true,
       );
+
+  /// Plan 18 C1: reactive — an inbound like (or unlike tombstone) from any
+  /// storage path re-emits without invalidation.
 
   ReactionsProvider call(String postId) =>
       ReactionsProvider._(argument: postId, from: this);

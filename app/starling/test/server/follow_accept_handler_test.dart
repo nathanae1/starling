@@ -106,22 +106,26 @@ void main() {
       );
       final nonce = crypto.randomBytes(24);
       final ct = crypto.encrypt(feedKey, nonce, sharedKey);
-      return Uint8List.fromList(cbor.encode(<String, dynamic>{
-        'owner_pubkey': peerIdentity.pubkey,
-        'encrypted_feed_key': ct,
-        'nonce': nonce,
-        'epoch': epochOverride ?? peerIdentity.feedKeyEpoch,
-        'timestamp': timestamp,
-      }));
+      return Uint8List.fromList(
+        cbor.encode(<String, dynamic>{
+          'owner_pubkey': peerIdentity.pubkey,
+          'encrypted_feed_key': ct,
+          'nonce': nonce,
+          'epoch': epochOverride ?? peerIdentity.feedKeyEpoch,
+          'timestamp': timestamp,
+        }),
+      );
     }
 
     Future<Response> postBytes(Uint8List body) async {
       final handler = followAcceptHandler(followService: service);
-      return handler(Request(
-        'POST',
-        Uri.parse('http://localhost/follow-accept'),
-        body: body,
-      ));
+      return handler(
+        Request(
+          'POST',
+          Uri.parse('http://localhost/follow-accept'),
+          body: body,
+        ),
+      );
     }
 
     test('valid CBOR → 202 + follows row written', () async {
@@ -142,12 +146,14 @@ void main() {
     });
 
     test('missing owner_pubkey → 400', () async {
-      final body = Uint8List.fromList(cbor.encode(<String, dynamic>{
-        'encrypted_feed_key': Uint8List(32),
-        'nonce': Uint8List(24),
-        'epoch': 1,
-        'timestamp': 1,
-      }));
+      final body = Uint8List.fromList(
+        cbor.encode(<String, dynamic>{
+          'encrypted_feed_key': Uint8List(32),
+          'nonce': Uint8List(24),
+          'epoch': 1,
+          'timestamp': 1,
+        }),
+      );
       final res = await postBytes(body);
       expect(res.statusCode, 400);
     });
@@ -161,9 +167,9 @@ void main() {
     });
 
     test('timestamp mismatch → 400 (decryption-class failure)', () async {
-      final res = await postBytes(buildAcceptBody(
-        timestampOverride: handshakeTimestamp + 999,
-      ));
+      final res = await postBytes(
+        buildAcceptBody(timestampOverride: handshakeTimestamp + 999),
+      );
       expect(res.statusCode, 400);
       expect(await storage.getFollow(peerIdentity.pubkey), isNull);
     });

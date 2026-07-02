@@ -15,24 +15,28 @@ void main() {
     // Seed three local events for pubkey "alice".
     final clock = MockClock(1_000_000);
     for (var i = 0; i < 3; i++) {
-      await storage.saveEvent(_event(
-        id: 'id-$i',
-        pubkey: 'alice',
-        createdAt: clock.nowUnixSeconds() + i,
-      ));
+      await storage.saveEvent(
+        _event(
+          id: 'id-$i',
+          pubkey: 'alice',
+          createdAt: clock.nowUnixSeconds() + i,
+        ),
+      );
     }
 
-    final transport = _StaticTransport(const Manifest(
-      pubkey: 'alice',
-      events: [
-        ManifestEntry(id: 'id-0', createdAt: 1_000_000),
-        ManifestEntry(id: 'id-1', createdAt: 1_000_001),
-        ManifestEntry(id: 'id-2', createdAt: 1_000_002),
-        ManifestEntry(id: 'id-3', createdAt: 1_000_003),
-        ManifestEntry(id: 'id-4', createdAt: 1_000_004),
-      ],
-      hasOlder: false,
-    ));
+    final transport = _StaticTransport(
+      const Manifest(
+        pubkey: 'alice',
+        events: [
+          ManifestEntry(id: 'id-0', createdAt: 1_000_000),
+          ManifestEntry(id: 'id-1', createdAt: 1_000_001),
+          ManifestEntry(id: 'id-2', createdAt: 1_000_002),
+          ManifestEntry(id: 'id-3', createdAt: 1_000_003),
+          ManifestEntry(id: 'id-4', createdAt: 1_000_004),
+        ],
+        hasOlder: false,
+      ),
+    );
 
     final exchange = ManifestExchange(transport: transport, storage: storage);
     final diff = await exchange.fetchAndDiff(
@@ -53,73 +57,79 @@ void main() {
     expect(diff.peerEvents, hasLength(5));
   });
 
-  test('drops manifest if peer\'s pubkey doesn\'t match the follow\'s pubkey',
-      () async {
-    final storage = MockStorageService();
-    final transport = _StaticTransport(const Manifest(
-      pubkey: 'eve',
-      events: [
-        ManifestEntry(id: 'id-evil', createdAt: 1),
-      ],
-      hasOlder: false,
-    ));
+  test(
+    'drops manifest if peer\'s pubkey doesn\'t match the follow\'s pubkey',
+    () async {
+      final storage = MockStorageService();
+      final transport = _StaticTransport(
+        const Manifest(
+          pubkey: 'eve',
+          events: [ManifestEntry(id: 'id-evil', createdAt: 1)],
+          hasOlder: false,
+        ),
+      );
 
-    final exchange = ManifestExchange(transport: transport, storage: storage);
-    final diff = await exchange.fetchAndDiff(
-      const PeerConnection(
-        pubkey: 'alice',
-        baseUrl: 'http://x',
-        transport: PeerTransport.lan,
-      ),
-      Follow(
-        pubkey: 'alice',
-        connectionCard: '',
-        feedKey: Uint8List(32),
-        lastSyncedAt: 0,
-      ),
-    );
+      final exchange = ManifestExchange(transport: transport, storage: storage);
+      final diff = await exchange.fetchAndDiff(
+        const PeerConnection(
+          pubkey: 'alice',
+          baseUrl: 'http://x',
+          transport: PeerTransport.lan,
+        ),
+        Follow(
+          pubkey: 'alice',
+          connectionCard: '',
+          feedKey: Uint8List(32),
+          lastSyncedAt: 0,
+        ),
+      );
 
-    expect(diff.missingIds, isEmpty);
-  });
-
-  test('fetchAndDiff reports maxCreatedAt and hasOlder from the manifest',
-      () async {
-    final storage = MockStorageService();
-    final transport = _StaticTransport(const Manifest(
-      pubkey: 'alice',
-      events: [
-        ManifestEntry(id: 'id-1', createdAt: 1_000_005),
-        ManifestEntry(id: 'id-0', createdAt: 1_000_001),
-      ],
-      hasOlder: true,
-    ));
-
-    final exchange = ManifestExchange(transport: transport, storage: storage);
-    final diff = await exchange.fetchAndDiff(
-      const PeerConnection(
-        pubkey: 'alice',
-        baseUrl: 'http://x',
-        transport: PeerTransport.lan,
-      ),
-      Follow(
-        pubkey: 'alice',
-        connectionCard: '',
-        feedKey: Uint8List(32),
-        lastSyncedAt: 0,
-      ),
-    );
-
-    expect(diff.maxCreatedAt, equals(1_000_005));
-    expect(diff.hasOlder, isTrue);
-  });
+      expect(diff.missingIds, isEmpty);
+    },
+  );
 
   test(
-      'fetchAndDiffFull pages with until/until_id to completion and diffs '
+    'fetchAndDiff reports maxCreatedAt and hasOlder from the manifest',
+    () async {
+      final storage = MockStorageService();
+      final transport = _StaticTransport(
+        const Manifest(
+          pubkey: 'alice',
+          events: [
+            ManifestEntry(id: 'id-1', createdAt: 1_000_005),
+            ManifestEntry(id: 'id-0', createdAt: 1_000_001),
+          ],
+          hasOlder: true,
+        ),
+      );
+
+      final exchange = ManifestExchange(transport: transport, storage: storage);
+      final diff = await exchange.fetchAndDiff(
+        const PeerConnection(
+          pubkey: 'alice',
+          baseUrl: 'http://x',
+          transport: PeerTransport.lan,
+        ),
+        Follow(
+          pubkey: 'alice',
+          connectionCard: '',
+          feedKey: Uint8List(32),
+          lastSyncedAt: 0,
+        ),
+      );
+
+      expect(diff.maxCreatedAt, equals(1_000_005));
+      expect(diff.hasOlder, isTrue);
+    },
+  );
+
+  test('fetchAndDiffFull pages with until/until_id to completion and diffs '
       'against all local ids (D1/D7)', () async {
     final storage = MockStorageService();
     // Local store already holds id-2; id-1 and id-3 are missing.
-    await storage
-        .saveEvent(_event(id: 'id-2', pubkey: 'alice', createdAt: 200));
+    await storage.saveEvent(
+      _event(id: 'id-2', pubkey: 'alice', createdAt: 200),
+    );
 
     final transport = _PagingTransport([
       Manifest(
@@ -137,9 +147,7 @@ void main() {
       ),
       const Manifest(
         pubkey: 'alice',
-        events: [
-          ManifestEntry(id: 'id-1', createdAt: 100),
-        ],
+        events: [ManifestEntry(id: 'id-1', createdAt: 100)],
         hasOlder: false,
       ),
     ]);
@@ -187,16 +195,15 @@ Event _event({
   required String id,
   required String pubkey,
   required int createdAt,
-}) =>
-    Event(
-      version: '2026-03-24',
-      id: id,
-      pubkey: pubkey,
-      createdAt: createdAt,
-      kind: EventKind.post,
-      content: Uint8List(0),
-      sig: Uint8List(64),
-    );
+}) => Event(
+  version: '2026-03-24',
+  id: id,
+  pubkey: pubkey,
+  createdAt: createdAt,
+  kind: EventKind.post,
+  content: Uint8List(0),
+  sig: Uint8List(64),
+);
 
 /// One recorded fetchManifest invocation.
 class _ManifestCall {
@@ -232,13 +239,15 @@ class _PagingTransport implements SyncTransport {
     int? cardSeenAt,
     Uint8List? ackSig,
   }) async {
-    calls.add(_ManifestCall(
-      since: since,
-      until: until,
-      untilId: untilId,
-      requesterPubkey: requesterPubkey,
-      ackRotationAt: ackRotationAt,
-    ));
+    calls.add(
+      _ManifestCall(
+        since: since,
+        until: until,
+        untilId: untilId,
+        requesterPubkey: requesterPubkey,
+        ackRotationAt: ackRotationAt,
+      ),
+    );
     final idx = calls.length - 1;
     return _pages[idx < _pages.length ? idx : _pages.length - 1];
   }
@@ -269,8 +278,7 @@ class _StaticTransport implements SyncTransport {
     int? ackRotationAt,
     int? cardSeenAt,
     Uint8List? ackSig,
-  }) async =>
-      _manifest;
+  }) async => _manifest;
 
   @override
   Future<Envelope> fetchEnvelope(PeerConnection peer, {int? since}) async =>

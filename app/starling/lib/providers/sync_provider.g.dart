@@ -705,7 +705,7 @@ final class SyncControllerProvider
   }
 }
 
-String _$syncControllerHash() => r'5a6fc7807b7f1209eec7b1a8373a2ff794daec4a';
+String _$syncControllerHash() => r'9e7edb152af1af7bd2e66e9ff8d07c551b76073b';
 
 /// Surfaces sync state to the UI and exposes [syncNow] for pull-to-refresh.
 

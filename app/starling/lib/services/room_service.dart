@@ -307,53 +307,51 @@ class DefaultRoomService implements RoomService {
   });
 
   @override
-  Future<void> announceCall({
-    required String roomId,
-    required String callId,
-  }) => _publishLock.synchronized(() async {
-    final identity = await _identityLookup();
-    if (identity == null) {
-      throw StateError('announceCall called before identity is loaded');
-    }
-    final room = await _storage.getRoom(roomId);
-    if (room == null || !room.isMember) return;
-    final now = _clock.nowUnixSeconds();
-    final seq = room.roomMsgSeqCounter;
-    final result = _contentKey.signAndEncryptForRoom(
-      _unsigned(
-        pubkey: identity.pubkey,
-        createdAt: now,
-        kind: EventKind.roomCallStarted,
-        ref: roomId,
-        content: encodeRoomCallStartedContent(
-          RoomCallStartedContent(
-            callId: callId,
-            starterPubkey: identity.pubkey,
+  Future<void> announceCall({required String roomId, required String callId}) =>
+      _publishLock.synchronized(() async {
+        final identity = await _identityLookup();
+        if (identity == null) {
+          throw StateError('announceCall called before identity is loaded');
+        }
+        final room = await _storage.getRoom(roomId);
+        if (room == null || !room.isMember) return;
+        final now = _clock.nowUnixSeconds();
+        final seq = room.roomMsgSeqCounter;
+        final result = _contentKey.signAndEncryptForRoom(
+          _unsigned(
+            pubkey: identity.pubkey,
+            createdAt: now,
+            kind: EventKind.roomCallStarted,
+            ref: roomId,
+            content: encodeRoomCallStartedContent(
+              RoomCallStartedContent(
+                callId: callId,
+                starterPubkey: identity.pubkey,
+              ),
+            ),
           ),
-        ),
-      ),
-      roomKey: room.roomKey,
-      roomEpoch: room.roomKeyEpoch,
-      roomMsgSeq: seq,
-    );
-    await _storage.saveOwnEventWithEncrypted(
-      result.signed,
-      result.encrypted.toBytes(),
-    );
-    await _storage.saveRoom(
-      room.copyWith(roomMsgSeqCounter: seq + 1, lastActivityAt: now),
-    );
-    final members = await _storage.getRoomMembers(roomId);
-    for (final m in members) {
-      if (!m.isActive || m.pubkey == identity.pubkey) continue;
-      await fanOutRoomEvent(
-        _storage,
-        m.pubkey,
-        roomId,
-        result.encrypted.toBytes(),
-      );
-    }
-  });
+          roomKey: room.roomKey,
+          roomEpoch: room.roomKeyEpoch,
+          roomMsgSeq: seq,
+        );
+        await _storage.saveOwnEventWithEncrypted(
+          result.signed,
+          result.encrypted.toBytes(),
+        );
+        await _storage.saveRoom(
+          room.copyWith(roomMsgSeqCounter: seq + 1, lastActivityAt: now),
+        );
+        final members = await _storage.getRoomMembers(roomId);
+        for (final m in members) {
+          if (!m.isActive || m.pubkey == identity.pubkey) continue;
+          await fanOutRoomEvent(
+            _storage,
+            m.pubkey,
+            roomId,
+            result.encrypted.toBytes(),
+          );
+        }
+      });
 
   /// Replay the genesis + newest-K messages to [pubkey]. Only events whose
   /// wire bytes we still hold are replayable (own-authored always; received

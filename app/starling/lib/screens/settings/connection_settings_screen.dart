@@ -12,6 +12,7 @@ import '../../services/types.dart';
 import '../../sync/peer_reachability_monitor.dart';
 import '../../sync/peer_reachability_provider.dart';
 import '../../theme/starling_theme.dart';
+import '../../utils/friendly_error.dart';
 import '../../utils/starling_address.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/sheet.dart';
@@ -41,7 +42,8 @@ class ConnectionSettingsScreen extends ConsumerWidget {
             Expanded(
               child: followsAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => _ErrorView(message: '$e'),
+                error: (e, _) =>
+                    _ErrorView(message: friendlyError(e, tag: 'connections')),
                 data: (follows) {
                   if (follows.isEmpty) {
                     return const _EmptyView();

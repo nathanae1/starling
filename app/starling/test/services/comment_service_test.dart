@@ -40,17 +40,22 @@ class _Fixture {
   final CommentService service;
 }
 
-Future<_Fixture> _buildFixture(CryptoService crypto, {int now = 1_700_000_000}) async {
+Future<_Fixture> _buildFixture(
+  CryptoService crypto, {
+  int now = 1_700_000_000,
+}) async {
   final db = AppDatabase.memory();
   final kp = await crypto.generateKeyPair();
   final pubkey = crockfordBase32Encode(kp.publicKey);
   final feedKey = crypto.randomBytes(32);
-  await db.identityDao.upsertIdentity(IdentityEntriesCompanion.insert(
-    pubkey: pubkey,
-    feedKey: feedKey,
-    recoveryPhrase: const Value(null),
-    createdAt: now,
-  ));
+  await db.identityDao.upsertIdentity(
+    IdentityEntriesCompanion.insert(
+      pubkey: pubkey,
+      feedKey: feedKey,
+      recoveryPhrase: const Value(null),
+      createdAt: now,
+    ),
+  );
   final cache = FeedKeyCache()..put(pubkey, feedKey, 0);
   final clock = _FixedClock(now);
   final storage = DriftStorageService(db, clock);
@@ -133,37 +138,39 @@ void main() {
       await f.db.close();
     });
 
-    test('comment on a third-party post: stored locally AND enqueued for the author',
-        () async {
-      final f = await _buildFixture(crypto);
-      const friendPubkey = 'FRIEND-PUBKEY-XYZ';
-      final postId = await _seedPost(f.storage, friendPubkey);
+    test(
+      'comment on a third-party post: stored locally AND enqueued for the author',
+      () async {
+        final f = await _buildFixture(crypto);
+        const friendPubkey = 'FRIEND-PUBKEY-XYZ';
+        final postId = await _seedPost(f.storage, friendPubkey);
 
-      final commentId = await f.service.create(
-        targetPostId: postId,
-        text: 'love this',
-      );
+        final commentId = await f.service.create(
+          targetPostId: postId,
+          text: 'love this',
+        );
 
-      // Local copy.
-      final stored = await f.storage.getEvent(commentId);
-      expect(stored, isNotNull);
-      expect(stored!.ref, equals(postId));
+        // Local copy.
+        final stored = await f.storage.getEvent(commentId);
+        expect(stored, isNotNull);
+        expect(stored!.ref, equals(postId));
 
-      // Queued for delivery to the friend.
-      final queued = await f.storage.dequeue(friendPubkey);
-      expect(queued, hasLength(1));
-      expect(queued.first.targetPubkey, equals(friendPubkey));
-      expect(queued.first.eventBlob.length, greaterThan(0));
+        // Queued for delivery to the friend.
+        final queued = await f.storage.dequeue(friendPubkey);
+        expect(queued, hasLength(1));
+        expect(queued.first.targetPubkey, equals(friendPubkey));
+        expect(queued.first.eventBlob.length, greaterThan(0));
 
-      // The blob is a CBOR-encoded EncryptedEvent; decoding it round-trips
-      // through decrypt.
-      final encrypted = EncryptedEvent.fromBytes(queued.first.eventBlob);
-      final plain = f.contentKey.decryptEvent(encrypted, f.identity.feedKey);
-      expect(plain.id, equals(commentId));
-      expect(plain.kind, equals(EventKind.comment));
+        // The blob is a CBOR-encoded EncryptedEvent; decoding it round-trips
+        // through decrypt.
+        final encrypted = EncryptedEvent.fromBytes(queued.first.eventBlob);
+        final plain = f.contentKey.decryptEvent(encrypted, f.identity.feedKey);
+        expect(plain.id, equals(commentId));
+        expect(plain.kind, equals(EventKind.comment));
 
-      await f.db.close();
-    });
+        await f.db.close();
+      },
+    );
 
     test('comment on an unknown postId: stored locally, NOT enqueued '
         '(no author lookup possible)', () async {
@@ -186,8 +193,10 @@ void main() {
     test('produces a kind=6 with ref=commentId', () async {
       final f = await _buildFixture(crypto);
       final postId = await _seedPost(f.storage, f.identity.pubkey);
-      final commentId =
-          await f.service.create(targetPostId: postId, text: 'hi');
+      final commentId = await f.service.create(
+        targetPostId: postId,
+        text: 'hi',
+      );
 
       final tombId = await f.service.delete(commentId);
       final tomb = await f.storage.getEvent(tombId);
@@ -203,8 +212,10 @@ void main() {
       final f = await _buildFixture(crypto);
       const friendPubkey = 'FRIEND';
       final postId = await _seedPost(f.storage, friendPubkey);
-      final commentId =
-          await f.service.create(targetPostId: postId, text: 'oops');
+      final commentId = await f.service.create(
+        targetPostId: postId,
+        text: 'oops',
+      );
 
       // First entry is the comment; deletion adds a tombstone for the friend.
       final beforeQueue = await f.storage.dequeue(friendPubkey);

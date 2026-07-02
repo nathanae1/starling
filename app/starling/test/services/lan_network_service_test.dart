@@ -35,27 +35,28 @@ void main() {
     });
 
     Future<void> fetch(PeerTransport transport) => service.fetchManifest(
-          PeerConnection(
-            pubkey: 'peer-1',
-            baseUrl: 'http://peer.example:80',
-            transport: transport,
-          ),
-          since: 100,
-          requesterPubkey: 'me-pubkey',
-          ackRotationAt: 500,
-          cardSeenAt: 600,
-          ackSig: Uint8List.fromList(List.filled(64, 0xAB)),
-        );
+      PeerConnection(
+        pubkey: 'peer-1',
+        baseUrl: 'http://peer.example:80',
+        transport: transport,
+      ),
+      since: 100,
+      requesterPubkey: 'me-pubkey',
+      ackRotationAt: 500,
+      cardSeenAt: 600,
+      ackSig: Uint8List.fromList(List.filled(64, 0xAB)),
+    );
 
-    test('relay transport strips requester_pubkey and all ack params',
-        () async {
-      await fetch(PeerTransport.relay);
-      expect(captured.queryParameters, {'since': '100'});
-    });
+    test(
+      'relay transport strips requester_pubkey and all ack params',
+      () async {
+        await fetch(PeerTransport.relay);
+        expect(captured.queryParameters, {'since': '100'});
+      },
+    );
 
     for (final transport in [PeerTransport.lan, PeerTransport.tor]) {
-      test('${transport.name} transport sends identity + ack params',
-          () async {
+      test('${transport.name} transport sends identity + ack params', () async {
         await fetch(transport);
         final q = captured.queryParameters;
         expect(q['since'], '100');

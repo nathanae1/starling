@@ -6,8 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../providers/identity_provider.dart';
 import '../../providers/qr_scanner_provider.dart';
 import '../../services/qr_scanner_service.dart';
+import '../../utils/debug_log.dart';
 import '../../theme/starling_theme.dart';
 import '../../utils/connection_card_parser.dart';
 import '../../widgets/buttons.dart';
@@ -63,11 +65,43 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
     }
   }
 
+  /// Scanning your own QR is the obvious first experiment — catch it here
+  /// with a snackbar and keep the camera running, instead of popping into a
+  /// sheet that offers to follow yourself. (`ConfirmRequestSheet` has the
+  /// same guard as a backstop for the paste and deep-link paths.)
+  bool _isOwnCode(ParsedInvite parsed) {
+    final ownPubkey = ref.read(identityControllerProvider).value?.pubkey;
+    return parsed is ValidInvite &&
+        ownPubkey != null &&
+        parsed.card.pubkey == ownPubkey;
+  }
+
+  Future<void> _rejectOwnCode() async {
+    setState(() => _busy = true);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text(
+            "That's your own code — have a friend scan it instead.",
+          ),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    // Debounce: the scanner keeps emitting the same QR every frame.
+    await Future<void>.delayed(const Duration(seconds: 2));
+    if (mounted) setState(() => _busy = false);
+  }
+
   Future<void> _handleScan(String payload) async {
     if (_busy) return;
     final parsed = parseInvite(payload);
     // Ignore anything that isn't a recognized Starling QR — keep scanning.
     if (parsed is! ValidInvite && parsed is! ValidRelayPair) return;
+    if (_isOwnCode(parsed)) {
+      await _rejectOwnCode();
+      return;
+    }
     setState(() => _busy = true);
     if (!mounted) return;
     Navigator.of(context).pop();
@@ -117,9 +151,13 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
     final parsed = parseInvite(result);
     if (parsed is InvalidInvite) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(parsed.reason)));
+      // Parser reasons are developer strings — log them, show plain copy.
+      debugLog('scan', 'invite parse failed: ${parsed.reason}');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("That doesn't look like a Starling invite."),
+        ),
+      );
       return;
     }
     if (!mounted) return;

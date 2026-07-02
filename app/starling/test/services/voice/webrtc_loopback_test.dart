@@ -35,8 +35,12 @@ void main() {
       final subs = <StreamSubscription<dynamic>>[];
 
       setUp(() {
-        alice = WebRtcVoiceService(iceConfigLookup: () async => const IceConfig());
-        bob = WebRtcVoiceService(iceConfigLookup: () async => const IceConfig());
+        alice = WebRtcVoiceService(
+          iceConfigLookup: () async => const IceConfig(),
+        );
+        bob = WebRtcVoiceService(
+          iceConfigLookup: () async => const IceConfig(),
+        );
       });
 
       tearDown(() async {
@@ -57,12 +61,16 @@ void main() {
 
         // Relay each side's local ICE to the other (rewriting the peer tag to
         // the sender's identity, exactly as the signaling plane would).
-        subs.add(alice.localIceCandidates.listen((c) {
-          bob.addRemoteIceCandidate(aliceId, c.candidate);
-        }));
-        subs.add(bob.localIceCandidates.listen((c) {
-          alice.addRemoteIceCandidate(bobId, c.candidate);
-        }));
+        subs.add(
+          alice.localIceCandidates.listen((c) {
+            bob.addRemoteIceCandidate(aliceId, c.candidate);
+          }),
+        );
+        subs.add(
+          bob.localIceCandidates.listen((c) {
+            alice.addRemoteIceCandidate(bobId, c.candidate);
+          }),
+        );
 
         final aliceConnected = _firstConnected(alice, bobId, subs);
         final bobConnected = _firstConnected(bob, aliceId, subs);
@@ -72,8 +80,10 @@ void main() {
         final answer = await bob.createAnswer(aliceId, offer);
         await alice.setRemoteAnswer(bobId, answer);
 
-        await Future.wait([aliceConnected, bobConnected])
-            .timeout(const Duration(seconds: 20));
+        await Future.wait([
+          aliceConnected,
+          bobConnected,
+        ]).timeout(const Duration(seconds: 20));
       });
     },
   );
@@ -86,12 +96,14 @@ Future<void> _firstConnected(
   List<StreamSubscription<dynamic>> subs,
 ) {
   final done = Completer<void>();
-  subs.add(svc.peerStates.listen((s) {
-    if (s.peerPubkey == peer &&
-        s.state == ParticipantConnectionState.connected &&
-        !done.isCompleted) {
-      done.complete();
-    }
-  }));
+  subs.add(
+    svc.peerStates.listen((s) {
+      if (s.peerPubkey == peer &&
+          s.state == ParticipantConnectionState.connected &&
+          !done.isCompleted) {
+        done.complete();
+      }
+    }),
+  );
   return done.future;
 }

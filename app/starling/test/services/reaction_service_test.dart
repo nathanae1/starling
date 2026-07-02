@@ -38,17 +38,22 @@ class _Fixture {
   final ReactionService service;
 }
 
-Future<_Fixture> _buildFixture(CryptoService crypto, {int now = 1_700_000_000}) async {
+Future<_Fixture> _buildFixture(
+  CryptoService crypto, {
+  int now = 1_700_000_000,
+}) async {
   final db = AppDatabase.memory();
   final kp = await crypto.generateKeyPair();
   final pubkey = crockfordBase32Encode(kp.publicKey);
   final feedKey = crypto.randomBytes(32);
-  await db.identityDao.upsertIdentity(IdentityEntriesCompanion.insert(
-    pubkey: pubkey,
-    feedKey: feedKey,
-    recoveryPhrase: const Value(null),
-    createdAt: now,
-  ));
+  await db.identityDao.upsertIdentity(
+    IdentityEntriesCompanion.insert(
+      pubkey: pubkey,
+      feedKey: feedKey,
+      recoveryPhrase: const Value(null),
+      createdAt: now,
+    ),
+  );
   final cache = FeedKeyCache()..put(pubkey, feedKey, 0);
   final clock = _FixedClock(now);
   final storage = DriftStorageService(db, clock);
@@ -125,8 +130,7 @@ void main() {
     final id2 = await f.service.like(postId);
     expect(id1, equals(id2));
 
-    final all =
-        await f.storage.getEventsByRef(postId, kind: EventKind.like);
+    final all = await f.storage.getEventsByRef(postId, kind: EventKind.like);
     expect(all, hasLength(1));
 
     await f.db.close();

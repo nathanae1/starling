@@ -8,6 +8,7 @@ import '../../providers/feed_provider.dart';
 import '../../providers/post_provider.dart';
 import '../../providers/publish_activity_provider.dart';
 import '../../theme/starling_theme.dart';
+import '../../utils/friendly_error.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/sticky_action_bar.dart';
 
@@ -59,7 +60,9 @@ class _PreviewScreenState extends ConsumerState<PreviewScreen> {
         _isPublishing = false;
         _error = "Couldn't publish. Try again.";
       });
-      ref.read(composeControllerProvider.notifier).markPublishFailed('$e');
+      ref
+          .read(composeControllerProvider.notifier)
+          .markPublishFailed(friendlyError(e, tag: 'publish'));
     } finally {
       publishActivity.end();
     }

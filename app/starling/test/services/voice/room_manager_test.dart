@@ -55,18 +55,18 @@ class _Peer {
   /// Make [other] a mutual follow: we follow them (active) and they follow us
   /// (accepted inbound request).
   Future<void> makeMutual(String other) async {
-    await storage.saveFollow(Follow(
-      pubkey: other,
-      connectionCard: '',
-      feedKey: Uint8List(32),
-    ));
-    await storage.saveInboundRequest(FollowRequest(
-      pubkey: other,
-      payload: Uint8List(0),
-      createdAt: 0,
-      requestTimestamp: 0,
-      status: 'accepted',
-    ));
+    await storage.saveFollow(
+      Follow(pubkey: other, connectionCard: '', feedKey: Uint8List(32)),
+    );
+    await storage.saveInboundRequest(
+      FollowRequest(
+        pubkey: other,
+        payload: Uint8List(0),
+        createdAt: 0,
+        requestTimestamp: 0,
+        status: 'accepted',
+      ),
+    );
   }
 }
 
@@ -92,43 +92,55 @@ void main() {
     await b.makeMutual(pkA);
   });
 
-  test('create → invite → accept establishes exactly one offer/answer pair',
-      () async {
-    final bInvites = <VoiceRoom>[];
-    b.manager.incomingInvites.listen(bInvites.add);
+  test(
+    'create → invite → accept establishes exactly one offer/answer pair',
+    () async {
+      final bInvites = <VoiceRoom>[];
+      b.manager.incomingInvites.listen(bInvites.add);
 
-    final room = await a.manager.createRoom(name: 'Chat', inviteePubkeys: [pkB]);
-    await _pump();
+      final room = await a.manager.createRoom(
+        name: 'Chat',
+        inviteePubkeys: [pkB],
+      );
+      await _pump();
 
-    expect(bInvites, hasLength(1));
-    expect(bInvites.first.id, room.id);
-    expect(bInvites.first.name, 'Chat');
-    expect(bInvites.first.creatorPubkey, pkA);
+      expect(bInvites, hasLength(1));
+      expect(bInvites.first.id, room.id);
+      expect(bInvites.first.name, 'Chat');
+      expect(bInvites.first.creatorPubkey, pkA);
 
-    await b.manager.acceptInvite(room.id);
-    await _pump();
+      await b.manager.acceptInvite(room.id);
+      await _pump();
 
-    // Exactly one side is the offerer (lexicographic pubkey rule).
-    final aOfferedB = a.voice.offeredPeers.contains(pkB);
-    final bOfferedA = b.voice.offeredPeers.contains(pkA);
-    expect(aOfferedB ^ bOfferedA, isTrue,
-        reason: 'exactly one peer offers, the other answers');
-    if (aOfferedB) {
-      expect(b.voice.answeredPeers, contains(pkA));
-    } else {
-      expect(a.voice.answeredPeers, contains(pkB));
-    }
+      // Exactly one side is the offerer (lexicographic pubkey rule).
+      final aOfferedB = a.voice.offeredPeers.contains(pkB);
+      final bOfferedA = b.voice.offeredPeers.contains(pkA);
+      expect(
+        aOfferedB ^ bOfferedA,
+        isTrue,
+        reason: 'exactly one peer offers, the other answers',
+      );
+      if (aOfferedB) {
+        expect(b.voice.answeredPeers, contains(pkA));
+      } else {
+        expect(a.voice.answeredPeers, contains(pkB));
+      }
 
-    // Both rosters know each other.
-    expect(a.manager.currentState!.room.participants.map((p) => p.pubkey),
-        containsAll([pkA, pkB]));
-    expect(b.manager.currentState!.room.participants.map((p) => p.pubkey),
-        containsAll([pkA, pkB]));
+      // Both rosters know each other.
+      expect(
+        a.manager.currentState!.room.participants.map((p) => p.pubkey),
+        containsAll([pkA, pkB]),
+      );
+      expect(
+        b.manager.currentState!.room.participants.map((p) => p.pubkey),
+        containsAll([pkA, pkB]),
+      );
 
-    // Both sessions are live on the mock WebRTC engine.
-    expect(a.voice.sessionRoomId, room.id);
-    expect(b.voice.sessionRoomId, room.id);
-  });
+      // Both sessions are live on the mock WebRTC engine.
+      expect(a.voice.sessionRoomId, room.id);
+      expect(b.voice.sessionRoomId, room.id);
+    },
+  );
 
   test('createRoom rejects a non-mutual-follow invitee', () async {
     // pkX is not a follow of A.
@@ -149,7 +161,10 @@ void main() {
   });
 
   test('decline does not start a session', () async {
-    final room = await a.manager.createRoom(name: 'Chat', inviteePubkeys: [pkB]);
+    final room = await a.manager.createRoom(
+      name: 'Chat',
+      inviteePubkeys: [pkB],
+    );
     await _pump();
     await b.manager.declineInvite(room.id);
     await _pump();
@@ -158,7 +173,10 @@ void main() {
   });
 
   test('creator closing the room ends the callee session', () async {
-    final room = await a.manager.createRoom(name: 'Chat', inviteePubkeys: [pkB]);
+    final room = await a.manager.createRoom(
+      name: 'Chat',
+      inviteePubkeys: [pkB],
+    );
     await _pump();
     await b.manager.acceptInvite(room.id);
     await _pump();
@@ -168,13 +186,20 @@ void main() {
     await _pump();
 
     expect(a.manager.inCall, isFalse);
-    expect(b.manager.inCall, isFalse, reason: 'roomClose tears down the callee');
+    expect(
+      b.manager.inCall,
+      isFalse,
+      reason: 'roomClose tears down the callee',
+    );
     expect(a.voice.sessionEnded, isTrue);
     expect(b.voice.sessionEnded, isTrue);
   });
 
   test('mute broadcasts mute status to the peer', () async {
-    final room = await a.manager.createRoom(name: 'Chat', inviteePubkeys: [pkB]);
+    final room = await a.manager.createRoom(
+      name: 'Chat',
+      inviteePubkeys: [pkB],
+    );
     await _pump();
     await b.manager.acceptInvite(room.id);
     await _pump();
@@ -183,43 +208,55 @@ void main() {
     await _pump();
 
     expect(a.voice.micMuted, isTrue);
-    final bParticipantA = b.manager.currentState!.room.participants
-        .firstWhere((p) => p.pubkey == pkA);
+    final bParticipantA = b.manager.currentState!.room.participants.firstWhere(
+      (p) => p.pubkey == pkA,
+    );
     expect(bParticipantA.isMuted, isTrue);
   });
 
-  test('a peer reconnecting flips the call-wide anyReconnecting flag',
-      () async {
-    final room = await a.manager.createRoom(name: 'Chat', inviteePubkeys: [pkB]);
-    await _pump();
-    await b.manager.acceptInvite(room.id);
-    await _pump();
+  test(
+    'a peer reconnecting flips the call-wide anyReconnecting flag',
+    () async {
+      final room = await a.manager.createRoom(
+        name: 'Chat',
+        inviteePubkeys: [pkB],
+      );
+      await _pump();
+      await b.manager.acceptInvite(room.id);
+      await _pump();
 
-    expect(a.manager.currentState!.anyReconnecting, isFalse);
+      expect(a.manager.currentState!.anyReconnecting, isFalse);
 
-    a.voice.emitPeerState(pkB, ParticipantConnectionState.reconnecting);
-    await _pump();
-    expect(a.manager.currentState!.anyReconnecting, isTrue);
+      a.voice.emitPeerState(pkB, ParticipantConnectionState.reconnecting);
+      await _pump();
+      expect(a.manager.currentState!.anyReconnecting, isTrue);
 
-    a.voice.emitPeerState(pkB, ParticipantConnectionState.connected);
-    await _pump();
-    expect(a.manager.currentState!.anyReconnecting, isFalse);
-  });
+      a.voice.emitPeerState(pkB, ParticipantConnectionState.connected);
+      await _pump();
+      expect(a.manager.currentState!.anyReconnecting, isFalse);
+    },
+  );
 
-  test('connection quality from the engine propagates to the participant',
-      () async {
-    final room = await a.manager.createRoom(name: 'Chat', inviteePubkeys: [pkB]);
-    await _pump();
-    await b.manager.acceptInvite(room.id);
-    await _pump();
+  test(
+    'connection quality from the engine propagates to the participant',
+    () async {
+      final room = await a.manager.createRoom(
+        name: 'Chat',
+        inviteePubkeys: [pkB],
+      );
+      await _pump();
+      await b.manager.acceptInvite(room.id);
+      await _pump();
 
-    a.voice.emitConnectionQuality({pkB: ConnectionQuality.poor});
-    await _pump();
+      a.voice.emitConnectionQuality({pkB: ConnectionQuality.poor});
+      await _pump();
 
-    final participantB = a.manager.currentState!.room.participants
-        .firstWhere((p) => p.pubkey == pkB);
-    expect(participantB.quality, ConnectionQuality.poor);
-  });
+      final participantB = a.manager.currentState!.room.participants.firstWhere(
+        (p) => p.pubkey == pkB,
+      );
+      expect(participantB.quality, ConnectionQuality.poor);
+    },
+  );
 
   test('startRoomCall pings every member; the live mesh caps at 4', () async {
     // A chatroom of 5 (A + B,C,D,E). The text room is unbounded, but the live

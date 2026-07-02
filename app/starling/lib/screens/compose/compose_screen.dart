@@ -8,6 +8,7 @@ import '../../theme/starling_theme.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/dashed_border.dart';
 import '../../widgets/inputs.dart';
+import '../../widgets/starling_alert_dialog.dart';
 import '../../widgets/sticky_action_bar.dart';
 
 class ComposeScreen extends ConsumerStatefulWidget {
@@ -34,9 +35,28 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     super.dispose();
   }
 
-  void _close() {
+  bool get _dirty {
+    final state = ref.read(composeControllerProvider);
+    return state.caption.trim().isNotEmpty || state.photoBytes != null;
+  }
+
+  /// One discard policy for both exits: Cancel and the system back gesture
+  /// confirm before dropping a dirty draft; discard invalidates the
+  /// keepAlive provider so the draft doesn't silently survive.
+  Future<void> _close() async {
+    if (_dirty) {
+      final discard = await showStarlingConfirm(
+        context,
+        title: 'Discard post?',
+        message: 'Your photo and caption will be lost.',
+        confirmLabel: 'Discard',
+        cancelLabel: 'Keep editing',
+        destructive: true,
+      );
+      if (!discard || !mounted) return;
+    }
     ref.invalidate(composeControllerProvider);
-    context.pop();
+    if (mounted) context.pop();
   }
 
   @override
@@ -61,91 +81,104 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     });
     final state = ref.watch(composeControllerProvider);
     final controller = ref.read(composeControllerProvider.notifier);
+    final dirty = state.caption.trim().isNotEmpty || state.photoBytes != null;
 
-    return Scaffold(
-      backgroundColor: starling.colors.paper,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            // Slim title bar; the close + advance actions live in the bottom
-            // StickyActionBar so they sit within thumb reach.
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
-              child: Text(
-                'New post',
-                textAlign: TextAlign.center,
-                style: starling.typography.h3.copyWith(
-                  fontFamily: 'Fraunces',
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
+    return PopScope(
+      // Clean drafts pop straight through (and get invalidated below, same
+      // as Cancel); dirty ones are held for the "Discard post?" confirm.
+      canPop: !dirty,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) {
+          ref.invalidate(composeControllerProvider);
+          return;
+        }
+        _close();
+      },
+      child: Scaffold(
+        backgroundColor: starling.colors.paper,
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              // Slim title bar; the close + advance actions live in the bottom
+              // StickyActionBar so they sit within thumb reach.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+                child: Text(
+                  'New post',
+                  textAlign: TextAlign.center,
+                  style: starling.typography.h3.copyWith(
+                    fontFamily: 'Fraunces',
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      AspectRatio(
+                        aspectRatio: 4 / 5,
+                        child: _PhotoSlot(
+                          state: state,
+                          onGallery: controller.pickFromGallery,
+                          onCamera: controller.pickFromCamera,
+                          onClear: controller.clearPhoto,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      StarlingTextarea(
+                        controller: _captionCtrl,
+                        placeholder: 'Say something…',
+                        minLines: 3,
+                        maxLines: 8,
+                        onChanged: controller.setCaption,
+                      ),
+                      if (state.photoBytes == null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          'Add a photo to post.',
+                          textAlign: TextAlign.center,
+                          style: starling.typography.small.copyWith(
+                            color: starling.colors.stone,
+                          ),
+                        ),
+                      ],
+                      if (state.errorMessage != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          state.errorMessage!,
+                          style: starling.typography.small.copyWith(
+                            color: starling.colors.danger,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              StickyActionBar(
+                child: Row(
                   children: [
-                    AspectRatio(
-                      aspectRatio: 4 / 5,
-                      child: _PhotoSlot(
-                        state: state,
-                        onGallery: controller.pickFromGallery,
-                        onCamera: controller.pickFromCamera,
-                        onClear: controller.clearPhoto,
+                    GhostButton(label: 'Cancel', onPressed: _close),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: PrimaryButton(
+                        label: 'Next',
+                        block: true,
+                        onPressed: state.canAdvanceToPreview
+                            ? () => context.push('/compose/preview')
+                            : null,
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    StarlingTextarea(
-                      controller: _captionCtrl,
-                      placeholder: 'Say something…',
-                      minLines: 3,
-                      maxLines: 8,
-                      onChanged: controller.setCaption,
-                    ),
-                    if (state.photoBytes == null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        'Add a photo to post.',
-                        textAlign: TextAlign.center,
-                        style: starling.typography.small.copyWith(
-                          color: starling.colors.stone,
-                        ),
-                      ),
-                    ],
-                    if (state.errorMessage != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        state.errorMessage!,
-                        style: starling.typography.small.copyWith(
-                          color: starling.colors.danger,
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
-            ),
-            StickyActionBar(
-              child: Row(
-                children: [
-                  GhostButton(label: 'Cancel', onPressed: _close),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: PrimaryButton(
-                      label: 'Next',
-                      block: true,
-                      onPressed: state.canAdvanceToPreview
-                          ? () => context.push('/compose/preview')
-                          : null,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

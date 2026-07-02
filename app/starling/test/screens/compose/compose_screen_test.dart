@@ -29,16 +29,13 @@ Widget _app(ProviderContainer container) {
       GoRoute(
         path: '/compose',
         parentNavigatorKey: rootKey,
-        pageBuilder: (_, _) => const MaterialPage(
-          fullscreenDialog: true,
-          child: ComposeScreen(),
-        ),
+        pageBuilder: (_, _) =>
+            const MaterialPage(fullscreenDialog: true, child: ComposeScreen()),
         routes: [
           GoRoute(
             path: 'preview',
             parentNavigatorKey: rootKey,
-            pageBuilder: (_, _) =>
-                const MaterialPage(child: PreviewScreen()),
+            pageBuilder: (_, _) => const MaterialPage(child: PreviewScreen()),
           ),
         ],
       ),
@@ -53,7 +50,10 @@ Widget _app(ProviderContainer container) {
   );
 }
 
-Future<void> _openCompose(WidgetTester tester, ProviderContainer container) async {
+Future<void> _openCompose(
+  WidgetTester tester,
+  ProviderContainer container,
+) async {
   await tester.pumpWidget(_app(container));
   await tester.pumpAndSettle();
   // Navigate to /compose programmatically so the back stack has /home at the
@@ -63,10 +63,9 @@ Future<void> _openCompose(WidgetTester tester, ProviderContainer container) asyn
   await tester.pumpAndSettle();
 }
 
-PrimaryButton _nextButton(WidgetTester tester) =>
-    tester.widget(find.byWidgetPredicate(
-      (w) => w is PrimaryButton && w.label == 'Next',
-    ));
+PrimaryButton _nextButton(WidgetTester tester) => tester.widget(
+  find.byWidgetPredicate((w) => w is PrimaryButton && w.label == 'Next'),
+);
 
 Uint8List _tinyJpeg() {
   final image = img.Image(width: 2, height: 2);
@@ -87,34 +86,55 @@ void main() {
     ];
     for (final path in roots) {
       final src = File(path).readAsStringSync().toLowerCase();
-      expect(src.contains('end-to-end'), isFalse,
-          reason: '$path must not mention end-to-end');
-      expect(src.contains('encrypt'), isFalse,
-          reason: '$path must not mention encryption');
+      expect(
+        src.contains('end-to-end'),
+        isFalse,
+        reason: '$path must not mention end-to-end',
+      );
+      expect(
+        src.contains('encrypt'),
+        isFalse,
+        reason: '$path must not mention encryption',
+      );
     }
   });
 
-  testWidgets('Next is disabled without a photo, enabled with one',
-      (tester) async {
+  testWidgets('Next is disabled without a photo, enabled with one', (
+    tester,
+  ) async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
     await _openCompose(tester, container);
 
     expect(_nextButton(tester).onPressed, isNull);
 
-    container.read(composeControllerProvider.notifier).debugSeedState(
-          ComposeState(
-            photoBytes: _tinyJpeg(),
-            phase: ComposePhase.ready,
-          ),
+    container
+        .read(composeControllerProvider.notifier)
+        .debugSeedState(
+          ComposeState(photoBytes: _tinyJpeg(), phase: ComposePhase.ready),
         );
     await tester.pump();
 
     expect(_nextButton(tester).onPressed, isNotNull);
   });
 
-  testWidgets('tapping Cancel invalidates compose state and pops the modal',
-      (tester) async {
+  testWidgets('Cancel on a clean draft pops immediately (no confirm)', (
+    tester,
+  ) async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    await _openCompose(tester, container);
+
+    await tester.tap(find.widgetWithText(GhostButton, 'Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Discard post?'), findsNothing);
+    expect(find.text('home'), findsOneWidget);
+  });
+
+  testWidgets('Cancel on a dirty draft confirms; Discard clears and pops', (
+    tester,
+  ) async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
     await _openCompose(tester, container);
@@ -124,14 +144,60 @@ void main() {
 
     await tester.tap(find.widgetWithText(GhostButton, 'Cancel'));
     await tester.pumpAndSettle();
+    expect(find.text('Discard post?'), findsOneWidget);
+
+    await tester.tap(find.text('Discard'));
+    await tester.pumpAndSettle();
 
     expect(container.read(composeControllerProvider).caption, '');
     // Back on /home — compose is gone.
     expect(find.text('home'), findsOneWidget);
   });
 
-  testWidgets('typing into the textarea updates the caption state',
-      (tester) async {
+  testWidgets('Keep editing dismisses the confirm and preserves the draft', (
+    tester,
+  ) async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    await _openCompose(tester, container);
+
+    container.read(composeControllerProvider.notifier).setCaption('draft');
+
+    await tester.tap(find.widgetWithText(GhostButton, 'Cancel'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Keep editing'));
+    await tester.pumpAndSettle();
+
+    expect(container.read(composeControllerProvider).caption, 'draft');
+    expect(find.text('home'), findsNothing);
+  });
+
+  testWidgets('system back on a dirty draft also confirms', (tester) async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    await _openCompose(tester, container);
+
+    container.read(composeControllerProvider.notifier).setCaption('draft');
+    // Rebuild so PopScope.canPop reflects the now-dirty draft.
+    await tester.pump();
+
+    // Simulate the system back gesture/button: it lands on the root
+    // navigator as maybePop, which is what PopScope intercepts.
+    final nav = tester.state<NavigatorState>(find.byType(Navigator).first);
+    unawaited(nav.maybePop());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Discard post?'), findsOneWidget);
+
+    await tester.tap(find.text('Discard'));
+    await tester.pumpAndSettle();
+    expect(container.read(composeControllerProvider).caption, '');
+    expect(find.text('home'), findsOneWidget);
+  });
+
+  testWidgets('typing into the textarea updates the caption state', (
+    tester,
+  ) async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
     await _openCompose(tester, container);
@@ -144,18 +210,18 @@ void main() {
     );
   });
 
-  testWidgets('selected-photo state shows a clear overlay that empties bytes',
-      (tester) async {
+  testWidgets('selected-photo state shows a clear overlay that empties bytes', (
+    tester,
+  ) async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
     await _openCompose(tester, container);
 
     await tester.runAsync(() async {
-      container.read(composeControllerProvider.notifier).debugSeedState(
-            ComposeState(
-              photoBytes: _tinyJpeg(),
-              phase: ComposePhase.ready,
-            ),
+      container
+          .read(composeControllerProvider.notifier)
+          .debugSeedState(
+            ComposeState(photoBytes: _tinyJpeg(), phase: ComposePhase.ready),
           );
       await tester.pump();
       // Give Image.memory a frame to resolve the codec.

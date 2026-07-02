@@ -26,8 +26,7 @@ class _CapturingTransport implements SyncTransport {
     int? ackRotationAt,
     int? cardSeenAt,
     Uint8List? ackSig,
-  }) async =>
-      throw UnimplementedError();
+  }) async => throw UnimplementedError();
 
   @override
   Future<Envelope> fetchEnvelope(PeerConnection peer, {int? since}) async =>
@@ -48,23 +47,22 @@ class _CapturingTransport implements SyncTransport {
   }
 }
 
-Follow _follow(String pubkey) => Follow(
-      pubkey: pubkey,
-      connectionCard: '{}',
-      feedKey: Uint8List(32),
-    );
+Follow _follow(String pubkey) =>
+    Follow(pubkey: pubkey, connectionCard: '{}', feedKey: Uint8List(32));
 
 PeerConnection _peer(String pubkey) => PeerConnection(
-      pubkey: pubkey,
-      baseUrl: 'http://test.local',
-      transport: PeerTransport.lan,
-    );
+  pubkey: pubkey,
+  baseUrl: 'http://test.local',
+  transport: PeerTransport.lan,
+);
 
 /// The peer answered with an HTTP error (4xx counts toward the drop
 /// threshold; 5xx is treated as transient).
-NetworkException _httpError(int statusCode) =>
-    NetworkException('pushEnvelope failed: $statusCode', 'alice',
-        statusCode: statusCode);
+NetworkException _httpError(int statusCode) => NetworkException(
+  'pushEnvelope failed: $statusCode',
+  'alice',
+  statusCode: statusCode,
+);
 
 void main() {
   test('empty queue: returns zeroes, no transport call', () async {
@@ -82,52 +80,56 @@ void main() {
     await storage.dispose();
   });
 
-  test('happy path: all queued blobs ship as one envelope, queue clears',
-      () async {
-    final storage = MockStorageService();
-    final transport = _CapturingTransport();
-    await storage.enqueue('alice', Uint8List.fromList([1, 2, 3]));
-    await storage.enqueue('alice', Uint8List.fromList([4, 5, 6]));
-    await storage.enqueue('bob', Uint8List.fromList([7]));
+  test(
+    'happy path: all queued blobs ship as one envelope, queue clears',
+    () async {
+      final storage = MockStorageService();
+      final transport = _CapturingTransport();
+      await storage.enqueue('alice', Uint8List.fromList([1, 2, 3]));
+      await storage.enqueue('alice', Uint8List.fromList([4, 5, 6]));
+      await storage.enqueue('bob', Uint8List.fromList([7]));
 
-    final result = await drainOutboundQueueForPeer(
-      storage: storage,
-      transport: transport,
-      follow: _follow('alice'),
-      peer: _peer('alice'),
-    );
+      final result = await drainOutboundQueueForPeer(
+        storage: storage,
+        transport: transport,
+        follow: _follow('alice'),
+        peer: _peer('alice'),
+      );
 
-    expect(result.pushed, equals(2));
-    expect(transport.sent, hasLength(1));
-    expect(transport.sent.first.items, hasLength(2));
+      expect(result.pushed, equals(2));
+      expect(transport.sent, hasLength(1));
+      expect(transport.sent.first.items, hasLength(2));
 
-    expect(await storage.dequeue('alice'), isEmpty);
-    // Bob's queue is untouched.
-    expect(await storage.dequeue('bob'), hasLength(1));
-    await storage.dispose();
-  });
+      expect(await storage.dequeue('alice'), isEmpty);
+      // Bob's queue is untouched.
+      expect(await storage.dequeue('bob'), hasLength(1));
+      await storage.dispose();
+    },
+  );
 
-  test('4xx rejection increments retry; under threshold rows survive',
-      () async {
-    final storage = MockStorageService();
-    final transport = _CapturingTransport()..nextError = _httpError(401);
-    await storage.enqueue('alice', Uint8List.fromList([1]));
+  test(
+    '4xx rejection increments retry; under threshold rows survive',
+    () async {
+      final storage = MockStorageService();
+      final transport = _CapturingTransport()..nextError = _httpError(401);
+      await storage.enqueue('alice', Uint8List.fromList([1]));
 
-    final result = await drainOutboundQueueForPeer(
-      storage: storage,
-      transport: transport,
-      follow: _follow('alice'),
-      peer: _peer('alice'),
-    );
+      final result = await drainOutboundQueueForPeer(
+        storage: storage,
+        transport: transport,
+        follow: _follow('alice'),
+        peer: _peer('alice'),
+      );
 
-    expect(result.pushed, equals(0));
-    expect(result.retried, equals(1));
-    expect(result.dropped, equals(0));
-    final still = await storage.dequeue('alice');
-    expect(still, hasLength(1));
-    expect(still.first.retryCount, equals(1));
-    await storage.dispose();
-  });
+      expect(result.pushed, equals(0));
+      expect(result.retried, equals(1));
+      expect(result.dropped, equals(0));
+      final still = await storage.dequeue('alice');
+      expect(still, hasLength(1));
+      expect(still.first.retryCount, equals(1));
+      await storage.dispose();
+    },
+  );
 
   test('three 4xx rejections drop the row', () async {
     final storage = MockStorageService();
@@ -147,8 +149,7 @@ void main() {
     await storage.dispose();
   });
 
-  test(
-      'transport-level failures never increment retry — rows survive '
+  test('transport-level failures never increment retry — rows survive '
       'arbitrarily many flaps (D9)', () async {
     final storage = MockStorageService();
     final transport = _CapturingTransport();
@@ -171,48 +172,56 @@ void main() {
     await storage.dispose();
   });
 
-  test('follow-accept wrappers are left for the retry pump, not shipped',
-      () async {
-    final storage = MockStorageService();
-    final transport = _CapturingTransport();
-    // A follow-accept wrapper { url, body } shares the queue with real
-    // events keyed by the same pubkey. The drain must skip it.
-    final acceptWrapper = Uint8List.fromList(cbor.encode(<String, dynamic>{
-      'url': 'http://alice.onion:80/follow-accept',
-      'body': Uint8List.fromList([9, 9, 9]),
-    }));
-    await storage.enqueue('alice', acceptWrapper);
-    await storage.enqueue('alice', Uint8List.fromList([1, 2, 3]));
+  test(
+    'follow-accept wrappers are left for the retry pump, not shipped',
+    () async {
+      final storage = MockStorageService();
+      final transport = _CapturingTransport();
+      // A follow-accept wrapper { url, body } shares the queue with real
+      // events keyed by the same pubkey. The drain must skip it.
+      final acceptWrapper = Uint8List.fromList(
+        cbor.encode(<String, dynamic>{
+          'url': 'http://alice.onion:80/follow-accept',
+          'body': Uint8List.fromList([9, 9, 9]),
+        }),
+      );
+      await storage.enqueue('alice', acceptWrapper);
+      await storage.enqueue('alice', Uint8List.fromList([1, 2, 3]));
 
-    final result = await drainOutboundQueueForPeer(
-      storage: storage,
-      transport: transport,
-      follow: _follow('alice'),
-      peer: _peer('alice'),
-    );
+      final result = await drainOutboundQueueForPeer(
+        storage: storage,
+        transport: transport,
+        follow: _follow('alice'),
+        peer: _peer('alice'),
+      );
 
-    // Only the real event ships.
-    expect(result.pushed, equals(1));
-    expect(transport.sent, hasLength(1));
-    expect(transport.sent.first.items, hasLength(1));
-    expect(transport.sent.first.items.first.payload,
-        equals(Uint8List.fromList([1, 2, 3])));
+      // Only the real event ships.
+      expect(result.pushed, equals(1));
+      expect(transport.sent, hasLength(1));
+      expect(transport.sent.first.items, hasLength(1));
+      expect(
+        transport.sent.first.items.first.payload,
+        equals(Uint8List.fromList([1, 2, 3])),
+      );
 
-    // The accept wrapper survives, untouched, for the follow retry pump.
-    final remaining = await storage.dequeue('alice');
-    expect(remaining, hasLength(1));
-    expect(remaining.single.eventBlob, equals(acceptWrapper));
-    expect(remaining.single.retryCount, 0);
-    await storage.dispose();
-  });
+      // The accept wrapper survives, untouched, for the follow retry pump.
+      final remaining = await storage.dequeue('alice');
+      expect(remaining, hasLength(1));
+      expect(remaining.single.eventBlob, equals(acceptWrapper));
+      expect(remaining.single.retryCount, 0);
+      await storage.dispose();
+    },
+  );
 
   test('queue holding only accept wrappers drains as a no-op', () async {
     final storage = MockStorageService();
     final transport = _CapturingTransport();
-    final acceptWrapper = Uint8List.fromList(cbor.encode(<String, dynamic>{
-      'url': 'http://alice.onion:80/follow-accept',
-      'body': Uint8List.fromList([9]),
-    }));
+    final acceptWrapper = Uint8List.fromList(
+      cbor.encode(<String, dynamic>{
+        'url': 'http://alice.onion:80/follow-accept',
+        'body': Uint8List.fromList([9]),
+      }),
+    );
     await storage.enqueue('alice', acceptWrapper);
 
     final result = await drainOutboundQueueForPeer(

@@ -7,8 +7,9 @@ void main() {
     test('round-trips through CBOR', () {
       const ref = MediaRef(hash: 'abc123', mimeType: 'image/jpeg', size: 1024);
       final bytes = cbor.encode(ref.toMap());
-      final decoded =
-          MediaRef.fromMap(cbor.decode(bytes) as Map<dynamic, dynamic>);
+      final decoded = MediaRef.fromMap(
+        cbor.decode(bytes) as Map<dynamic, dynamic>,
+      );
       expect(decoded, equals(ref));
     });
 

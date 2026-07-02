@@ -167,20 +167,26 @@ void main() {
       expect(hex(digest), v['claim_digest_hex'] as String);
       final sig = crypto.sign(ownerSk, digest);
       expect(hex(sig), v['sig_hex'] as String);
-      final claimCbor = Uint8List.fromList(cbor.encode(<String, dynamic>{
-        'owner_pubkey': base64.encode(ownerPk),
-        'pairing_token': token,
-        'sig': sig,
-      }));
+      final claimCbor = Uint8List.fromList(
+        cbor.encode(<String, dynamic>{
+          'owner_pubkey': base64.encode(ownerPk),
+          'pairing_token': token,
+          'sig': sig,
+        }),
+      );
       expect(hex(claimCbor), v['claim_cbor_hex'] as String);
     });
 
     test('relay_id derivation and PairResponse decode', () {
       final v = rw['relay_id'] as Map<String, dynamic>;
-      final derived = hex(crypto.blake2b256(Uint8List.fromList([
-        ...ownerPk,
-        ...utf8.encode(v['owner_onion'] as String),
-      ])));
+      final derived = hex(
+        crypto.blake2b256(
+          Uint8List.fromList([
+            ...ownerPk,
+            ...utf8.encode(v['owner_onion'] as String),
+          ]),
+        ),
+      );
       expect(derived, v['relay_id_hex'] as String);
       // Decode the pinned Rust-shaped response the way the initiator does.
       final decoded =
@@ -216,8 +222,7 @@ void main() {
       );
       expect(hex(encrypted.toBytes()), v['cbor_hex'] as String);
       // And it round-trips through the Dart decoder.
-      final back =
-          EncryptedEvent.fromBytes(fromHex(v['cbor_hex'] as String));
+      final back = EncryptedEvent.fromBytes(fromHex(v['cbor_hex'] as String));
       expect(back.pubkey, encrypted.pubkey);
       expect(back.msgSeq, encrypted.msgSeq);
     });
@@ -227,21 +232,20 @@ void main() {
       final eventBytes = fromHex(
         (rw['encrypted_event'] as Map<String, dynamic>)['cbor_hex'] as String,
       );
-      final batch = Uint8List.fromList(cbor.encode(<String, dynamic>{
-        'items': [
-          <String, dynamic>{
-            'id': v['event_id'] as String,
-            'payload': eventBytes,
-          },
-        ],
-      }));
+      final batch = Uint8List.fromList(
+        cbor.encode(<String, dynamic>{
+          'items': [
+            <String, dynamic>{
+              'id': v['event_id'] as String,
+              'payload': eventBytes,
+            },
+          ],
+        }),
+      );
       expect(hex(batch), v['cbor_hex'] as String);
       final digest = crypto.blake2b256(batch);
       expect(hex(digest), v['owner_sig_digest_hex'] as String);
-      expect(
-        hex(crypto.sign(ownerSk, digest)),
-        v['owner_sig_hex'] as String,
-      );
+      expect(hex(crypto.sign(ownerSk, digest)), v['owner_sig_hex'] as String);
     });
 
     test('PushReceipt decode', () {
@@ -254,7 +258,8 @@ void main() {
     test('manifest page decodes through parseManifestResponse', () {
       final v = rw['manifest_page'] as Map<String, dynamic>;
       final decoded =
-          cbor.decode(fromHex(v['cbor_hex'] as String)) as Map<dynamic, dynamic>;
+          cbor.decode(fromHex(v['cbor_hex'] as String))
+              as Map<dynamic, dynamic>;
       final manifest = parseManifestResponse(
         decoded,
         toBytes: (b) => Uint8List.fromList((b as List).cast<int>()),

@@ -18,76 +18,94 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('WebRtcVoiceService', () {
-    test('startSession acquires the local stream once and is idempotent', () async {
-      final h = _Harness();
-      await h.service.startSession('room1');
-      expect(h.getUserMediaCalls, 1);
-      // Same room → no re-acquire.
-      await h.service.startSession('room1');
-      expect(h.getUserMediaCalls, 1);
-      await h.service.endSession();
-    });
+    test(
+      'startSession acquires the local stream once and is idempotent',
+      () async {
+        final h = _Harness();
+        await h.service.startSession('room1');
+        expect(h.getUserMediaCalls, 1);
+        // Same room → no re-acquire.
+        await h.service.startSession('room1');
+        expect(h.getUserMediaCalls, 1);
+        await h.service.endSession();
+      },
+    );
 
-    test('startSession applies the current mute state to acquired tracks', () async {
-      final h = _Harness();
-      // Mute before any stream exists — just records intent.
-      await h.service.setMicMuted(true);
-      await h.service.startSession('r');
-      expect(h.stream.tracks.every((t) => !t.enabled), isTrue);
-      await h.service.endSession();
-    });
+    test(
+      'startSession applies the current mute state to acquired tracks',
+      () async {
+        final h = _Harness();
+        // Mute before any stream exists — just records intent.
+        await h.service.setMicMuted(true);
+        await h.service.startSession('r');
+        expect(h.stream.tracks.every((t) => !t.enabled), isTrue);
+        await h.service.endSession();
+      },
+    );
 
-    test('createOffer creates one peer connection and attaches local tracks', () async {
-      final h = _Harness();
-      await h.service.startSession('r');
-      final offer = await h.service.createOffer('peerB');
+    test(
+      'createOffer creates one peer connection and attaches local tracks',
+      () async {
+        final h = _Harness();
+        await h.service.startSession('r');
+        final offer = await h.service.createOffer('peerB');
 
-      expect(offer['type'], 'offer');
-      expect(offer['sdp'], isNotNull);
-      expect(h.created, hasLength(1));
-      expect(h.created.single.addedTracks, hasLength(h.stream.getAudioTracks().length));
-      expect(h.created.single.setLocalCount, 1);
+        expect(offer['type'], 'offer');
+        expect(offer['sdp'], isNotNull);
+        expect(h.created, hasLength(1));
+        expect(
+          h.created.single.addedTracks,
+          hasLength(h.stream.getAudioTracks().length),
+        );
+        expect(h.created.single.setLocalCount, 1);
 
-      // A second offer to the same peer reuses the existing connection.
-      await h.service.createOffer('peerB');
-      expect(h.created, hasLength(1));
-      await h.service.endSession();
-    });
+        // A second offer to the same peer reuses the existing connection.
+        await h.service.createOffer('peerB');
+        expect(h.created, hasLength(1));
+        await h.service.endSession();
+      },
+    );
 
-    test('createAnswer applies the remote offer and returns an answer', () async {
-      final h = _Harness();
-      await h.service.startSession('r');
-      final answer = await h.service.createAnswer(
-        'peerB',
-        {'sdp': 'remote-offer', 'type': 'offer'},
-      );
+    test(
+      'createAnswer applies the remote offer and returns an answer',
+      () async {
+        final h = _Harness();
+        await h.service.startSession('r');
+        final answer = await h.service.createAnswer('peerB', {
+          'sdp': 'remote-offer',
+          'type': 'offer',
+        });
 
-      expect(answer['type'], 'answer');
-      final pc = h.created.single;
-      expect(pc.setRemoteCount, 1);
-      expect(pc.setLocalCount, 1);
-      await h.service.endSession();
-    });
+        expect(answer['type'], 'answer');
+        final pc = h.created.single;
+        expect(pc.setRemoteCount, 1);
+        expect(pc.setLocalCount, 1);
+        await h.service.endSession();
+      },
+    );
 
-    test('local ICE candidates are forwarded tagged with the peer pubkey', () async {
-      final h = _Harness();
-      await h.service.startSession('r');
-      final events = <VoiceIceCandidate>[];
-      final sub = h.service.localIceCandidates.listen(events.add);
+    test(
+      'local ICE candidates are forwarded tagged with the peer pubkey',
+      () async {
+        final h = _Harness();
+        await h.service.startSession('r');
+        final events = <VoiceIceCandidate>[];
+        final sub = h.service.localIceCandidates.listen(events.add);
 
-      await h.service.createOffer('peerB');
-      h.created.single.onIceCandidate!(RTCIceCandidate('cand:1', 'audio', 0));
-      await _flush();
+        await h.service.createOffer('peerB');
+        h.created.single.onIceCandidate!(RTCIceCandidate('cand:1', 'audio', 0));
+        await _flush();
 
-      expect(events, hasLength(1));
-      expect(events.single.peerPubkey, 'peerB');
-      expect(events.single.candidate['candidate'], 'cand:1');
-      expect(events.single.candidate['sdpMid'], 'audio');
-      expect(events.single.candidate['sdpMLineIndex'], 0);
+        expect(events, hasLength(1));
+        expect(events.single.peerPubkey, 'peerB');
+        expect(events.single.candidate['candidate'], 'cand:1');
+        expect(events.single.candidate['sdpMid'], 'audio');
+        expect(events.single.candidate['sdpMLineIndex'], 0);
 
-      await sub.cancel();
-      await h.service.endSession();
-    });
+        await sub.cancel();
+        await h.service.endSession();
+      },
+    );
 
     test('connection-state transitions map to participant states', () async {
       final table = {
@@ -144,10 +162,11 @@ void main() {
       await h.service.startSession('r');
       // Must not throw and must not create a connection.
       await h.service.setRemoteAnswer('ghost', {'sdp': 's', 'type': 'answer'});
-      await h.service.addRemoteIceCandidate(
-        'ghost',
-        {'candidate': 'c', 'sdpMid': 'a', 'sdpMLineIndex': 0},
-      );
+      await h.service.addRemoteIceCandidate('ghost', {
+        'candidate': 'c',
+        'sdpMid': 'a',
+        'sdpMLineIndex': 0,
+      });
       expect(h.created, isEmpty);
       await h.service.endSession();
     });
@@ -158,13 +177,17 @@ void main() {
       await h.service.createOffer('peerB');
       final pc = h.created.single;
 
-      await h.service.setRemoteAnswer('peerB', {'sdp': 'ans', 'type': 'answer'});
+      await h.service.setRemoteAnswer('peerB', {
+        'sdp': 'ans',
+        'type': 'answer',
+      });
       expect(pc.setRemoteCount, 1);
 
-      await h.service.addRemoteIceCandidate(
-        'peerB',
-        {'candidate': 'c', 'sdpMid': 'a', 'sdpMLineIndex': 1},
-      );
+      await h.service.addRemoteIceCandidate('peerB', {
+        'candidate': 'c',
+        'sdpMid': 'a',
+        'sdpMLineIndex': 1,
+      });
       expect(pc.addedCandidates.single.candidate, 'c');
       expect(pc.addedCandidates.single.sdpMLineIndex, 1);
       await h.service.endSession();
@@ -185,25 +208,28 @@ void main() {
       await h.service.endSession();
     });
 
-    test('endSession closes every peer, releases the stream, resets mute', () async {
-      final h = _Harness();
-      await h.service.startSession('r');
-      await h.service.createOffer('a');
-      await h.service.createOffer('b');
-      await h.service.setMicMuted(true);
+    test(
+      'endSession closes every peer, releases the stream, resets mute',
+      () async {
+        final h = _Harness();
+        await h.service.startSession('r');
+        await h.service.createOffer('a');
+        await h.service.createOffer('b');
+        await h.service.setMicMuted(true);
 
-      await h.service.endSession();
+        await h.service.endSession();
 
-      expect(h.created.every((pc) => pc.closed), isTrue);
-      expect(h.stream.disposed, isTrue);
-      expect(h.stream.tracks.every((t) => t.stopped), isTrue);
-      expect(h.service.micMuted, isFalse);
+        expect(h.created.every((pc) => pc.closed), isTrue);
+        expect(h.stream.disposed, isTrue);
+        expect(h.stream.tracks.every((t) => t.stopped), isTrue);
+        expect(h.service.micMuted, isFalse);
 
-      // A new session re-acquires the mic.
-      await h.service.startSession('r2');
-      expect(h.getUserMediaCalls, 2);
-      await h.service.endSession();
-    });
+        // A new session re-acquires the mic.
+        await h.service.startSession('r2');
+        expect(h.getUserMediaCalls, 2);
+        await h.service.endSession();
+      },
+    );
 
     test('audio-level poll surfaces the loudest stat per peer', () async {
       final h = _Harness(interval: const Duration(milliseconds: 10));
@@ -214,8 +240,9 @@ void main() {
         StatsReport('2', 'inbound-rtp', 0, {'audioLevel': 0.7}),
       ];
 
-      final levels =
-          await h.service.audioLevels.first.timeout(const Duration(seconds: 2));
+      final levels = await h.service.audioLevels.first.timeout(
+        const Duration(seconds: 2),
+      );
       expect(levels['peerB'], 0.7);
       await h.service.endSession();
     });
@@ -246,8 +273,9 @@ void main() {
           'currentRoundTripTime': 0.05,
         }),
       ];
-      final q = await h.service.connectionQuality.first
-          .timeout(const Duration(seconds: 2));
+      final q = await h.service.connectionQuality.first.timeout(
+        const Duration(seconds: 2),
+      );
       expect(q['peerB'], ConnectionQuality.good);
       await h.service.endSession();
     });
@@ -353,7 +381,7 @@ class _FakeMediaStreamTrack implements MediaStreamTrack {
 
 class _FakeMediaStream implements MediaStream {
   _FakeMediaStream([int audioTracks = 1])
-      : tracks = List.generate(audioTracks, (_) => _FakeMediaStreamTrack());
+    : tracks = List.generate(audioTracks, (_) => _FakeMediaStreamTrack());
 
   final List<_FakeMediaStreamTrack> tracks;
   bool disposed = false;
@@ -387,12 +415,14 @@ class _FakePeerConnection implements RTCPeerConnection {
   bool closed = false;
 
   @override
-  Future<RTCSessionDescription> createOffer([Map<String, dynamic>? constraints]) async =>
-      RTCSessionDescription('offer-sdp', 'offer');
+  Future<RTCSessionDescription> createOffer([
+    Map<String, dynamic>? constraints,
+  ]) async => RTCSessionDescription('offer-sdp', 'offer');
 
   @override
-  Future<RTCSessionDescription> createAnswer([Map<String, dynamic>? constraints]) async =>
-      RTCSessionDescription('answer-sdp', 'answer');
+  Future<RTCSessionDescription> createAnswer([
+    Map<String, dynamic>? constraints,
+  ]) async => RTCSessionDescription('answer-sdp', 'answer');
 
   @override
   Future<void> setLocalDescription(RTCSessionDescription description) async {
@@ -410,10 +440,14 @@ class _FakePeerConnection implements RTCPeerConnection {
   }
 
   @override
-  Future<List<StatsReport>> getStats([MediaStreamTrack? track]) async => statsReports;
+  Future<List<StatsReport>> getStats([MediaStreamTrack? track]) async =>
+      statsReports;
 
   @override
-  Future<RTCRtpSender> addTrack(MediaStreamTrack track, [MediaStream? stream]) async {
+  Future<RTCRtpSender> addTrack(
+    MediaStreamTrack track, [
+    MediaStream? stream,
+  ]) async {
     addedTracks.add(track);
     return _FakeRtpSender();
   }

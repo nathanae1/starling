@@ -75,12 +75,14 @@ void main() {
     final pubkey = crockfordBase32Encode(kp.publicKey);
     final feedKey = crypto.randomBytes(32);
     // Seed identity so DriftStorageService.saveEvent resolves isOwn=1.
-    await db.identityDao.upsertIdentity(IdentityEntriesCompanion.insert(
-      pubkey: pubkey,
-      feedKey: feedKey,
-      recoveryPhrase: const Value(null),
-      createdAt: now,
-    ));
+    await db.identityDao.upsertIdentity(
+      IdentityEntriesCompanion.insert(
+        pubkey: pubkey,
+        feedKey: feedKey,
+        recoveryPhrase: const Value(null),
+        createdAt: now,
+      ),
+    );
     final cache = FeedKeyCache()..put(pubkey, feedKey, 0);
     final clock = _FixedClock(now);
     final storage = DriftStorageService(db, clock);
@@ -90,14 +92,16 @@ void main() {
       ownPubkey: pubkey,
       ownSecretKey: kp.secretKey,
     );
-    final media = _StubMediaService(MediaProcessingResult(
-      compressedHash: 'cc' * 32,
-      compressedSize: 1234,
-      compressedMime: 'image/jpeg',
-      originalHash: 'dd' * 32,
-      originalSize: 9999,
-      originalMime: 'image/jpeg',
-    ));
+    final media = _StubMediaService(
+      MediaProcessingResult(
+        compressedHash: 'cc' * 32,
+        compressedSize: 1234,
+        compressedMime: 'image/jpeg',
+        originalHash: 'dd' * 32,
+        originalSize: 9999,
+        originalMime: 'image/jpeg',
+      ),
+    );
     final identity = Identity(
       pubkey: pubkey,
       feedKey: feedKey,
@@ -125,50 +129,52 @@ void main() {
   }
 
   group('createPost', () {
-    test('persists a kind=1 event with is_own=1 and the expected fields',
-        () async {
-      final f = await buildFixture();
-      final photo = Uint8List.fromList(List.generate(100, (i) => i));
-      final id = await f.service.createPost(
-        photoBytes: photo,
-        caption: 'hello starling',
-      );
+    test(
+      'persists a kind=1 event with is_own=1 and the expected fields',
+      () async {
+        final f = await buildFixture();
+        final photo = Uint8List.fromList(List.generate(100, (i) => i));
+        final id = await f.service.createPost(
+          photoBytes: photo,
+          caption: 'hello starling',
+        );
 
-      expect(id, isNotEmpty);
-      expect(f.media.calls, equals(1));
-      expect(f.media.lastPhoto, equals(photo));
-      // Media is encrypted with a per-message key derived from the
-      // identity's chain root + the msg_seq allocated by the publisher
-      // (0 on the first publish).
-      expect(
-        f.media.lastMsgKey,
-        equals(deriveMsgKey(f.identity.feedKey, 0, f.crypto)),
-      );
+        expect(id, isNotEmpty);
+        expect(f.media.calls, equals(1));
+        expect(f.media.lastPhoto, equals(photo));
+        // Media is encrypted with a per-message key derived from the
+        // identity's chain root + the msg_seq allocated by the publisher
+        // (0 on the first publish).
+        expect(
+          f.media.lastMsgKey,
+          equals(deriveMsgKey(f.identity.feedKey, 0, f.crypto)),
+        );
 
-      final stored = await f.storage.getEvent(id);
-      expect(stored, isNotNull);
-      expect(stored!.kind, equals(EventKind.post));
-      expect(stored.pubkey, equals(f.identity.pubkey));
-      expect(stored.createdAt, equals(f.clock.value));
-      expect(stored.ref, isNull);
-      expect(utf8.decode(stored.content), equals('hello starling'));
-      expect(stored.media.length, equals(1));
-      expect(stored.media.first.hash, equals('cc' * 32));
-      expect(stored.media.first.mimeType, equals('image/jpeg'));
-      expect(stored.media.first.size, equals(1234));
-      expect(stored.version, equals(kStarlingProtocolVersion));
-      expect(stored.extensions, isEmpty);
-      expect(stored.sig.length, equals(64));
+        final stored = await f.storage.getEvent(id);
+        expect(stored, isNotNull);
+        expect(stored!.kind, equals(EventKind.post));
+        expect(stored.pubkey, equals(f.identity.pubkey));
+        expect(stored.createdAt, equals(f.clock.value));
+        expect(stored.ref, isNull);
+        expect(utf8.decode(stored.content), equals('hello starling'));
+        expect(stored.media.length, equals(1));
+        expect(stored.media.first.hash, equals('cc' * 32));
+        expect(stored.media.first.mimeType, equals('image/jpeg'));
+        expect(stored.media.first.size, equals(1234));
+        expect(stored.version, equals(kStarlingProtocolVersion));
+        expect(stored.extensions, isEmpty);
+        expect(stored.sig.length, equals(64));
 
-      // is_own is not on the Event model (it's a storage-only column). Verify
-      // via the DAO directly.
-      final row = await f.db.eventsDao.getEvent(id);
-      expect(row!.isOwn, equals(1));
+        // is_own is not on the Event model (it's a storage-only column). Verify
+        // via the DAO directly.
+        final row = await f.db.eventsDao.getEvent(id);
+        expect(row!.isOwn, equals(1));
 
-      // Signature verifies against the owner's public key over decoded id bytes.
-      final idBytes = crockfordBase32Decode(stored.id);
-      expect(crypto.verify(f.ownPublicKey, idBytes, stored.sig), isTrue);
-    });
+        // Signature verifies against the owner's public key over decoded id bytes.
+        final idBytes = crockfordBase32Decode(stored.id);
+        expect(crypto.verify(f.ownPublicKey, idBytes, stored.sig), isTrue);
+      },
+    );
 
     test('empty caption is valid', () async {
       final f = await buildFixture();
@@ -206,10 +212,7 @@ void main() {
         identityLookup: () async => null,
       );
       expect(
-        () => service.createPost(
-          photoBytes: Uint8List(1),
-          caption: 'x',
-        ),
+        () => service.createPost(photoBytes: Uint8List(1), caption: 'x'),
         throwsA(isA<StateError>()),
       );
     });

@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../providers/identity_provider.dart';
+import '../sync/peer_reachability_provider.dart';
 import '../theme/starling_theme.dart';
 import 'media_decrypt.dart';
 
@@ -42,14 +44,25 @@ class EncryptedImage extends ConsumerStatefulWidget {
   ConsumerState<EncryptedImage> createState() => _EncryptedImageState();
 }
 
-class _EncryptedImageState extends ConsumerState<EncryptedImage> {
+class _EncryptedImageState extends ConsumerState<EncryptedImage>
+    with SingleTickerProviderStateMixin {
   Uint8List? _bytes;
   bool _missing = false;
   bool _loading = false;
 
+  // Pulses the placeholder while a fetch+decrypt is pending (30 s+ over Tor)
+  // so the tile reads as "working", not broken. Same triangle-wave pattern as
+  // SyncDot; stopped in terminal states so pumpAndSettle works in tests.
+  late final AnimationController _pulse;
+
   @override
   void initState() {
     super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    _syncPulse();
     _loadIfNeeded();
   }
 
@@ -61,7 +74,25 @@ class _EncryptedImageState extends ConsumerState<EncryptedImage> {
         _bytes = null;
         _missing = false;
       });
+      _syncPulse();
       _loadIfNeeded();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  bool get _pending => _bytes == null && !_missing;
+
+  void _syncPulse() {
+    if (_pending) {
+      if (!_pulse.isAnimating) _pulse.repeat(reverse: true);
+    } else {
+      _pulse.stop();
+      _pulse.value = 1.0;
     }
   }
 
@@ -69,6 +100,7 @@ class _EncryptedImageState extends ConsumerState<EncryptedImage> {
     final cached = _imageCache.get(widget.hash);
     if (cached != null) {
       setState(() => _bytes = cached);
+      _syncPulse();
       return;
     }
     if (_loading) return;
@@ -88,6 +120,7 @@ class _EncryptedImageState extends ConsumerState<EncryptedImage> {
         _imageCache.put(widget.hash, bytes);
         setState(() => _bytes = bytes);
       }
+      _syncPulse();
     } finally {
       _loading = false;
     }
@@ -95,6 +128,7 @@ class _EncryptedImageState extends ConsumerState<EncryptedImage> {
 
   Future<void> _retry() async {
     setState(() => _missing = false);
+    _syncPulse();
     await _loadIfNeeded();
   }
 
@@ -103,20 +137,34 @@ class _EncryptedImageState extends ConsumerState<EncryptedImage> {
     final starling = StarlingTheme.of(context);
     final radius = widget.borderRadius ?? BorderRadius.zero;
 
+    // Auto-retry when the author comes online: a failed fetch usually means
+    // "friend unreachable", and the moment that flips is exactly when a
+    // retry will succeed — no manual tap required.
+    ref.listen(peerReachabilityStateProvider, (prev, next) {
+      if (!_missing) return;
+      final wasReachable = prev?.value?[widget.pubkey]?.isReachable ?? false;
+      final isReachable = next.value?[widget.pubkey]?.isReachable ?? false;
+      if (!wasReachable && isReachable) _retry();
+    });
+
     Widget content;
     if (_bytes != null) {
       content = Image.memory(_bytes!, fit: widget.fit, gaplessPlayback: true);
     } else if (_missing) {
-      content = _PlaceholderTile(
-        background: starling.colors.linen,
-        label: 'Tap to load',
-        labelColor: starling.colors.graphite,
-        onTap: _retry,
-      );
+      content = _missingTile(starling);
     } else {
-      content = _PlaceholderTile(
-        background: starling.colors.linen,
-        labelColor: starling.colors.stone,
+      // Pending: fetch+decrypt in flight. Subtle pulse so it reads as
+      // working, not as a dead tile.
+      content = AnimatedBuilder(
+        animation: _pulse,
+        builder: (context, child) {
+          final tri = 1 - (1 - 2 * _pulse.value).abs();
+          return Opacity(opacity: 0.55 + 0.45 * tri, child: child);
+        },
+        child: _PlaceholderTile(
+          background: starling.colors.linen,
+          labelColor: starling.colors.stone,
+        ),
       );
     }
 
@@ -126,6 +174,41 @@ class _EncryptedImageState extends ConsumerState<EncryptedImage> {
       return AspectRatio(aspectRatio: widget.aspectRatio!, child: clipped);
     }
     return clipped;
+  }
+
+  /// Terminal-failure tile with cause-differentiated copy: legacy rows can
+  /// never decrypt (nothing actionable), an unreachable author means "wait
+  /// for them" (auto-retry handles recovery), anything else is worth a tap.
+  Widget _missingTile(StarlingTheme starling) {
+    if (widget.msgSeq == null) {
+      // Pre-v9 row without a msg_seq — no key can be derived, ever.
+      return _PlaceholderTile(
+        background: starling.colors.linen,
+        label: 'Photo unavailable',
+        labelColor: starling.colors.stone,
+      );
+    }
+    final isOwn =
+        ref.watch(identityControllerProvider).value?.pubkey == widget.pubkey;
+    final authorReachable =
+        ref
+            .watch(peerReachabilityStateProvider)
+            .value?[widget.pubkey]
+            ?.isReachable ??
+        false;
+    if (!isOwn && !authorReachable) {
+      return _PlaceholderTile(
+        background: starling.colors.linen,
+        label: 'Photo will load when your friend is next online',
+        labelColor: starling.colors.stone,
+      );
+    }
+    return _PlaceholderTile(
+      background: starling.colors.linen,
+      label: 'Tap to retry',
+      labelColor: starling.colors.graphite,
+      onTap: _retry,
+    );
   }
 }
 
@@ -149,13 +232,17 @@ class _PlaceholderTile extends StatelessWidget {
       alignment: Alignment.center,
       child: label == null
           ? null
-          : Text(
-              label!,
-              style: TextStyle(
-                color: labelColor,
-                fontSize: 13,
-                fontFamily: 'IBMPlexSans',
-                fontWeight: FontWeight.w500,
+          : Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                label!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: labelColor,
+                  fontSize: 13,
+                  fontFamily: 'IBMPlexSans',
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
     );

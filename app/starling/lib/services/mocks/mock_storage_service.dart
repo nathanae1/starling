@@ -27,6 +27,13 @@ class MockStorageService implements StorageService {
       StreamController<List<FollowRequest>>.broadcast();
   final StreamController<List<FollowRequest>> _outboundController =
       StreamController<List<FollowRequest>>.broadcast();
+  // Change signal for event writes: watch* event streams recompute their own
+  // filtered snapshot per tick (feed vs by-ref vs profile all filter
+  // differently, so a single "something changed" pulse is simpler than one
+  // controller per query shape — mirrors how drift streams key off table
+  // writes).
+  final StreamController<void> _eventsChangedController =
+      StreamController<void>.broadcast();
 
   List<Follow> _snapshotFollows() =>
       _follows.values.where((f) => f.status == 'active').toList();
@@ -43,6 +50,7 @@ class MockStorageService implements StorageService {
   }
 
   void _emitOutbound() => _outboundController.add(_snapshotOutbound());
+  void _emitEventsChanged() => _eventsChangedController.add(null);
 
   /// Releases broadcast controllers. Call from tearDown when the test
   /// instance is no longer needed.
@@ -55,6 +63,7 @@ class MockStorageService implements StorageService {
     unawaited(_inboundController.close());
     unawaited(_inboundFollowersController.close());
     unawaited(_outboundController.close());
+    unawaited(_eventsChangedController.close());
   }
 
   // --- Identity ---
@@ -191,6 +200,7 @@ class MockStorageService implements StorageService {
   @override
   Future<void> saveEvent(Event event) async {
     _events[event.id] = event;
+    _emitEventsChanged();
   }
 
   @override
@@ -200,6 +210,7 @@ class MockStorageService implements StorageService {
   ) async {
     _events[event.id] = event;
     _encryptedPayloads[event.id] = encryptedPayload;
+    _emitEventsChanged();
   }
 
   @override
@@ -213,12 +224,14 @@ class MockStorageService implements StorageService {
   ) async {
     _events[event.id] = event;
     _encryptedPayloads[event.id] = encryptedPayload;
+    _emitEventsChanged();
   }
 
   @override
   Future<void> deleteEvent(String id) async {
     _events.remove(id);
     _encryptedPayloads.remove(id);
+    _emitEventsChanged();
   }
 
   @override
@@ -272,6 +285,30 @@ class MockStorageService implements StorageService {
     }
     results.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     return results;
+  }
+
+  @override
+  Stream<List<Event>> watchFeedEvents({int? limit}) async* {
+    yield await getFeedEvents(limit: limit);
+    await for (final _ in _eventsChangedController.stream) {
+      yield await getFeedEvents(limit: limit);
+    }
+  }
+
+  @override
+  Stream<List<Event>> watchProfilePosts(String pubkey, {int? limit}) async* {
+    yield await getProfilePosts(pubkey, limit: limit);
+    await for (final _ in _eventsChangedController.stream) {
+      yield await getProfilePosts(pubkey, limit: limit);
+    }
+  }
+
+  @override
+  Stream<List<Event>> watchEventsByRef(String refId, {EventKind? kind}) async* {
+    yield await getEventsByRef(refId, kind: kind);
+    await for (final _ in _eventsChangedController.stream) {
+      yield await getEventsByRef(refId, kind: kind);
+    }
   }
 
   @override

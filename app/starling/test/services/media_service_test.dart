@@ -96,29 +96,35 @@ void main() {
     expect(decoded.height, 300);
   });
 
-  test('hash in MediaRef matches BLAKE2b-256 of decrypted compressed bytes',
-      () async {
-    final src = _makePng(600, 400);
-    final result = await media.processAndStoreOwnPhoto(
-      photoBytes: src,
-      msgKey: feedKey,
-    );
-    final plaintext = await media.readPlaintext(result.compressedHash, feedKey);
-    final rehash = _hex(crypto.blake2b256(plaintext!));
-    expect(rehash, equals(result.compressedHash));
-  });
+  test(
+    'hash in MediaRef matches BLAKE2b-256 of decrypted compressed bytes',
+    () async {
+      final src = _makePng(600, 400);
+      final result = await media.processAndStoreOwnPhoto(
+        photoBytes: src,
+        msgKey: feedKey,
+      );
+      final plaintext = await media.readPlaintext(
+        result.compressedHash,
+        feedKey,
+      );
+      final rehash = _hex(crypto.blake2b256(plaintext!));
+      expect(rehash, equals(result.compressedHash));
+    },
+  );
 
-  test('writes encrypted blobs to sharded paths and no .tmp remains',
-      () async {
+  test('writes encrypted blobs to sharded paths and no .tmp remains', () async {
     final src = _makePng(500, 500);
     final result = await media.processAndStoreOwnPhoto(
       photoBytes: src,
       msgKey: feedKey,
     );
-    final compressedFile =
-        File('${tmp.path}/${mediaRelativePath(result.compressedHash)}');
-    final originalFile =
-        File('${tmp.path}/${mediaRelativePath(result.originalHash)}');
+    final compressedFile = File(
+      '${tmp.path}/${mediaRelativePath(result.compressedHash)}',
+    );
+    final originalFile = File(
+      '${tmp.path}/${mediaRelativePath(result.originalHash)}',
+    );
     expect(compressedFile.existsSync(), isTrue);
     expect(originalFile.existsSync(), isTrue);
     expect(File('${compressedFile.path}.tmp').existsSync(), isFalse);
@@ -135,7 +141,10 @@ void main() {
     final originalRow = await storage.getMedia(result.originalHash);
     expect(compressedRow, isNotNull);
     expect(originalRow, isNotNull);
-    expect(compressedRow!.path, equals(mediaRelativePath(result.compressedHash)));
+    expect(
+      compressedRow!.path,
+      equals(mediaRelativePath(result.compressedHash)),
+    );
     expect(compressedRow.lastAccessed, equals(1_700_000_000));
     expect(originalRow!.lastAccessed, equals(1_700_000_000));
     // Encrypted size = nonce (24) + ciphertext+tag (plaintext + 16).
@@ -168,8 +177,7 @@ void main() {
     expect(r2.originalHash, equals(r1.originalHash));
     // Capture the ciphertext (nonce is the first 24 bytes). Second write
     // uses a fresh nonce because encryptMedia pulls random bytes per call.
-    final f =
-        File('${tmp.path}/${mediaRelativePath(r2.compressedHash)}');
+    final f = File('${tmp.path}/${mediaRelativePath(r2.compressedHash)}');
     // The final on-disk bytes reflect the *second* write, so we can't
     // compare two ciphertexts directly here; instead verify the file bytes
     // decrypt back to the plaintext.

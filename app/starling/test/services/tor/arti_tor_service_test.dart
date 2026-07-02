@@ -35,8 +35,11 @@ void main() {
           await Future<void>.delayed(const Duration(milliseconds: 500));
         }
         final status = svc.getStatus();
-        expect(status.isReady, isTrue,
-            reason: 'Arti did not finish bootstrapping within 60s');
+        expect(
+          status.isReady,
+          isTrue,
+          reason: 'Arti did not finish bootstrapping within 60s',
+        );
         expect(status.bootstrapPercent, 100);
 
         // Publish onion service. The on-device HTTP server isn't running
@@ -59,13 +62,30 @@ void main() {
     timeout: const Timeout(Duration(minutes: 2)),
   );
 
-  test('keypair survives a shutdown / re-init cycle', () async {
-    final supportDir = await getApplicationSupportDirectory();
-    final dataDir = Directory('${supportDir.path}/tor-test')
-      ..createSync(recursive: true);
+  test(
+    'keypair survives a shutdown / re-init cycle',
+    () async {
+      final supportDir = await getApplicationSupportDirectory();
+      final dataDir = Directory('${supportDir.path}/tor-test')
+        ..createSync(recursive: true);
 
-    String? first;
-    {
+      String? first;
+      {
+        final svc = ArtiTorService();
+        try {
+          await svc.init(dataDir.path);
+          final deadline = DateTime.now().add(const Duration(seconds: 60));
+          while (!svc.getStatus().isReady &&
+              DateTime.now().isBefore(deadline)) {
+            await Future<void>.delayed(const Duration(milliseconds: 500));
+          }
+          first = await svc.createOnionService(12345);
+        } finally {
+          await svc.shutdown();
+        }
+      }
+      expect(first, isNotNull);
+
       final svc = ArtiTorService();
       try {
         await svc.init(dataDir.path);
@@ -73,26 +93,13 @@ void main() {
         while (!svc.getStatus().isReady && DateTime.now().isBefore(deadline)) {
           await Future<void>.delayed(const Duration(milliseconds: 500));
         }
-        first = await svc.createOnionService(12345);
+        final second = await svc.createOnionService(12345);
+        expect(second, first);
       } finally {
         await svc.shutdown();
       }
-    }
-    expect(first, isNotNull);
-
-    final svc = ArtiTorService();
-    try {
-      await svc.init(dataDir.path);
-      final deadline = DateTime.now().add(const Duration(seconds: 60));
-      while (!svc.getStatus().isReady && DateTime.now().isBefore(deadline)) {
-        await Future<void>.delayed(const Duration(milliseconds: 500));
-      }
-      final second = await svc.createOnionService(12345);
-      expect(second, first);
-    } finally {
-      await svc.shutdown();
-    }
-  },
-      skip: _enabled ? false : 'set STARLING_REAL_TOR=1 to run',
-      timeout: const Timeout(Duration(minutes: 4)));
+    },
+    skip: _enabled ? false : 'set STARLING_REAL_TOR=1 to run',
+    timeout: const Timeout(Duration(minutes: 4)),
+  );
 }

@@ -106,8 +106,9 @@ void main() {
       contentKey: contentKey,
       identityLookup: () async => null,
     );
-    final res =
-        await handler(Request('GET', Uri.parse('http://localhost/events')));
+    final res = await handler(
+      Request('GET', Uri.parse('http://localhost/events')),
+    );
     expect(res.statusCode, 503);
   });
 }

@@ -1,4 +1,3 @@
-
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:starling/services/storage/database.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,13 +13,15 @@ void main() {
     await db.close();
   });
 
-  FollowEntriesCompanion makeFollow(String pubkey, {String status = 'active'}) =>
-      FollowEntriesCompanion.insert(
-        pubkey: pubkey,
-        connectionCard: '{"pubkey":"$pubkey","endpoints":[]}',
-        feedKey: Uint8List.fromList(List.filled(32, 0xAA)),
-        status: Value(status),
-      );
+  FollowEntriesCompanion makeFollow(
+    String pubkey, {
+    String status = 'active',
+  }) => FollowEntriesCompanion.insert(
+    pubkey: pubkey,
+    connectionCard: '{"pubkey":"$pubkey","endpoints":[]}',
+    feedKey: Uint8List.fromList(List.filled(32, 0xAA)),
+    status: Value(status),
+  );
 
   test('saves and retrieves follow', () async {
     await db.followsDao.upsertFollow(makeFollow('pk-1'));

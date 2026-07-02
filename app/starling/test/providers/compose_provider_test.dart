@@ -58,15 +58,17 @@ void main() {
     expect(picking.canAdvanceToPreview, isFalse);
   });
 
-  test('markPublishFailed drops phase back to ready and records the message',
-      () {
-    final container = ProviderContainer();
-    addTearDown(container.dispose);
-    final c = container.read(composeControllerProvider.notifier);
-    c.markPublishing();
-    c.markPublishFailed('nope');
-    final s = container.read(composeControllerProvider);
-    expect(s.phase, ComposePhase.ready);
-    expect(s.errorMessage, 'nope');
-  });
+  test(
+    'markPublishFailed drops phase back to ready and records the message',
+    () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final c = container.read(composeControllerProvider.notifier);
+      c.markPublishing();
+      c.markPublishFailed('nope');
+      final s = container.read(composeControllerProvider);
+      expect(s.phase, ComposePhase.ready);
+      expect(s.errorMessage, 'nope');
+    },
+  );
 }

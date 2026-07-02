@@ -27,28 +27,29 @@ Event _profileEvent({
   required String name,
   String? avatarHash,
   int? msgSeq,
-}) =>
-    Event(
-      version: '2026-04-28',
-      id: id,
-      pubkey: pubkey,
-      createdAt: createdAt,
-      kind: EventKind.profile,
-      ref: null,
-      content: encodeProfileContent(name: name, avatarHash: avatarHash),
-      media: const [],
-      sig: Uint8List(64),
-      msgSeq: msgSeq,
-    );
+}) => Event(
+  version: '2026-04-28',
+  id: id,
+  pubkey: pubkey,
+  createdAt: createdAt,
+  kind: EventKind.profile,
+  ref: null,
+  content: encodeProfileContent(name: name, avatarHash: avatarHash),
+  media: const [],
+  sig: Uint8List(64),
+  msgSeq: msgSeq,
+);
 
 Future<DriftStorageService> _storageWithIdentity(AppDatabase db) async {
   final storage = DriftStorageService(db, const _FixedClock(1000));
-  await db.identityDao.upsertIdentity(IdentityEntriesCompanion.insert(
-    pubkey: 'me',
-    feedKey: Uint8List(32),
-    recoveryPhrase: const Value(null),
-    createdAt: 1000,
-  ));
+  await db.identityDao.upsertIdentity(
+    IdentityEntriesCompanion.insert(
+      pubkey: 'me',
+      feedKey: Uint8List(32),
+      recoveryPhrase: const Value(null),
+      createdAt: 1000,
+    ),
+  );
   return storage;
 }
 
@@ -63,21 +64,32 @@ ProviderContainer _container(StorageService storage) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('ownProfile reads the latest kind=2 by created_at (with msg_seq)',
-      () async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
-    final storage = await _storageWithIdentity(db);
-    await storage
-        .saveEvent(_profileEvent(id: 'p1', pubkey: 'me', createdAt: 100, name: 'Old'));
-    await storage.saveEvent(_profileEvent(
-        id: 'p2', pubkey: 'me', createdAt: 200, name: 'New', avatarHash: 'h', msgSeq: 5));
+  test(
+    'ownProfile reads the latest kind=2 by created_at (with msg_seq)',
+    () async {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      final storage = await _storageWithIdentity(db);
+      await storage.saveEvent(
+        _profileEvent(id: 'p1', pubkey: 'me', createdAt: 100, name: 'Old'),
+      );
+      await storage.saveEvent(
+        _profileEvent(
+          id: 'p2',
+          pubkey: 'me',
+          createdAt: 200,
+          name: 'New',
+          avatarHash: 'h',
+          msgSeq: 5,
+        ),
+      );
 
-    final snap = await _container(storage).read(ownProfileProvider.future);
-    expect(snap.displayName, 'New');
-    expect(snap.avatarHash, 'h');
-    expect(snap.avatarMsgSeq, 5);
-  });
+      final snap = await _container(storage).read(ownProfileProvider.future);
+      expect(snap.displayName, 'New');
+      expect(snap.avatarHash, 'h');
+      expect(snap.avatarMsgSeq, 5);
+    },
+  );
 
   test('ownProfile falls back to "You" when no kind=2 exists', () async {
     final db = AppDatabase.memory();
@@ -93,25 +105,37 @@ void main() {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     final storage = await _storageWithIdentity(db);
-    await storage.saveEvent(_profileEvent(
-        id: 'b1', pubkey: 'bob', createdAt: 300, name: 'Bob', avatarHash: 'bh', msgSeq: 2));
+    await storage.saveEvent(
+      _profileEvent(
+        id: 'b1',
+        pubkey: 'bob',
+        createdAt: 300,
+        name: 'Bob',
+        avatarHash: 'bh',
+        msgSeq: 2,
+      ),
+    );
 
-    final snap =
-        await _container(storage).read(followProfileProvider('bob').future);
+    final snap = await _container(
+      storage,
+    ).read(followProfileProvider('bob').future);
     expect(snap.displayName, 'Bob');
     expect(snap.avatarHash, 'bh');
     expect(snap.avatarMsgSeq, 2);
   });
 
-  test('followProfile falls back to a short hash when friend has no kind=2',
-      () async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
-    final storage = await _storageWithIdentity(db);
+  test(
+    'followProfile falls back to a short hash when friend has no kind=2',
+    () async {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      final storage = await _storageWithIdentity(db);
 
-    final snap = await _container(storage)
-        .read(followProfileProvider('bobpubkey00001234').future);
-    expect(snap.displayName, contains('…'));
-    expect(snap.avatarHash, isNull);
-  });
+      final snap = await _container(
+        storage,
+      ).read(followProfileProvider('bobpubkey00001234').future);
+      expect(snap.displayName, contains('…'));
+      expect(snap.avatarHash, isNull);
+    },
+  );
 }

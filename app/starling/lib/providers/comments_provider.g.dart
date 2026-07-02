@@ -16,6 +16,10 @@ part of 'comments_provider.dart';
 /// Storage holds every received comment regardless of follow status — the
 /// filter is at the read layer so following someone retroactively reveals
 /// their old comments without a backfill.
+///
+/// Plan 18 C1: reactive — an inbound comment (sync pull or push) re-emits
+/// without any invalidation. Tombstone writes also re-fire the stream (the
+/// storage watch is table-granular), so deletes disappear live too.
 
 @ProviderFor(comments)
 final commentsProvider = CommentsFamily._();
@@ -28,15 +32,19 @@ final commentsProvider = CommentsFamily._();
 /// Storage holds every received comment regardless of follow status — the
 /// filter is at the read layer so following someone retroactively reveals
 /// their old comments without a backfill.
+///
+/// Plan 18 C1: reactive — an inbound comment (sync pull or push) re-emits
+/// without any invalidation. Tombstone writes also re-fire the stream (the
+/// storage watch is table-granular), so deletes disappear live too.
 
 final class CommentsProvider
     extends
         $FunctionalProvider<
           AsyncValue<List<Event>>,
           List<Event>,
-          FutureOr<List<Event>>
+          Stream<List<Event>>
         >
-    with $FutureModifier<List<Event>>, $FutureProvider<List<Event>> {
+    with $FutureModifier<List<Event>>, $StreamProvider<List<Event>> {
   /// Comments (kind=4) on the post identified by [postId], ordered ASC by
   /// `created_at`, filtered to authors the local viewer follows or is
   /// themselves. Tombstoned comments (kind=6 referencing the comment id by
@@ -45,6 +53,10 @@ final class CommentsProvider
   /// Storage holds every received comment regardless of follow status — the
   /// filter is at the read layer so following someone retroactively reveals
   /// their old comments without a backfill.
+  ///
+  /// Plan 18 C1: reactive — an inbound comment (sync pull or push) re-emits
+  /// without any invalidation. Tombstone writes also re-fire the stream (the
+  /// storage watch is table-granular), so deletes disappear live too.
   CommentsProvider._({
     required CommentsFamily super.from,
     required String super.argument,
@@ -68,12 +80,12 @@ final class CommentsProvider
 
   @$internal
   @override
-  $FutureProviderElement<List<Event>> $createElement(
+  $StreamProviderElement<List<Event>> $createElement(
     $ProviderPointer pointer,
-  ) => $FutureProviderElement(pointer);
+  ) => $StreamProviderElement(pointer);
 
   @override
-  FutureOr<List<Event>> create(Ref ref) {
+  Stream<List<Event>> create(Ref ref) {
     final argument = this.argument as String;
     return comments(ref, argument);
   }
@@ -89,7 +101,7 @@ final class CommentsProvider
   }
 }
 
-String _$commentsHash() => r'0cbcea7977e1fb16c30499ed25ff9c4f1d030595';
+String _$commentsHash() => r'c1584c9e49f5c78179ec94d0d3ae123f49399fd3';
 
 /// Comments (kind=4) on the post identified by [postId], ordered ASC by
 /// `created_at`, filtered to authors the local viewer follows or is
@@ -99,9 +111,13 @@ String _$commentsHash() => r'0cbcea7977e1fb16c30499ed25ff9c4f1d030595';
 /// Storage holds every received comment regardless of follow status — the
 /// filter is at the read layer so following someone retroactively reveals
 /// their old comments without a backfill.
+///
+/// Plan 18 C1: reactive — an inbound comment (sync pull or push) re-emits
+/// without any invalidation. Tombstone writes also re-fire the stream (the
+/// storage watch is table-granular), so deletes disappear live too.
 
 final class CommentsFamily extends $Family
-    with $FunctionalFamilyOverride<FutureOr<List<Event>>, String> {
+    with $FunctionalFamilyOverride<Stream<List<Event>>, String> {
   CommentsFamily._()
     : super(
         retry: null,
@@ -119,6 +135,10 @@ final class CommentsFamily extends $Family
   /// Storage holds every received comment regardless of follow status — the
   /// filter is at the read layer so following someone retroactively reveals
   /// their old comments without a backfill.
+  ///
+  /// Plan 18 C1: reactive — an inbound comment (sync pull or push) re-emits
+  /// without any invalidation. Tombstone writes also re-fire the stream (the
+  /// storage watch is table-granular), so deletes disappear live too.
 
   CommentsProvider call(String postId) =>
       CommentsProvider._(argument: postId, from: this);

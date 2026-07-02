@@ -45,10 +45,10 @@ void main() {
 
   group('follows', () {
     Follow makeFollow(String pk) => Follow(
-          pubkey: pk,
-          connectionCard: '{"pubkey":"$pk"}',
-          feedKey: Uint8List.fromList(List.filled(32, 0xBB)),
-        );
+      pubkey: pk,
+      connectionCard: '{"pubkey":"$pk"}',
+      feedKey: Uint8List.fromList(List.filled(32, 0xBB)),
+    );
 
     test('CRUD operations', () async {
       await service.saveFollow(makeFollow('f1'));
@@ -72,19 +72,20 @@ void main() {
   });
 
   group('events', () {
-    Event makeEvent(String id, {String pubkey = 'author', int createdAt = 1000}) =>
-        Event(
-          version: '2026-03-24',
-          id: id,
-          pubkey: pubkey,
-          createdAt: createdAt,
-          kind: EventKind.post,
-          content: Uint8List.fromList([72, 101, 108, 108, 111]),
-          media: const [
-            MediaRef(hash: 'h1', mimeType: 'image/jpeg', size: 1024),
-          ],
-          sig: Uint8List.fromList(List.filled(64, 0xFF)),
-        );
+    Event makeEvent(
+      String id, {
+      String pubkey = 'author',
+      int createdAt = 1000,
+    }) => Event(
+      version: '2026-03-24',
+      id: id,
+      pubkey: pubkey,
+      createdAt: createdAt,
+      kind: EventKind.post,
+      content: Uint8List.fromList([72, 101, 108, 108, 111]),
+      media: const [MediaRef(hash: 'h1', mimeType: 'image/jpeg', size: 1024)],
+      sig: Uint8List.fromList(List.filled(64, 0xFF)),
+    );
 
     test('save and get', () async {
       await service.saveEvent(makeEvent('e1'));
@@ -97,16 +98,12 @@ void main() {
     });
 
     test('getFeedEvents includes own and followed', () async {
-      await service.saveIdentity(Identity(
-        pubkey: 'me',
-        feedKey: Uint8List(32),
-        createdAt: 1,
-      ));
-      await service.saveFollow(Follow(
-        pubkey: 'friend',
-        connectionCard: '{}',
-        feedKey: Uint8List(32),
-      ));
+      await service.saveIdentity(
+        Identity(pubkey: 'me', feedKey: Uint8List(32), createdAt: 1),
+      );
+      await service.saveFollow(
+        Follow(pubkey: 'friend', connectionCard: '{}', feedKey: Uint8List(32)),
+      );
 
       await service.saveEvent(makeEvent('e1', pubkey: 'me'));
       await service.saveEvent(makeEvent('e2', pubkey: 'friend'));
@@ -143,12 +140,14 @@ void main() {
 
   group('follow requests', () {
     test('inbound request lifecycle', () async {
-      await service.saveInboundRequest(FollowRequest(
-        pubkey: 'req-1',
-        payload: Uint8List.fromList([1, 2, 3]),
-        createdAt: 1000,
-        requestTimestamp: 990,
-      ));
+      await service.saveInboundRequest(
+        FollowRequest(
+          pubkey: 'req-1',
+          payload: Uint8List.fromList([1, 2, 3]),
+          createdAt: 1000,
+          requestTimestamp: 990,
+        ),
+      );
 
       expect(await service.getInboundRequests(), hasLength(1));
 
@@ -157,14 +156,14 @@ void main() {
     });
 
     test('outbound request lifecycle', () async {
-      await service.saveOutboundRequest(FollowRequest(
-        pubkey: 'target-1',
-        payload: Uint8List.fromList(
-          '{"pubkey":"target-1"}'.codeUnits,
+      await service.saveOutboundRequest(
+        FollowRequest(
+          pubkey: 'target-1',
+          payload: Uint8List.fromList('{"pubkey":"target-1"}'.codeUnits),
+          createdAt: 2000,
+          requestTimestamp: 2000,
         ),
-        createdAt: 2000,
-        requestTimestamp: 2000,
-      ));
+      );
 
       final outbound = await service.getOutboundRequests();
       expect(outbound, hasLength(1));
@@ -196,17 +195,16 @@ void main() {
       int createdAt = 1000,
       EventKind kind = EventKind.post,
       String? ref,
-    }) =>
-        Event(
-          version: '2026-03-24',
-          id: id,
-          pubkey: pubkey,
-          createdAt: createdAt,
-          kind: kind,
-          ref: ref,
-          content: Uint8List.fromList([0]),
-          sig: Uint8List.fromList(List.filled(64, 0)),
-        );
+    }) => Event(
+      version: '2026-03-24',
+      id: id,
+      pubkey: pubkey,
+      createdAt: createdAt,
+      kind: kind,
+      ref: ref,
+      content: Uint8List.fromList([0]),
+      sig: Uint8List.fromList(List.filled(64, 0)),
+    );
 
     test('setEventSaved round-trips', () async {
       await service.saveEvent(makePost('e1'));
@@ -228,9 +226,12 @@ void main() {
       // Re-save the same event id (different content/sig would still be the
       // same drift upsert path).
       await service.saveEvent(makePost('e1'));
-      expect(await service.isEventSaved('e1'), isTrue,
-          reason:
-              'is_saved column was preserved across drift upsert (companion omits the column)');
+      expect(
+        await service.isEventSaved('e1'),
+        isTrue,
+        reason:
+            'is_saved column was preserved across drift upsert (companion omits the column)',
+      );
     });
 
     test('setEventLastViewed updates the column', () async {
@@ -256,57 +257,49 @@ void main() {
       await service.saveEvent(makePost('e1', createdAt: 1000));
       await service.saveEvent(makePost('e2', createdAt: 2000));
       // Tombstone for e1 from same author.
-      await service.saveEvent(makePost(
-        'd1',
-        createdAt: 3000,
-        kind: EventKind.delete,
-        ref: 'e1',
-      ));
+      await service.saveEvent(
+        makePost('d1', createdAt: 3000, kind: EventKind.delete, ref: 'e1'),
+      );
 
       final posts = await service.getProfilePosts('me');
-      expect(posts.map((e) => e.id), equals(['e2']),
-          reason: 'e1 should be filtered out by its kind=6 tombstone');
+      expect(
+        posts.map((e) => e.id),
+        equals(['e2']),
+        reason: 'e1 should be filtered out by its kind=6 tombstone',
+      );
     });
 
     test('getFeedEvents filters kind!=1 and tombstones', () async {
-      await service.saveIdentity(Identity(
-        pubkey: 'me',
-        feedKey: Uint8List(32),
-        createdAt: 1,
-      ));
+      await service.saveIdentity(
+        Identity(pubkey: 'me', feedKey: Uint8List(32), createdAt: 1),
+      );
       await service.saveEvent(makePost('p1', createdAt: 1000));
-      await service.saveEvent(makePost(
-        'profile',
-        createdAt: 1500,
-        kind: EventKind.profile,
-      ));
-      await service.saveEvent(makePost(
-        'd1',
-        createdAt: 2000,
-        kind: EventKind.delete,
-        ref: 'p1',
-      ));
+      await service.saveEvent(
+        makePost('profile', createdAt: 1500, kind: EventKind.profile),
+      );
+      await service.saveEvent(
+        makePost('d1', createdAt: 2000, kind: EventKind.delete, ref: 'p1'),
+      );
       await service.saveEvent(makePost('p2', createdAt: 2500));
 
       final feed = await service.getFeedEvents();
-      expect(feed.map((e) => e.id), equals(['p2']),
-          reason:
-              'kind=2 profile events excluded; kind=1 p1 excluded by tombstone d1; only kind=1 p2 remains');
+      expect(
+        feed.map((e) => e.id),
+        equals(['p2']),
+        reason:
+            'kind=2 profile events excluded; kind=1 p1 excluded by tombstone d1; only kind=1 p2 remains',
+      );
     });
 
     test('evictOldEvents keeps is_saved=1 events even when old', () async {
       // Note: is_own only flips when identity matches author. No identity
       // here, so is_own=0 — exactly the path retention targets.
-      await service.saveEvent(makePost(
-        'old-post',
-        pubkey: 'someone-else',
-        createdAt: 1,
-      ));
-      await service.saveEvent(makePost(
-        'saved-post',
-        pubkey: 'someone-else',
-        createdAt: 1,
-      ));
+      await service.saveEvent(
+        makePost('old-post', pubkey: 'someone-else', createdAt: 1),
+      );
+      await service.saveEvent(
+        makePost('saved-post', pubkey: 'someone-else', createdAt: 1),
+      );
       await service.setEventSaved('saved-post', true);
 
       // Advance the shared mock clock far enough that 'old-post' is past
@@ -318,8 +311,11 @@ void main() {
         7 * 86400, // 7 day grace
       );
 
-      expect(removed, equals(1),
-          reason: 'unsaved old non-own event evicted; saved one kept');
+      expect(
+        removed,
+        equals(1),
+        reason: 'unsaved old non-own event evicted; saved one kept',
+      );
       expect(await service.getEvent('saved-post'), isNotNull);
       expect(await service.getEvent('old-post'), isNull);
     });

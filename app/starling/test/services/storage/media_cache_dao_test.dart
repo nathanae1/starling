@@ -16,13 +16,12 @@ void main() {
     String hash, {
     int size = 1000,
     int lastAccessed = 1000,
-  }) =>
-      MediaCacheEntriesCompanion.insert(
-        hash: hash,
-        path: '/media/$hash',
-        size: size,
-        lastAccessed: lastAccessed,
-      );
+  }) => MediaCacheEntriesCompanion.insert(
+    hash: hash,
+    path: '/media/$hash',
+    size: size,
+    lastAccessed: lastAccessed,
+  );
 
   test('saves and retrieves media', () async {
     await db.mediaCacheDao.upsertMedia(makeMedia('h1'));

@@ -67,15 +67,15 @@ Future<Envelope> buildEventsEnvelope({
 }) async {
   final events =
       (await storage.getOwnAndIncomingRefs(
-        identity.pubkey,
-        since: since,
-        limit: pageLimit,
-      ))
-      // Defense-in-depth: the DAO already excludes chatroom kinds (100-103)
-      // from this seam; never re-encrypt a room event under the feed key and
-      // serve it to followers.
-      .where((e) => !e.kind.isRoomScoped)
-      .toList();
+            identity.pubkey,
+            since: since,
+            limit: pageLimit,
+          ))
+          // Defense-in-depth: the DAO already excludes chatroom kinds (100-103)
+          // from this seam; never re-encrypt a room event under the feed key and
+          // serve it to followers.
+          .where((e) => !e.kind.isRoomScoped)
+          .toList();
   // For each event row, prefer the persisted wire-EncryptedEvent
   // captured at author time — that's the only encryption whose msgSeq
   // matches the media blobs on disk. Fall back to on-the-fly re-encrypt

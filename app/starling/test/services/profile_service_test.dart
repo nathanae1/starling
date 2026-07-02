@@ -72,12 +72,14 @@ Future<_Fixture> _build(CryptoService crypto, {int now = 1_700_000_000}) async {
   final kp = await crypto.generateKeyPair();
   final pubkey = crockfordBase32Encode(kp.publicKey);
   final feedKey = crypto.randomBytes(32);
-  await db.identityDao.upsertIdentity(IdentityEntriesCompanion.insert(
-    pubkey: pubkey,
-    feedKey: feedKey,
-    recoveryPhrase: const Value(null),
-    createdAt: now,
-  ));
+  await db.identityDao.upsertIdentity(
+    IdentityEntriesCompanion.insert(
+      pubkey: pubkey,
+      feedKey: feedKey,
+      recoveryPhrase: const Value(null),
+      createdAt: now,
+    ),
+  );
   final cache = FeedKeyCache()..put(pubkey, feedKey, 0);
   final clock = _FixedClock(now);
   final storage = DriftStorageService(db, clock);
@@ -125,36 +127,38 @@ void main() {
     crypto = await SodiumCryptoService.init();
   });
 
-  test('name-only: writes a kind=2 with JSON content, no media, bumps counter',
-      () async {
-    final f = await _build(crypto);
-    final id = await f.service.publishProfile(displayName: 'Sam');
+  test(
+    'name-only: writes a kind=2 with JSON content, no media, bumps counter',
+    () async {
+      final f = await _build(crypto);
+      final id = await f.service.publishProfile(displayName: 'Sam');
 
-    final ev = await f.storage.getLatestProfile(f.pubkey);
-    expect(ev, isNotNull);
-    expect(ev!.id, id);
-    expect(ev.kind, EventKind.profile);
-    expect(ev.ref, isNull);
-    expect(ev.media, isEmpty);
+      final ev = await f.storage.getLatestProfile(f.pubkey);
+      expect(ev, isNotNull);
+      expect(ev!.id, id);
+      expect(ev.kind, EventKind.profile);
+      expect(ev.ref, isNull);
+      expect(ev.media, isEmpty);
 
-    final pc = decodeProfileContent(ev.content)!;
-    expect(pc.name, 'Sam');
-    expect(pc.bio, isNull);
-    expect(pc.avatarHash, isNull);
+      final pc = decodeProfileContent(ev.content)!;
+      expect(pc.name, 'Sam');
+      expect(pc.bio, isNull);
+      expect(pc.avatarHash, isNull);
 
-    final identity = await f.storage.getIdentity();
-    expect(identity!.msgSeqCounter, 1);
+      final identity = await f.storage.getIdentity();
+      expect(identity!.msgSeqCounter, 1);
 
-    // Author-time wire bytes are persisted and decrypt round-trips.
-    final payload = await f.storage.getEncryptedPayload(id);
-    expect(payload, isNotNull);
-    final enc = EncryptedEvent.fromBytes(payload!);
-    final plain = f.contentKey.decryptEvent(enc, f.feedKey);
-    expect(plain.kind, EventKind.profile);
-    expect(decodeProfileContent(plain.content)!.name, 'Sam');
+      // Author-time wire bytes are persisted and decrypt round-trips.
+      final payload = await f.storage.getEncryptedPayload(id);
+      expect(payload, isNotNull);
+      final enc = EncryptedEvent.fromBytes(payload!);
+      final plain = f.contentKey.decryptEvent(enc, f.feedKey);
+      expect(plain.kind, EventKind.profile);
+      expect(decodeProfileContent(plain.content)!.name, 'Sam');
 
-    await f.close();
-  });
+      await f.close();
+    },
+  );
 
   test('with bio: content carries the bio', () async {
     final f = await _build(crypto);

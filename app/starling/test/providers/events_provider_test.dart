@@ -24,16 +24,15 @@ Event _makeEvent({
   required String id,
   required int createdAt,
   int kind = 1,
-}) =>
-    Event(
-      version: kStarlingProtocolVersion,
-      id: id,
-      pubkey: pubkey,
-      createdAt: createdAt,
-      kind: EventKind.fromValue(kind),
-      content: Uint8List.fromList([0]),
-      sig: Uint8List.fromList(List.filled(64, 0xAA)),
-    );
+}) => Event(
+  version: kStarlingProtocolVersion,
+  id: id,
+  pubkey: pubkey,
+  createdAt: createdAt,
+  kind: EventKind.fromValue(kind),
+  content: Uint8List.fromList([0]),
+  sig: Uint8List.fromList(List.filled(64, 0xAA)),
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -42,9 +41,9 @@ void main() {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     final storage = DriftStorageService(db, const _FixedClock(1));
-    final container = ProviderContainer(overrides: [
-      storageServiceProvider.overrideWithValue(storage),
-    ]);
+    final container = ProviderContainer(
+      overrides: [storageServiceProvider.overrideWithValue(storage)],
+    );
     addTearDown(container.dispose);
     final events = await container.read(ownEventsProvider.future);
     expect(events, isEmpty);
@@ -58,31 +57,27 @@ void main() {
     const ownPubkey = 'abcdef';
     const otherPubkey = '012345';
     // Seed identity + two own events + one from someone else.
-    await db.identityDao.upsertIdentity(IdentityEntriesCompanion.insert(
-      pubkey: ownPubkey,
-      feedKey: Uint8List(32),
-      recoveryPhrase: const Value(null),
-      createdAt: 1000,
-    ));
-    await storage.saveEvent(_makeEvent(
-      pubkey: ownPubkey,
-      id: 'id1',
-      createdAt: 1001,
-    ));
-    await storage.saveEvent(_makeEvent(
-      pubkey: ownPubkey,
-      id: 'id2',
-      createdAt: 1002,
-    ));
-    await storage.saveEvent(_makeEvent(
-      pubkey: otherPubkey,
-      id: 'id3',
-      createdAt: 1003,
-    ));
+    await db.identityDao.upsertIdentity(
+      IdentityEntriesCompanion.insert(
+        pubkey: ownPubkey,
+        feedKey: Uint8List(32),
+        recoveryPhrase: const Value(null),
+        createdAt: 1000,
+      ),
+    );
+    await storage.saveEvent(
+      _makeEvent(pubkey: ownPubkey, id: 'id1', createdAt: 1001),
+    );
+    await storage.saveEvent(
+      _makeEvent(pubkey: ownPubkey, id: 'id2', createdAt: 1002),
+    );
+    await storage.saveEvent(
+      _makeEvent(pubkey: otherPubkey, id: 'id3', createdAt: 1003),
+    );
 
-    final container = ProviderContainer(overrides: [
-      storageServiceProvider.overrideWithValue(storage),
-    ]);
+    final container = ProviderContainer(
+      overrides: [storageServiceProvider.overrideWithValue(storage)],
+    );
     addTearDown(container.dispose);
 
     // Wait for identity to resolve before reading ownEvents.

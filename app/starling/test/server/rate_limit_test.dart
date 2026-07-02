@@ -18,13 +18,14 @@ void main() {
 
   tearDown(() => limiter.dispose());
 
-  Handler buildHandler() => limiter.middleware((Request _) async => Response.ok('ok'));
+  Handler buildHandler() =>
+      limiter.middleware((Request _) async => Response.ok('ok'));
 
   Request requestFrom(String address) => Request(
-        'GET',
-        Uri.parse('http://localhost/'),
-        context: {'starling.test.remote_address': address},
-      );
+    'GET',
+    Uri.parse('http://localhost/'),
+    context: {'starling.test.remote_address': address},
+  );
 
   test('allows up to the configured limit, then 429', () async {
     final handler = buildHandler();

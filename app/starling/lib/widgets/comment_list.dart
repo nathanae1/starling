@@ -6,8 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/models.dart';
 import '../providers/comments_provider.dart';
 import '../providers/follow_profile_provider.dart';
+import '../providers/identity_provider.dart';
+import '../providers/minute_ticker_provider.dart';
 import '../providers/service_providers.dart';
 import '../theme/starling_theme.dart';
+import '../utils/friendly_error.dart';
 import '../utils/time_ago.dart';
 import 'avatar.dart';
 
@@ -33,7 +36,7 @@ class CommentList extends ConsumerWidget {
       error: (e, _) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         child: Text(
-          '$e',
+          friendlyError(e, tag: 'comments'),
           style: starling.typography.small.copyWith(
             color: starling.colors.danger,
           ),
@@ -73,11 +76,18 @@ class _CommentRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final starling = StarlingTheme.of(context);
     final clock = ref.watch(clockProvider);
+    // Re-render each minute so the relative timestamp stays honest.
+    ref.watch(minuteTickerProvider);
     final profile = ref.watch(followProfileProvider(comment.pubkey));
-    final displayName = profile.maybeWhen(
-      data: (p) => firstNameOf(p.displayName),
-      orElse: () => 'You',
-    );
+    // "You" only when it's actually the user's comment — a friend's
+    // still-loading profile must not fall back to "You".
+    final ownPubkey = ref.watch(identityControllerProvider).value?.pubkey;
+    final displayName = comment.pubkey == ownPubkey
+        ? 'You'
+        : profile.maybeWhen(
+            data: (p) => firstNameOf(p.displayName),
+            orElse: () => 'Friend',
+          );
     final body = utf8.decode(comment.content, allowMalformed: true);
 
     return Padding(

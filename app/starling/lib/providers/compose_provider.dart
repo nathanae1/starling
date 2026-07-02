@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:image_picker/image_picker.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../utils/debug_log.dart';
+
 part 'compose_provider.g.dart';
 
 enum ComposePhase {
@@ -111,11 +113,12 @@ class ComposeController extends _$ComposeController {
         clearError: true,
       );
     } on Object catch (e) {
+      debugLog('compose', 'photo pick failed: $e');
       state = state.copyWith(
         phase: state.photoBytes == null
             ? ComposePhase.idle
             : ComposePhase.ready,
-        errorMessage: 'Couldn\'t open photo: $e',
+        errorMessage: "Couldn't open that photo. Try another.",
       );
     }
   }

@@ -7,11 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   ConnectionCard sampleCard() => ConnectionCard(
-        pubkey: crockfordBase32Encode(Uint8List.fromList(List.filled(32, 7))),
-        endpoints: const [
-          Endpoint(type: 'direct', address: '127.0.0.1:54321'),
-        ],
-      );
+    pubkey: crockfordBase32Encode(Uint8List.fromList(List.filled(32, 7))),
+    endpoints: const [Endpoint(type: 'direct', address: '127.0.0.1:54321')],
+  );
 
   test('parses a starling://connect URL', () {
     final card = sampleCard();

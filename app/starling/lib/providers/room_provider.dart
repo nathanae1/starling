@@ -36,10 +36,7 @@ Future<List<RoomMember>> roomMembersList(Ref ref, String roomId) async {
 Future<List<Event>> roomMessages(Ref ref, String roomId) async {
   final storage = ref.watch(storageServiceProvider);
   final members = await storage.getRoomMembers(roomId);
-  final allowed = members
-      .where((m) => m.isActive)
-      .map((m) => m.pubkey)
-      .toSet();
+  final allowed = members.where((m) => m.isActive).map((m) => m.pubkey).toSet();
   final identity = await ref.watch(identityControllerProvider.future);
   if (identity != null) allowed.add(identity.pubkey);
   final raw = await storage.getEventsByRef(roomId, kind: EventKind.roomMessage);

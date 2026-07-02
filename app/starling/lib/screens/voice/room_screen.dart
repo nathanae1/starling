@@ -14,6 +14,7 @@ import '../../providers/service_providers.dart';
 import '../../providers/voice_provider.dart';
 import '../../services/types.dart';
 import '../../theme/starling_theme.dart';
+import '../../utils/friendly_error.dart';
 import '../../utils/time_ago.dart';
 import '../../widgets/avatar.dart';
 import '../../widgets/buttons.dart';
@@ -73,7 +74,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     } catch (e) {
       if (mounted) {
         messenger.showSnackBar(
-          SnackBar(content: Text('Couldn\'t start the call: $e')),
+          SnackBar(content: Text(friendlyError(e, tag: 'room_call'))),
         );
       }
     } finally {
@@ -163,7 +164,7 @@ class _RoomTimeline extends ConsumerWidget {
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Text(
-            '$e',
+            friendlyError(e, tag: 'room'),
             style: starling.typography.small.copyWith(
               color: starling.colors.danger,
             ),

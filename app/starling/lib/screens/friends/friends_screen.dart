@@ -6,10 +6,13 @@ import '../../providers/follow_profile_provider.dart';
 import '../../providers/follow_provider.dart';
 import '../../providers/follow_requests_provider.dart';
 import '../../providers/follows_provider.dart';
+import '../../providers/minute_ticker_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../services/follow_service.dart';
+import '../../sync/peer_reachability_provider.dart';
 import '../../services/types.dart';
 import '../../theme/starling_theme.dart';
+import '../../utils/friendly_error.dart';
 import '../../utils/pubkey_format.dart';
 import '../../utils/time_ago.dart';
 import '../../widgets/avatar.dart';
@@ -322,7 +325,13 @@ class _FriendRowState extends ConsumerState<_FriendRow> {
     final starling = StarlingTheme.of(context);
     final clock = ref.watch(clockProvider);
     final now = clock.nowUnixSeconds();
-    final reachable = follow.lastSyncedAt > 0 && now - follow.lastSyncedAt < 60;
+    // Re-render each minute so "Last seen Nm" stays honest.
+    ref.watch(minuteTickerProvider);
+    // Live per-transport reachability (LAN + Tor + libp2p), not the stale
+    // "synced within the last minute" heuristic.
+    final reachability =
+        ref.watch(peerReachabilityStateProvider).value ?? const {};
+    final reachable = reachability[follow.pubkey]?.isReachable ?? false;
     // A friend's name + avatar live in their latest kind=2 profile event, not
     // the `follows` row — resolve them the same way the feed and profile
     // screens do. Fall back to a short pubkey while the profile is loading.
@@ -485,13 +494,13 @@ class _FollowerOnlyRowState extends ConsumerState<_FollowerOnlyRow> {
     } on FollowFailure catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Follow back failed: ${e.message}')),
+        SnackBar(content: Text(friendlyError(e, tag: 'follow_back'))),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Follow back failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyError(e, tag: 'follow_back'))),
+      );
     } finally {
       if (mounted) setState(() => _sending = false);
     }

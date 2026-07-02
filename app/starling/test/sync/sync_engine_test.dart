@@ -39,25 +39,23 @@ void main() {
       alice = await _Peer.build(crypto, label: 'alice');
       bob = await _Peer.build(crypto, label: 'bob');
 
-      transport = _RouteableTransport({
-        alice.identity.pubkey: alice,
-      });
+      transport = _RouteableTransport({alice.identity.pubkey: alice});
       bobMdns = MockMdnsService();
       // Bob's mDNS sees Alice as a reachable peer.
-      bobMdns.setPeer(LanPeer(
-        pubkey: alice.identity.pubkey,
-        host: '10.0.0.1',
-        port: 49000,
-      ));
+      bobMdns.setPeer(
+        LanPeer(pubkey: alice.identity.pubkey, host: '10.0.0.1', port: 49000),
+      );
 
       // Bob has an active follow on Alice using Alice's feed key.
-      await bob.storage.saveFollow(Follow(
-        pubkey: alice.identity.pubkey,
-        connectionCard: '',
-        feedKey: alice.identity.feedKey,
-        feedKeyEpoch: alice.identity.feedKeyEpoch,
-        lastSyncedAt: 0,
-      ));
+      await bob.storage.saveFollow(
+        Follow(
+          pubkey: alice.identity.pubkey,
+          connectionCard: '',
+          feedKey: alice.identity.feedKey,
+          feedKeyEpoch: alice.identity.feedKeyEpoch,
+          lastSyncedAt: 0,
+        ),
+      );
 
       bobMonitor = FakePeerReachabilityMonitor()
         ..setReachable(
@@ -95,8 +93,7 @@ void main() {
       expect(report.peers.single.status, equals(PeerSyncStatus.synced));
       expect(report.peers.single.eventsFetched, equals(3));
 
-      final stored = await bob.storage
-          .getEvents(pubkey: alice.identity.pubkey);
+      final stored = await bob.storage.getEvents(pubkey: alice.identity.pubkey);
       expect(stored, hasLength(3));
       expect(stored.every((e) => e.kind == EventKind.post), isTrue);
 
@@ -147,8 +144,7 @@ void main() {
       );
     }
 
-    test('ingests a sealed connection card from the peer (Plan 15)',
-        () async {
+    test('ingests a sealed connection card from the peer (Plan 15)', () async {
       final card = ConnectionCard(
         pubkey: alice.identity.pubkey,
         endpoints: const [
@@ -172,34 +168,35 @@ void main() {
       expect(stored.endpoints.any((e) => e.type == 'relay'), isTrue);
     });
 
-    test('rejects a connection card with tampered ciphertext (Plan 15)',
-        () async {
-      final card = ConnectionCard(
-        pubkey: alice.identity.pubkey,
-        endpoints: const [Endpoint(type: 'relay', address: 'evil.onion:80')],
-      );
-      final sealed = sealCard(card, 5000);
-      final tampered = Uint8List.fromList(sealed.payload);
-      tampered[0] ^= 0xFF;
-      transport.queueCardFor(
-        peerPubkey: alice.identity.pubkey,
-        delivery: SealedDelivery(
-          payload: tampered,
-          nonce: sealed.nonce,
-          createdAt: sealed.createdAt,
-        ),
-      );
-
-      await bobEngine.syncOnePeerByPubkey(alice.identity.pubkey);
-
-      // The seeded follow's card was empty; tampering must leave it so.
-      final follow = await bob.storage.getFollow(alice.identity.pubkey);
-      expect(follow!.connectionCard, isEmpty);
-      expect(follow.lastReceivedCardAt, equals(0));
-    });
-
     test(
-        'replayed card with an inflated created_at fails decrypt and does '
+      'rejects a connection card with tampered ciphertext (Plan 15)',
+      () async {
+        final card = ConnectionCard(
+          pubkey: alice.identity.pubkey,
+          endpoints: const [Endpoint(type: 'relay', address: 'evil.onion:80')],
+        );
+        final sealed = sealCard(card, 5000);
+        final tampered = Uint8List.fromList(sealed.payload);
+        tampered[0] ^= 0xFF;
+        transport.queueCardFor(
+          peerPubkey: alice.identity.pubkey,
+          delivery: SealedDelivery(
+            payload: tampered,
+            nonce: sealed.nonce,
+            createdAt: sealed.createdAt,
+          ),
+        );
+
+        await bobEngine.syncOnePeerByPubkey(alice.identity.pubkey);
+
+        // The seeded follow's card was empty; tampering must leave it so.
+        final follow = await bob.storage.getFollow(alice.identity.pubkey);
+        expect(follow!.connectionCard, isEmpty);
+        expect(follow.lastReceivedCardAt, equals(0));
+      },
+    );
+
+    test('replayed card with an inflated created_at fails decrypt and does '
         'not advance lastReceivedCardAt (S2)', () async {
       final card = ConnectionCard(
         pubkey: alice.identity.pubkey,
@@ -233,8 +230,7 @@ void main() {
       expect(follow!.lastReceivedCardAt, equals(5000));
     });
 
-    test(
-        'relay-tier connection: outbound queue is NOT drained into the '
+    test('relay-tier connection: outbound queue is NOT drained into the '
         'relay (D9)', () async {
       bobMonitor.clear();
       bobMonitor.setReachable(
@@ -242,8 +238,10 @@ void main() {
         PeerTransport.relay,
         'http://relayhost.onion:80',
       );
-      await bob.storage
-          .enqueue(alice.identity.pubkey, Uint8List.fromList([1, 2, 3]));
+      await bob.storage.enqueue(
+        alice.identity.pubkey,
+        Uint8List.fromList([1, 2, 3]),
+      );
 
       final report = await bobEngine.syncNow();
       expect(report.peers.single.status, equals(PeerSyncStatus.upToDate));
@@ -252,27 +250,25 @@ void main() {
       // Nothing was pushed at the relay (its POST /events would 401 a
       // follower envelope), and the queue survives for a direct tier.
       expect(transport.pushedEnvelopes, isEmpty);
-      expect(
-        await bob.storage.dequeue(alice.identity.pubkey),
-        hasLength(1),
-      );
+      expect(await bob.storage.dequeue(alice.identity.pubkey), hasLength(1));
     });
 
     test(
-        'cursor advances to max manifest created_at, never wall clock (D1)',
-        () async {
-      alice.clock.advance(60);
-      await alice.publishPost('post at author time');
-      final authoredAt = alice.clock.nowUnixSeconds();
+      'cursor advances to max manifest created_at, never wall clock (D1)',
+      () async {
+        alice.clock.advance(60);
+        await alice.publishPost('post at author time');
+        final authoredAt = alice.clock.nowUnixSeconds();
 
-      // Bob's clock is far ahead — the old code stamped THIS on the
-      // cursor, sliding the window past anything still in flight.
-      bob.clock.set(2_900_000);
+        // Bob's clock is far ahead — the old code stamped THIS on the
+        // cursor, sliding the window past anything still in flight.
+        bob.clock.set(2_900_000);
 
-      await bobEngine.syncNow();
-      final follow = await bob.storage.getFollow(alice.identity.pubkey);
-      expect(follow!.lastSyncedAt, equals(authoredAt));
-    });
+        await bobEngine.syncNow();
+        final follow = await bob.storage.getFollow(alice.identity.pubkey);
+        expect(follow!.lastSyncedAt, equals(authoredAt));
+      },
+    );
 
     test('empty manifest does not advance the cursor (D1)', () async {
       final report = await bobEngine.syncNow();
@@ -293,8 +289,7 @@ void main() {
       expect(follow!.lastSyncedAt, equals(bobNow + kMaxCursorSkewSecs));
     });
 
-    test(
-        'late-arriving older event is missed by the windowed pass and '
+    test('late-arriving older event is missed by the windowed pass and '
         'recovered by the periodic full diff (D1)', () async {
       // Alice publishes B; bob's first sync is a full pass (cursor → B's
       // created_at, full stamp set).
@@ -322,40 +317,43 @@ void main() {
       // 24h later the full pass diffs all ids and recovers A.
       bob.clock.advance(kFullManifestSyncIntervalSecs);
       await bobEngine.syncNow();
-      final stored =
-          await bob.storage.getEvents(pubkey: alice.identity.pubkey);
-      expect(stored.map((e) => String.fromCharCodes(e.content)).toSet(),
-          equals({'B', 'A (late, older)'}));
-    });
-
-    test('windowed manifest reporting has_older triggers a full redo (D1)',
-        () async {
-      // First sync: full pass, sets the stamp.
-      alice.clock.advance(60);
-      await alice.publishPost('first');
-      await bobEngine.syncNow();
-      final stampAfterFirst =
-          (await bob.storage.getFollow(alice.identity.pubkey))!
-              .lastFullSyncAt;
-      expect(stampAfterFirst, greaterThan(0));
-
-      // Second sync is windowed (stamp fresh), but the peer reports the
-      // window overflowed its page — the engine must redo it as a full
-      // paged pass and re-stamp.
-      alice.clock.advance(60);
-      await alice.publishPost('second');
-      bob.clock.advance(120);
-      transport.forceHasOlderOnWindowedOnce = true;
-      await bobEngine.syncNow();
-
-      final follow = await bob.storage.getFollow(alice.identity.pubkey);
-      expect(follow!.lastFullSyncAt, equals(bob.clock.nowUnixSeconds()));
-      // The full redo still pulled the new event.
+      final stored = await bob.storage.getEvents(pubkey: alice.identity.pubkey);
       expect(
-        await bob.storage.getEvents(pubkey: alice.identity.pubkey),
-        hasLength(2),
+        stored.map((e) => String.fromCharCodes(e.content)).toSet(),
+        equals({'B', 'A (late, older)'}),
       );
     });
+
+    test(
+      'windowed manifest reporting has_older triggers a full redo (D1)',
+      () async {
+        // First sync: full pass, sets the stamp.
+        alice.clock.advance(60);
+        await alice.publishPost('first');
+        await bobEngine.syncNow();
+        final stampAfterFirst = (await bob.storage.getFollow(
+          alice.identity.pubkey,
+        ))!.lastFullSyncAt;
+        expect(stampAfterFirst, greaterThan(0));
+
+        // Second sync is windowed (stamp fresh), but the peer reports the
+        // window overflowed its page — the engine must redo it as a full
+        // paged pass and re-stamp.
+        alice.clock.advance(60);
+        await alice.publishPost('second');
+        bob.clock.advance(120);
+        transport.forceHasOlderOnWindowedOnce = true;
+        await bobEngine.syncNow();
+
+        final follow = await bob.storage.getFollow(alice.identity.pubkey);
+        expect(follow!.lastFullSyncAt, equals(bob.clock.nowUnixSeconds()));
+        // The full redo still pulled the new event.
+        expect(
+          await bob.storage.getEvents(pubkey: alice.identity.pubkey),
+          hasLength(2),
+        );
+      },
+    );
 
     test('re-running syncNow does not duplicate events', () async {
       alice.clock.advance(60);
@@ -371,17 +369,20 @@ void main() {
       expect(after2, hasLength(1));
     });
 
-    test('peer not in mDNS cache → marked unreachable, sync continues',
-        () async {
-      bobMdns.removePeer(alice.identity.pubkey);
-      bobMonitor.clear();
-      final report = await bobEngine.syncNow();
-      expect(report.peers.single.status, equals(PeerSyncStatus.unreachable));
+    test(
+      'peer not in mDNS cache → marked unreachable, sync continues',
+      () async {
+        bobMdns.removePeer(alice.identity.pubkey);
+        bobMonitor.clear();
+        final report = await bobEngine.syncNow();
+        expect(report.peers.single.status, equals(PeerSyncStatus.unreachable));
 
-      final stored =
-          await bob.storage.getEvents(pubkey: alice.identity.pubkey);
-      expect(stored, isEmpty);
-    });
+        final stored = await bob.storage.getEvents(
+          pubkey: alice.identity.pubkey,
+        );
+        expect(stored, isEmpty);
+      },
+    );
 
     test('tampered EncryptedEvent payload is skipped, not stored', () async {
       alice.clock.advance(60);
@@ -397,8 +398,7 @@ void main() {
       expect(report.peers.single.eventsFetched, equals(1));
       expect(report.peers.single.eventsSkipped, equals(1));
 
-      final stored =
-          await bob.storage.getEvents(pubkey: alice.identity.pubkey);
+      final stored = await bob.storage.getEvents(pubkey: alice.identity.pubkey);
       expect(stored, hasLength(1));
     });
 
@@ -417,8 +417,7 @@ void main() {
       expect(report.peers.single.eventsFetched, equals(1));
       expect(report.peers.single.unknownItemsPreserved, equals(1));
 
-      final unknown =
-          await bob.storage.getUnknownEnvelopeItemsByType('commit');
+      final unknown = await bob.storage.getUnknownEnvelopeItemsByType('commit');
       expect(unknown, hasLength(1));
       expect(unknown.single.sourcePubkey, equals(alice.identity.pubkey));
       expect(unknown.single.payload, equals(Uint8List.fromList([1, 2, 3, 4])));
@@ -432,84 +431,89 @@ void main() {
     });
 
     test(
-        'rotated feed key in manifest response is decrypted, follow.feedKey '
-        'and lastReceivedRotationAt are persisted, new posts decrypt',
-        () async {
-      // Alice publishes one post under her *current* feed key, which Bob
-      // already has. Then alice rotates: she encrypts a new feed key for
-      // bob, queues it, and publishes a post under the new key. Bob syncs
-      // and should receive both: the rotation payload (applied first) and
-      // the new post (decrypted with the new key).
-      alice.clock.advance(60);
-      await alice.publishPost('pre-rotation');
+      'rotated feed key in manifest response is decrypted, follow.feedKey '
+      'and lastReceivedRotationAt are persisted, new posts decrypt',
+      () async {
+        // Alice publishes one post under her *current* feed key, which Bob
+        // already has. Then alice rotates: she encrypts a new feed key for
+        // bob, queues it, and publishes a post under the new key. Bob syncs
+        // and should receive both: the rotation payload (applied first) and
+        // the new post (decrypted with the new key).
+        alice.clock.advance(60);
+        await alice.publishPost('pre-rotation');
 
-      // First sync: bob picks up the pre-rotation post with the old key.
-      final pre = await bobEngine.syncNow();
-      expect(pre.peers.single.eventsFetched, equals(1));
+        // First sync: bob picks up the pre-rotation post with the old key.
+        final pre = await bobEngine.syncNow();
+        expect(pre.peers.single.eventsFetched, equals(1));
 
-      // Now alice rotates. We need to plumb a delivery into the transport.
-      final rotationAt = alice.clock.nowUnixSeconds() + 30;
-      alice.clock.advance(30);
-      final newKey = crypto.randomBytes(32);
+        // Now alice rotates. We need to plumb a delivery into the transport.
+        final rotationAt = alice.clock.nowUnixSeconds() + 30;
+        alice.clock.advance(30);
+        final newKey = crypto.randomBytes(32);
 
-      // Wrap the new key for bob using alice's (sender) and bob's (recipient)
-      // identities — same convention KeyRotationService uses.
-      final aliceEdPk = crockfordBase32Decode(alice.identity.pubkey);
-      final bobEdPk = crockfordBase32Decode(bob.identity.pubkey);
-      final aliceXSk = crypto.ed25519ToX25519SecretKey(alice.secretKey);
-      final bobXPk = crypto.ed25519ToX25519PublicKey(bobEdPk);
-      final shared = crypto.deriveSharedKey(
-        aliceXSk,
-        bobXPk,
-        aliceEdPk,
-        bobEdPk,
-        rotationAt,
-      );
-      final wrapped = alice.contentKey.encryptFeedKey(newKey, shared);
-      final nonce = Uint8List.fromList(wrapped.sublist(0, 24));
-      final ct = Uint8List.fromList(wrapped.sublist(24));
+        // Wrap the new key for bob using alice's (sender) and bob's (recipient)
+        // identities — same convention KeyRotationService uses.
+        final aliceEdPk = crockfordBase32Decode(alice.identity.pubkey);
+        final bobEdPk = crockfordBase32Decode(bob.identity.pubkey);
+        final aliceXSk = crypto.ed25519ToX25519SecretKey(alice.secretKey);
+        final bobXPk = crypto.ed25519ToX25519PublicKey(bobEdPk);
+        final shared = crypto.deriveSharedKey(
+          aliceXSk,
+          bobXPk,
+          aliceEdPk,
+          bobEdPk,
+          rotationAt,
+        );
+        final wrapped = alice.contentKey.encryptFeedKey(newKey, shared);
+        final nonce = Uint8List.fromList(wrapped.sublist(0, 24));
+        final ct = Uint8List.fromList(wrapped.sublist(24));
 
-      // Tell the transport to attach this delivery to alice's next manifest
-      // response targeted at bob.
-      transport.queueRotationFor(
-        peerPubkey: alice.identity.pubkey,
-        delivery: SealedDelivery(
-          payload: ct,
-          nonce: nonce,
-          createdAt: rotationAt,
-        ),
-      );
-      // Update alice's identity to the new key so her _RouteableTransport
-      // re-encrypts subsequent envelope items under it.
-      await alice.storage.saveIdentity(alice.identity.copyWith(
-        feedKey: newKey,
-        feedKeyValidFrom: rotationAt,
-      ));
-      alice.identity = (await alice.storage.getIdentity())!;
+        // Tell the transport to attach this delivery to alice's next manifest
+        // response targeted at bob.
+        transport.queueRotationFor(
+          peerPubkey: alice.identity.pubkey,
+          delivery: SealedDelivery(
+            payload: ct,
+            nonce: nonce,
+            createdAt: rotationAt,
+          ),
+        );
+        // Update alice's identity to the new key so her _RouteableTransport
+        // re-encrypts subsequent envelope items under it.
+        await alice.storage.saveIdentity(
+          alice.identity.copyWith(
+            feedKey: newKey,
+            feedKeyValidFrom: rotationAt,
+          ),
+        );
+        alice.identity = (await alice.storage.getIdentity())!;
 
-      // Alice publishes a post under the new key.
-      alice.clock.advance(10);
-      await alice.publishPostWithKey('post-rotation', newKey, 0);
+        // Alice publishes a post under the new key.
+        alice.clock.advance(10);
+        await alice.publishPostWithKey('post-rotation', newKey, 0);
 
-      final post = await bobEngine.syncNow();
-      expect(post.peers.single.status, equals(PeerSyncStatus.synced));
+        final post = await bobEngine.syncNow();
+        expect(post.peers.single.status, equals(PeerSyncStatus.synced));
 
-      // Bob's follow row now has the new feed key and ack timestamp.
-      final follow = await bob.storage.getFollow(alice.identity.pubkey);
-      expect(follow!.feedKey, equals(newKey));
-      expect(follow.lastReceivedRotationAt, equals(rotationAt));
+        // Bob's follow row now has the new feed key and ack timestamp.
+        final follow = await bob.storage.getFollow(alice.identity.pubkey);
+        expect(follow!.feedKey, equals(newKey));
+        expect(follow.lastReceivedRotationAt, equals(rotationAt));
 
-      // Both events end up stored — pre-rotation (still readable, plaintext
-      // on disk; the wire re-encryption uses the new key which bob now has)
-      // and post-rotation.
-      final stored =
-          await bob.storage.getEvents(pubkey: alice.identity.pubkey);
-      expect(stored.map((e) => String.fromCharCodes(e.content)).toSet(),
-          equals({'pre-rotation', 'post-rotation'}));
-    });
+        // Both events end up stored — pre-rotation (still readable, plaintext
+        // on disk; the wire re-encryption uses the new key which bob now has)
+        // and post-rotation.
+        final stored = await bob.storage.getEvents(
+          pubkey: alice.identity.pubkey,
+        );
+        expect(
+          stored.map((e) => String.fromCharCodes(e.content)).toSet(),
+          equals({'pre-rotation', 'post-rotation'}),
+        );
+      },
+    );
 
-    test(
-        'replayed older rotation delivery does not regress follow.feedKey '
+    test('replayed older rotation delivery does not regress follow.feedKey '
         '(apply-side monotonic gate)', () async {
       final keyA = crypto.randomBytes(32);
       final keyB = crypto.randomBytes(32);
@@ -546,29 +550,35 @@ void main() {
       expect(follow.lastReceivedRotationAt, equals(6000));
     });
 
-    test('syncOnePeerByPubkey runs the full per-peer sync for one follow',
-        () async {
-      alice.clock.advance(60);
-      await alice.publishPost('targeted');
+    test(
+      'syncOnePeerByPubkey runs the full per-peer sync for one follow',
+      () async {
+        alice.clock.advance(60);
+        await alice.publishPost('targeted');
 
-      final report = await bobEngine.syncOnePeerByPubkey(alice.identity.pubkey);
-      expect(report, isNotNull);
-      expect(report!.status, equals(PeerSyncStatus.synced));
-      expect(report.eventsFetched, equals(1));
+        final report = await bobEngine.syncOnePeerByPubkey(
+          alice.identity.pubkey,
+        );
+        expect(report, isNotNull);
+        expect(report!.status, equals(PeerSyncStatus.synced));
+        expect(report.eventsFetched, equals(1));
 
-      final stored =
-          await bob.storage.getEvents(pubkey: alice.identity.pubkey);
-      expect(stored, hasLength(1));
-    });
-
-    test('syncOnePeerByPubkey returns null when the follow does not exist',
-        () async {
-      final report = await bobEngine.syncOnePeerByPubkey('not-a-real-pubkey');
-      expect(report, isNull);
-    });
+        final stored = await bob.storage.getEvents(
+          pubkey: alice.identity.pubkey,
+        );
+        expect(stored, hasLength(1));
+      },
+    );
 
     test(
-        'event decrypt failure stamps lastDecryptFailureAt; rotation clears '
+      'syncOnePeerByPubkey returns null when the follow does not exist',
+      () async {
+        final report = await bobEngine.syncOnePeerByPubkey('not-a-real-pubkey');
+        expect(report, isNull);
+      },
+    );
+
+    test('event decrypt failure stamps lastDecryptFailureAt; rotation clears '
         'it', () async {
       // Bob's stored feedKey is alice's current key. Tamper the next
       // envelope so decrypt/verify fails — that should stamp
@@ -578,8 +588,7 @@ void main() {
       transport.tamperNextEnvelopeFor = alice.identity.pubkey;
 
       await bobEngine.syncNow();
-      final afterFailure =
-          await bob.storage.getFollow(alice.identity.pubkey);
+      final afterFailure = await bob.storage.getFollow(alice.identity.pubkey);
       expect(afterFailure!.lastDecryptFailureAt, isNotNull);
 
       // Now alice rotates her feed key. Bob's next sync should pull the
@@ -607,29 +616,27 @@ void main() {
           createdAt: rotationAt,
         ),
       );
-      await alice.storage.saveIdentity(alice.identity.copyWith(
-        feedKey: newKey,
-        feedKeyValidFrom: rotationAt,
-      ));
+      await alice.storage.saveIdentity(
+        alice.identity.copyWith(feedKey: newKey, feedKeyValidFrom: rotationAt),
+      );
       alice.identity = (await alice.storage.getIdentity())!;
 
       await bobEngine.syncOnePeerByPubkey(alice.identity.pubkey);
-      final afterRotation =
-          await bob.storage.getFollow(alice.identity.pubkey);
+      final afterRotation = await bob.storage.getFollow(alice.identity.pubkey);
       expect(afterRotation!.feedKey, equals(newKey));
       expect(afterRotation.lastDecryptFailureAt, isNull);
     });
 
-    test(
-        'follow_feed_key_history archives the prior chain root on rotation '
+    test('follow_feed_key_history archives the prior chain root on rotation '
         'so cached pre-rotation content stays decryptable', () async {
       // Pre-rotation: alice publishes one post under her current feedKey.
       alice.clock.advance(60);
       await alice.publishPost('pre-rotation');
       // Bob first-syncs and stores the post. Confirm both sides match.
       await bobEngine.syncNow();
-      final bobBeforeRotation =
-          await bob.storage.getFollow(alice.identity.pubkey);
+      final bobBeforeRotation = await bob.storage.getFollow(
+        alice.identity.pubkey,
+      );
       expect(bobBeforeRotation!.feedKey, equals(alice.identity.feedKey));
 
       // Capture the pre-rotation key for assertion.
@@ -659,22 +666,26 @@ void main() {
           createdAt: rotationAt,
         ),
       );
-      await alice.storage.saveIdentity(alice.identity.copyWith(
-        feedKey: newKey,
-        feedKeyValidFrom: rotationAt,
-        msgSeqCounter: 0,
-      ));
+      await alice.storage.saveIdentity(
+        alice.identity.copyWith(
+          feedKey: newKey,
+          feedKeyValidFrom: rotationAt,
+          msgSeqCounter: 0,
+        ),
+      );
       alice.identity = (await alice.storage.getIdentity())!;
 
       // Sync — bob applies the rotation. Old key should land in the
       // follow_feed_key_history table; current Follow.feedKey is newKey.
       await bobEngine.syncOnePeerByPubkey(alice.identity.pubkey);
-      final bobAfterRotation =
-          await bob.storage.getFollow(alice.identity.pubkey);
+      final bobAfterRotation = await bob.storage.getFollow(
+        alice.identity.pubkey,
+      );
       expect(bobAfterRotation!.feedKey, equals(newKey));
 
-      final history =
-          await bob.storage.getFollowFeedKeyHistory(alice.identity.pubkey);
+      final history = await bob.storage.getFollowFeedKeyHistory(
+        alice.identity.pubkey,
+      );
       expect(history, hasLength(1));
       expect(history.single.feedKey, equals(priorKey));
       expect(history.single.validUntil, equals(rotationAt));
@@ -702,7 +713,10 @@ class _Peer {
   final ContentKeyService contentKey;
   final MockClock clock;
 
-  static Future<_Peer> build(CryptoService crypto, {required String label}) async {
+  static Future<_Peer> build(
+    CryptoService crypto, {
+    required String label,
+  }) async {
     final kp = await crypto.generateKeyPair();
     final pubkey = crockfordBase32Encode(kp.publicKey);
     final feedKey = crypto.randomBytes(32);
@@ -755,9 +769,7 @@ class _Peer {
       msgSeq: msgSeq,
     );
     await storage.saveEvent(result.signed);
-    await storage.saveIdentity(
-      identityRow.copyWith(msgSeqCounter: msgSeq + 1),
-    );
+    await storage.saveIdentity(identityRow.copyWith(msgSeqCounter: msgSeq + 1));
     identity = (await storage.getIdentity())!;
   }
 
@@ -786,9 +798,7 @@ class _Peer {
       msgSeq: msgSeq,
     );
     await storage.saveEvent(result.signed);
-    await storage.saveIdentity(
-      identityRow.copyWith(msgSeqCounter: msgSeq + 1),
-    );
+    await storage.saveIdentity(identityRow.copyWith(msgSeqCounter: msgSeq + 1));
     identity = (await storage.getIdentity())!;
   }
 
@@ -846,11 +856,7 @@ class _RouteableTransport implements SyncTransport {
     }
     if (forceHasOlderOnWindowedOnce && since != null) {
       forceHasOlderOnWindowedOnce = false;
-      return Manifest(
-        pubkey: peer.pubkey,
-        events: const [],
-        hasOlder: true,
-      );
+      return Manifest(pubkey: peer.pubkey, events: const [], hasOlder: true);
     }
     final source = _peers[peer.pubkey]!;
     final events = await source.storage.getEvents(
@@ -873,10 +879,7 @@ class _RouteableTransport implements SyncTransport {
   }
 
   @override
-  Future<Envelope> fetchEnvelope(
-    PeerConnection peer, {
-    int? since,
-  }) async {
+  Future<Envelope> fetchEnvelope(PeerConnection peer, {int? since}) async {
     final source = _peers[peer.pubkey]!;
     // Re-read identity to pick up any rotations the test made via
     // `saveIdentity`.
@@ -900,17 +903,19 @@ class _RouteableTransport implements SyncTransport {
     if (tamperNextEnvelopeFor == peer.pubkey) {
       tamperNextEnvelopeFor = null;
       // Add a tampered "event" item with random bytes that won't decrypt.
-      items.add(EnvelopeItem(
-        type: 'event',
-        payload: EncryptedEvent(
-          pubkey: peer.pubkey,
-          createdAt: events.isEmpty ? 0 : events.first.createdAt + 1,
-          epoch: 0,
-          msgSeq: 0,
-          nonce: Uint8List(24),
-          payload: Uint8List.fromList(List.filled(64, 0xFF)),
-        ).toBytes(),
-      ));
+      items.add(
+        EnvelopeItem(
+          type: 'event',
+          payload: EncryptedEvent(
+            pubkey: peer.pubkey,
+            createdAt: events.isEmpty ? 0 : events.first.createdAt + 1,
+            epoch: 0,
+            msgSeq: 0,
+            nonce: Uint8List(24),
+            payload: Uint8List.fromList(List.filled(64, 0xFF)),
+          ).toBytes(),
+        ),
+      );
     }
 
     if (injectExtraItemFor == peer.pubkey && injectedItem != null) {
@@ -929,9 +934,7 @@ class _RouteableTransport implements SyncTransport {
 
   @override
   Future<void> pushEnvelope(PeerConnection peer, Envelope envelope) async {
-    pushedEnvelopes
-        .putIfAbsent(peer.pubkey, () => <Envelope>[])
-        .add(envelope);
+    pushedEnvelopes.putIfAbsent(peer.pubkey, () => <Envelope>[]).add(envelope);
     if (failNextPushFor == peer.pubkey) {
       failNextPushFor = null;
       throw Exception('simulated push failure');

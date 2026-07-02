@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../providers/minute_ticker_provider.dart';
 import '../../providers/search_provider.dart';
+import '../../providers/service_providers.dart';
 import '../../providers/sync_provider.dart';
 import '../../providers/sync_status_provider.dart';
 import '../../theme/starling_theme.dart';
+import '../../utils/time_ago.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/starling_icon.dart';
 import '../../widgets/sync_dot.dart';
@@ -56,8 +59,9 @@ class _FeedSyncSearchBarState extends ConsumerState<FeedSyncSearchBar> {
     _focus.unfocus();
   }
 
-  /// Offline status is tappable — kick a fresh sync pass. Errors surface
-  /// through `syncStatusProvider`, so we swallow them here.
+  /// Offline and sync-problem statuses are tappable — kick a fresh sync
+  /// pass. Errors land in `SyncEngineState.lastError`, which
+  /// `syncStatusProvider` folds back into this row, so we swallow them here.
   Future<void> _retrySync() async {
     try {
       await ref.read(syncControllerProvider.notifier).syncNow();
@@ -94,7 +98,11 @@ class _FeedSyncSearchBarState extends ConsumerState<FeedSyncSearchBar> {
 
   Widget _buildSyncRow(StarlingTheme starling) {
     final status = ref.watch(syncStatusProvider);
-    final isOffline = status.state == SyncState.offline;
+    // 60 s heartbeat keeps the "synced Nm ago" clause honest while idle.
+    ref.watch(minuteTickerProvider);
+    final now = ref.watch(clockProvider).nowUnixSeconds();
+    final tappable =
+        status.state == SyncState.offline || status.state == SyncState.problem;
 
     final statusRow = Row(
       children: [
@@ -105,7 +113,7 @@ class _FeedSyncSearchBarState extends ConsumerState<FeedSyncSearchBar> {
         const SizedBox(width: 10),
         Flexible(
           child: Text(
-            _statusLabel(status),
+            _statusLabel(status, now),
             style: starling.typography.small.copyWith(
               color: starling.colors.graphite,
             ),
@@ -113,7 +121,7 @@ class _FeedSyncSearchBarState extends ConsumerState<FeedSyncSearchBar> {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        if (isOffline) ...[
+        if (tappable) ...[
           const SizedBox(width: 8),
           StarlingIcon(
             LucideIcons.refreshCw,
@@ -127,10 +135,12 @@ class _FeedSyncSearchBarState extends ConsumerState<FeedSyncSearchBar> {
     return Row(
       children: [
         Expanded(
-          child: isOffline
+          child: tappable
               ? Semantics(
                   button: true,
-                  label: 'Offline. Tap to retry sync.',
+                  label: status.state == SyncState.problem
+                      ? 'Sync problem. Tap to retry sync.'
+                      : 'Offline. Tap to retry sync.',
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () => unawaited(_retrySync()),
@@ -184,27 +194,36 @@ class _FeedSyncSearchBarState extends ConsumerState<FeedSyncSearchBar> {
     );
   }
 
-  String _statusLabel(SyncStatus status) {
+  String _statusLabel(SyncStatus status, int nowUnixSeconds) {
     switch (status.state) {
       case SyncState.synced:
-        if (status.lastSyncedAtSeconds == null) {
-          if (status.reachableFriends > 0) {
-            // Render reachability as a fraction (e.g. "3/5 friends reachable")
-            // so the count has context. `totalFriends` is always >= reachable.
-            final total = status.totalFriends >= status.reachableFriends
-                ? status.totalFriends
-                : status.reachableFriends;
-            return '${status.reachableFriends}/$total friends reachable';
-          }
-          return 'Up to date';
-        }
-        return 'Last synced just now';
+        // Reachability as a fraction ("3/5 friends reachable") is the
+        // primary signal; when it last synced is the secondary clause.
+        final primary = status.totalFriends > 0
+            ? '${status.reachableFriends}/${status.totalFriends} friends reachable'
+            : 'Up to date';
+        final syncedAt = status.lastSyncedAtSeconds;
+        if (syncedAt == null) return primary;
+        return '$primary · ${_syncedClause(syncedAt, nowUnixSeconds)}';
       case SyncState.syncing:
         return status.direction == SyncDirection.pushing
             ? 'Publishing…'
             : 'Loading feeds…';
+      case SyncState.connecting:
+        return status.torBootstrapPercent > 0
+            ? 'Connecting to network… ${status.torBootstrapPercent}%'
+            : 'Connecting to network…';
       case SyncState.offline:
         return 'Offline — tap to retry';
+      case SyncState.problem:
+        return 'Sync problem — tap to retry';
     }
+  }
+
+  String _syncedClause(int syncedAtSeconds, int nowUnixSeconds) {
+    final rel = timeAgo(syncedAtSeconds, nowUnixSeconds: nowUnixSeconds);
+    // "just now"/"yesterday" already read as complete phrases.
+    if (rel == 'just now' || rel == 'yesterday') return 'synced $rel';
+    return 'synced $rel ago';
   }
 }

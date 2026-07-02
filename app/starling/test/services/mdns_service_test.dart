@@ -149,9 +149,6 @@ class _FakeChannels {
     final binary =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     binary.setMockMethodCallHandler(methodChannel, null);
-    binary.setMockMethodCallHandler(
-      MethodChannel(eventChannel.name),
-      null,
-    );
+    binary.setMockMethodCallHandler(MethodChannel(eventChannel.name), null);
   }
 }

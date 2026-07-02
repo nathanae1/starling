@@ -59,23 +59,27 @@ void main() {
     a.signaling.link(b.signaling);
   });
 
-  test('sendTo delivers a voice message to the recipient inbound stream',
-      () async {
-    final received = <VoiceSignal>[];
-    b.roomSignaling.inbound.listen(received.add);
+  test(
+    'sendTo delivers a voice message to the recipient inbound stream',
+    () async {
+      final received = <VoiceSignal>[];
+      b.roomSignaling.inbound.listen(received.add);
 
-    await a.roomSignaling.sendTo(pkB,
+      await a.roomSignaling.sendTo(
+        pkB,
         type: SignalingMessageType.roomInvite,
         roomId: 'room1',
-        payload: {'name': 'Hi'});
-    await _pump();
+        payload: {'name': 'Hi'},
+      );
+      await _pump();
 
-    expect(received, hasLength(1));
-    expect(received.first.message.type, SignalingMessageType.roomInvite);
-    expect(received.first.message.roomId, 'room1');
-    expect(received.first.message.senderPubkey, pkA);
-    expect(received.first.message.payload['name'], 'Hi');
-  });
+      expect(received, hasLength(1));
+      expect(received.first.message.type, SignalingMessageType.roomInvite);
+      expect(received.first.message.roomId, 'room1');
+      expect(received.first.message.senderPubkey, pkA);
+      expect(received.first.message.payload['name'], 'Hi');
+    },
+  );
 
   test('fanOut delivers a copy to every recipient', () async {
     final c = _Peer(pkC, crypto);
@@ -104,8 +108,12 @@ void main() {
     final gotB = <VoiceSignal>[];
     b.roomSignaling.inbound.listen(gotB.add);
 
-    await a.roomSignaling.sendTo(pkB,
-        type: SignalingMessageType.offer, roomId: 'r', payload: {'sdp': 's'});
+    await a.roomSignaling.sendTo(
+      pkB,
+      type: SignalingMessageType.offer,
+      roomId: 'r',
+      payload: {'sdp': 's'},
+    );
     await _pump();
     expect(gotB, hasLength(1));
 
@@ -122,10 +130,12 @@ void main() {
     final gotB = <VoiceSignal>[];
     b.roomSignaling.inbound.listen(gotB.add);
 
-    await a.roomSignaling.sendTo(pkB,
-        type: SignalingMessageType.libp2pConnect,
-        roomId: '',
-        payload: {'peer_id': 'x'});
+    await a.roomSignaling.sendTo(
+      pkB,
+      type: SignalingMessageType.libp2pConnect,
+      roomId: '',
+      payload: {'peer_id': 'x'},
+    );
     await _pump();
 
     expect(gotB, isEmpty);

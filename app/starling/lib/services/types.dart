@@ -17,6 +17,20 @@ class TorStatus {
   final int circuitCount;
   final bool isReady;
   final String? onionAddress;
+
+  // Value equality so pollers can emit only on change instead of
+  // rebuilding watchers every tick.
+  @override
+  bool operator ==(Object other) =>
+      other is TorStatus &&
+      other.bootstrapPercent == bootstrapPercent &&
+      other.circuitCount == circuitCount &&
+      other.isReady == isReady &&
+      other.onionAddress == onionAddress;
+
+  @override
+  int get hashCode =>
+      Object.hash(bootstrapPercent, circuitCount, isReady, onionAddress);
 }
 
 class LanPeer {

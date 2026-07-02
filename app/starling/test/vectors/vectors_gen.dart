@@ -66,9 +66,7 @@ void main() {
     final sig = crypto.sign(kp.secretKey, idHash);
 
     // Vector 4: feed key ratchet, fixed base key.
-    final baseKey = fromHex(
-      'ff' * 32,
-    );
+    final baseKey = fromHex('ff' * 32);
     final epoch1 = ratchetFeedKey(baseKey, crypto);
     final epoch2 = ratchetFeedKey(epoch1, crypto);
 
@@ -100,29 +98,37 @@ void main() {
     ]);
     final claimDigest = crypto.blake2b256(claimBytes);
     final claimSig = crypto.sign(kp.secretKey, claimDigest);
-    final pairingClaimCbor = Uint8List.fromList(cbor.encode(<String, dynamic>{
-      'owner_pubkey': base64.encode(kp.publicKey),
-      'pairing_token': pairingToken,
-      'sig': claimSig,
-    }));
+    final pairingClaimCbor = Uint8List.fromList(
+      cbor.encode(<String, dynamic>{
+        'owner_pubkey': base64.encode(kp.publicKey),
+        'pairing_token': pairingToken,
+        'sig': claimSig,
+      }),
+    );
 
     // relay_id = hex(blake2b256(owner_pk || utf8(owner_onion))) and the
     // PairResponse CBOR carrying it (Rust-produced, Dart-decoded).
     const ownerOnion = 'ownerexampleonionaddressownerexampleonionaddress.onion';
-    final relayIdHex = hex(crypto.blake2b256(
-      Uint8List.fromList([...kp.publicKey, ...utf8.encode(ownerOnion)]),
-    ));
-    final pairResponseCbor = Uint8List.fromList(cbor.encode(<String, dynamic>{
-      'relay_onion': ownerOnion,
-      'relay_id': relayIdHex,
-    }));
+    final relayIdHex = hex(
+      crypto.blake2b256(
+        Uint8List.fromList([...kp.publicKey, ...utf8.encode(ownerOnion)]),
+      ),
+    );
+    final pairResponseCbor = Uint8List.fromList(
+      cbor.encode(<String, dynamic>{
+        'relay_onion': ownerOnion,
+        'relay_id': relayIdHex,
+      }),
+    );
 
     // RelayQrCard (Rust-produced, scanned by the phone).
-    final qrCardCbor = Uint8List.fromList(cbor.encode(<String, dynamic>{
-      'relay_onion': adminOnion,
-      'pairing_token': pairingToken,
-      'relay_version': '0.1.0-test',
-    }));
+    final qrCardCbor = Uint8List.fromList(
+      cbor.encode(<String, dynamic>{
+        'relay_onion': adminOnion,
+        'pairing_token': pairingToken,
+        'relay_version': '0.1.0-test',
+      }),
+    );
 
     // EncryptedEvent wire blob (Dart-produced; the relay reads only the
     // cleartext header fields).
@@ -137,50 +143,57 @@ void main() {
     final encryptedEventBytes = encryptedEvent.toBytes();
 
     // POST /events PushBatch (Dart-produced, relay_push_service.dart).
-    final pushBatchCbor = Uint8List.fromList(cbor.encode(<String, dynamic>{
-      'items': [
-        <String, dynamic>{'id': eventId, 'payload': encryptedEventBytes},
-      ],
-    }));
+    final pushBatchCbor = Uint8List.fromList(
+      cbor.encode(<String, dynamic>{
+        'items': [
+          <String, dynamic>{'id': eventId, 'payload': encryptedEventBytes},
+        ],
+      }),
+    );
 
     // Owner write auth: Ed25519 over blake2b256(body) (X-Starling-Sig).
     final ownerSigDigest = crypto.blake2b256(pushBatchCbor);
     final ownerSig = crypto.sign(kp.secretKey, ownerSigDigest);
 
     // PushReceipt (Rust-produced).
-    final pushReceiptCbor = Uint8List.fromList(cbor.encode(<String, dynamic>{
-      'accepted': 1,
-      'rejected': 0,
-    }));
+    final pushReceiptCbor = Uint8List.fromList(
+      cbor.encode(<String, dynamic>{'accepted': 1, 'rejected': 0}),
+    );
 
     // GET /manifest page (Rust-produced shape; Dart decodes it through
     // parseManifestResponse).
-    final manifestPageCbor = Uint8List.fromList(cbor.encode(<String, dynamic>{
-      'pubkey': crockfordBase32Encode(kp.publicKey),
-      'events': [
-        <String, dynamic>{'id': eventId, 'created_at': 1_700_000_000},
-      ],
-      'has_older': true,
-    }));
+    final manifestPageCbor = Uint8List.fromList(
+      cbor.encode(<String, dynamic>{
+        'pubkey': crockfordBase32Encode(kp.publicKey),
+        'events': [
+          <String, dynamic>{'id': eventId, 'created_at': 1_700_000_000},
+        ],
+        'has_older': true,
+      }),
+    );
 
     // GET /media-manifest page (Rust-produced).
-    final mediaManifestCbor = Uint8List.fromList(cbor.encode(<String, dynamic>{
-      'hashes': ['aa' * 32, 'bb' * 32],
-      'has_older': false,
-    }));
+    final mediaManifestCbor = Uint8List.fromList(
+      cbor.encode(<String, dynamic>{
+        'hashes': ['aa' * 32, 'bb' * 32],
+        'has_older': false,
+      }),
+    );
 
     // GET /events Envelope (Rust-produced via build_events_envelope).
-    final envelopeCbor = Uint8List.fromList(cbor.encode(<String, dynamic>{
-      'version': '2026-04-28',
-      'items': [
-        <String, dynamic>{
-          'type': 'event',
-          'payload': encryptedEventBytes,
-          'extensions': <String, dynamic>{},
-        },
-      ],
-      'extensions': <String, dynamic>{},
-    }));
+    final envelopeCbor = Uint8List.fromList(
+      cbor.encode(<String, dynamic>{
+        'version': '2026-04-28',
+        'items': [
+          <String, dynamic>{
+            'type': 'event',
+            'payload': encryptedEventBytes,
+            'extensions': <String, dynamic>{},
+          },
+        ],
+        'extensions': <String, dynamic>{},
+      }),
+    );
 
     // Manifest ack possession proof (S3a). Dart↔Dart only (phone owner ↔
     // phone follower); pinned here against Dart-side drift, skipped by the
@@ -229,7 +242,8 @@ void main() {
         'ciphertext_hex': hex(ciphertext),
       },
       'relay_wire': {
-        '_comment': 'Dart↔Rust wire surfaces (Plan 15). Rust consumer: '
+        '_comment':
+            'Dart↔Rust wire surfaces (Plan 15). Rust consumer: '
             'relay/crates/starling-wire/tests/wire_vectors.rs. '
             'manifest_ack is Dart↔Dart only and skipped by the Rust test.',
         'crockford_base32': {
@@ -273,12 +287,8 @@ void main() {
           'rejected': 0,
           'cbor_hex': hex(pushReceiptCbor),
         },
-        'manifest_page': {
-          'cbor_hex': hex(manifestPageCbor),
-        },
-        'media_manifest_page': {
-          'cbor_hex': hex(mediaManifestCbor),
-        },
+        'manifest_page': {'cbor_hex': hex(manifestPageCbor)},
+        'media_manifest_page': {'cbor_hex': hex(mediaManifestCbor)},
         'events_envelope': {
           'version': '2026-04-28',
           'cbor_hex': hex(envelopeCbor),

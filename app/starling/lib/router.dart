@@ -46,11 +46,16 @@ GoRouter buildRouter(Ref ref) {
 
       if (identity.isLoading) return null;
       if (!hasIdentity && !isOnboarding) return '/onboarding/welcome';
-      // `/onboarding/done` is the post-signup capstone — the identity already
-      // exists by the time we land there, so exempt it from the bounce that
-      // sends every other onboarding route to the feed once onboarded.
+      // `/onboarding/recovery` and `/onboarding/done` are post-signup — the
+      // identity already exists by the time we land on them, so exempt them
+      // from the bounce that sends every other onboarding route to the feed
+      // once onboarded. Without the recovery exemption, the identity
+      // provider's async reload (kicked off inside `createIdentity()`)
+      // re-fires this redirect via `_IdentityRefresh` and yanks the user off
+      // the one screen that shows their recovery phrase.
       if (hasIdentity &&
           isOnboarding &&
+          state.matchedLocation != '/onboarding/recovery' &&
           state.matchedLocation != '/onboarding/done') {
         return '/feed';
       }

@@ -8,19 +8,18 @@ void main() {
     String? ref,
     List<MediaRef> media = const [],
     Map<String, Uint8List> extensions = const {},
-  }) =>
-      Event(
-        version: '2026-03-24',
-        id: 'test-id-123',
-        pubkey: 'test-pubkey-abc',
-        createdAt: 1711324800,
-        kind: EventKind.post,
-        ref: ref,
-        content: Uint8List.fromList([72, 101, 108, 108, 111]), // "Hello"
-        media: media,
-        extensions: extensions,
-        sig: Uint8List.fromList(List.filled(64, 0xFF)),
-      );
+  }) => Event(
+    version: '2026-03-24',
+    id: 'test-id-123',
+    pubkey: 'test-pubkey-abc',
+    createdAt: 1711324800,
+    kind: EventKind.post,
+    ref: ref,
+    content: Uint8List.fromList([72, 101, 108, 108, 111]), // "Hello"
+    media: media,
+    extensions: extensions,
+    sig: Uint8List.fromList(List.filled(64, 0xFF)),
+  );
 
   group('Event CBOR serialization', () {
     test('round-trips through bytes', () {
@@ -45,16 +44,8 @@ void main() {
     test('preserves media list with entries', () {
       final event = makeEvent(
         media: [
-          const MediaRef(
-            hash: 'abc123',
-            mimeType: 'image/jpeg',
-            size: 1024,
-          ),
-          const MediaRef(
-            hash: 'def456',
-            mimeType: 'image/png',
-            size: 2048,
-          ),
+          const MediaRef(hash: 'abc123', mimeType: 'image/jpeg', size: 1024),
+          const MediaRef(hash: 'def456', mimeType: 'image/png', size: 2048),
         ],
       );
       final decoded = Event.fromBytes(event.toBytes());
@@ -78,7 +69,10 @@ void main() {
       );
       final decoded = Event.fromBytes(event.toBytes());
       expect(decoded.extensions, hasLength(2));
-      expect(decoded.extensions['custom'], equals(Uint8List.fromList([1, 2, 3])));
+      expect(
+        decoded.extensions['custom'],
+        equals(Uint8List.fromList([1, 2, 3])),
+      );
       expect(decoded.extensions['another'], equals(Uint8List.fromList([4, 5])));
       expect(decoded, equals(event));
     });
@@ -90,19 +84,31 @@ void main() {
       expect(decoded, equals(event));
     });
 
-    test('toIdFields contains version, pubkey, created_at, kind, ref, content, media, extensions', () {
-      final event = makeEvent(ref: 'some-ref');
-      final idFields = event.toIdFields();
-      expect(
-        idFields.keys.toSet(),
-        equals({'version', 'pubkey', 'created_at', 'kind', 'ref', 'content', 'media', 'extensions'}),
-      );
-      expect(idFields['version'], equals('2026-03-24'));
-      expect(idFields['pubkey'], equals('test-pubkey-abc'));
-      expect(idFields['created_at'], equals(1711324800));
-      expect(idFields['kind'], equals(EventKind.post.value));
-      expect(idFields['ref'], equals('some-ref'));
-    });
+    test(
+      'toIdFields contains version, pubkey, created_at, kind, ref, content, media, extensions',
+      () {
+        final event = makeEvent(ref: 'some-ref');
+        final idFields = event.toIdFields();
+        expect(
+          idFields.keys.toSet(),
+          equals({
+            'version',
+            'pubkey',
+            'created_at',
+            'kind',
+            'ref',
+            'content',
+            'media',
+            'extensions',
+          }),
+        );
+        expect(idFields['version'], equals('2026-03-24'));
+        expect(idFields['pubkey'], equals('test-pubkey-abc'));
+        expect(idFields['created_at'], equals(1711324800));
+        expect(idFields['kind'], equals(EventKind.post.value));
+        expect(idFields['ref'], equals('some-ref'));
+      },
+    );
 
     test('toIdFields excludes ref when null', () {
       final event = makeEvent();
@@ -110,7 +116,15 @@ void main() {
       expect(idFields.containsKey('ref'), isFalse);
       expect(
         idFields.keys.toSet(),
-        equals({'version', 'pubkey', 'created_at', 'kind', 'content', 'media', 'extensions'}),
+        equals({
+          'version',
+          'pubkey',
+          'created_at',
+          'kind',
+          'content',
+          'media',
+          'extensions',
+        }),
       );
     });
 
@@ -122,7 +136,9 @@ void main() {
 
     test('toIdFields includes extensions', () {
       final event = makeEvent(
-        extensions: {'key': Uint8List.fromList([42])},
+        extensions: {
+          'key': Uint8List.fromList([42]),
+        },
       );
       final idFields = event.toIdFields();
       expect(idFields.containsKey('extensions'), isTrue);

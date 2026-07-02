@@ -44,12 +44,7 @@ void main() {
     await storage.saveEvent(buildEvent(id: 'b', pubkey: identity.pubkey));
     final hash = List.generate(64, (_) => 'a').join();
     await storage.saveMedia(
-      CachedMedia(
-        hash: hash,
-        path: '/tmp/a',
-        size: 4096,
-        lastAccessed: 100,
-      ),
+      CachedMedia(hash: hash, path: '/tmp/a', size: 4096, lastAccessed: 100),
     );
 
     final res = await call(identity: identity);

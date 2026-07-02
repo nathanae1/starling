@@ -58,36 +58,43 @@ void main() {
   }
 
   group('encryptForAudience + decryptEvent', () {
-    test('round-trip recovers the original event with valid signature',
-        () async {
-      final f = await buildFixture();
-      final event = unsignedEvent(pubkey: f.ownPubkey);
+    test(
+      'round-trip recovers the original event with valid signature',
+      () async {
+        final f = await buildFixture();
+        final event = unsignedEvent(pubkey: f.ownPubkey);
 
-      final enc = f.service.encryptForAudience(event, Audience.broadcast, msgSeq: 0);
-      expect(enc.pubkey, f.ownPubkey);
-      expect(enc.createdAt, event.createdAt);
-      expect(enc.epoch, 0);
-      expect(enc.nonce.length, 24);
-      expect(enc.payload, isNotEmpty);
+        final enc = f.service.encryptForAudience(
+          event,
+          Audience.broadcast,
+          msgSeq: 0,
+        );
+        expect(enc.pubkey, f.ownPubkey);
+        expect(enc.createdAt, event.createdAt);
+        expect(enc.epoch, 0);
+        expect(enc.nonce.length, 24);
+        expect(enc.payload, isNotEmpty);
 
-      final decrypted = f.service.decryptEvent(enc, f.feedKey);
-      expect(decrypted.version, event.version);
-      expect(decrypted.pubkey, event.pubkey);
-      expect(decrypted.createdAt, event.createdAt);
-      expect(decrypted.content, event.content);
-      expect(decrypted.id, isNotEmpty);
-      expect(decrypted.sig.length, 64);
-    });
+        final decrypted = f.service.decryptEvent(enc, f.feedKey);
+        expect(decrypted.version, event.version);
+        expect(decrypted.pubkey, event.pubkey);
+        expect(decrypted.createdAt, event.createdAt);
+        expect(decrypted.content, event.content);
+        expect(decrypted.id, isNotEmpty);
+        expect(decrypted.sig.length, 64);
+      },
+    );
 
     test('decrypt with wrong key throws', () async {
       final f = await buildFixture();
       final event = unsignedEvent(pubkey: f.ownPubkey);
-      final enc = f.service.encryptForAudience(event, Audience.broadcast, msgSeq: 0);
-      final wrongKey = crypto.randomBytes(32);
-      expect(
-        () => f.service.decryptEvent(enc, wrongKey),
-        throwsA(anything),
+      final enc = f.service.encryptForAudience(
+        event,
+        Audience.broadcast,
+        msgSeq: 0,
       );
+      final wrongKey = crypto.randomBytes(32);
+      expect(() => f.service.decryptEvent(enc, wrongKey), throwsA(anything));
     });
 
     test('uses current cache epoch, not a hardcoded zero', () async {
@@ -96,23 +103,33 @@ void main() {
       f.cache.put(f.ownPubkey, epoch3Key, 3);
 
       final event = unsignedEvent(pubkey: f.ownPubkey);
-      final enc = f.service.encryptForAudience(event, Audience.broadcast, msgSeq: 0);
+      final enc = f.service.encryptForAudience(
+        event,
+        Audience.broadcast,
+        msgSeq: 0,
+      );
       expect(enc.epoch, 3);
 
       final decrypted = f.service.decryptEvent(enc, epoch3Key);
       expect(decrypted.content, event.content);
     });
 
-    test('encryptForAudience throws when cache is missing own pubkey',
-        () async {
-      final f = await buildFixture();
-      f.cache.remove(f.ownPubkey);
-      final event = unsignedEvent(pubkey: f.ownPubkey);
-      expect(
-        () => f.service.encryptForAudience(event, Audience.broadcast, msgSeq: 0),
-        throwsStateError,
-      );
-    });
+    test(
+      'encryptForAudience throws when cache is missing own pubkey',
+      () async {
+        final f = await buildFixture();
+        f.cache.remove(f.ownPubkey);
+        final event = unsignedEvent(pubkey: f.ownPubkey);
+        expect(
+          () => f.service.encryptForAudience(
+            event,
+            Audience.broadcast,
+            msgSeq: 0,
+          ),
+          throwsStateError,
+        );
+      },
+    );
   });
 
   group('computeEventId', () {
@@ -127,10 +144,7 @@ void main() {
       final f = await buildFixture();
       final e1 = unsignedEvent(pubkey: f.ownPubkey);
       final e2 = e1.copyWith(version: '2099-01-01');
-      expect(
-        f.service.computeEventId(e1),
-        isNot(f.service.computeEventId(e2)),
-      );
+      expect(f.service.computeEventId(e1), isNot(f.service.computeEventId(e2)));
     });
 
     test('depends on extensions (trust-model coverage)', () async {
@@ -138,12 +152,11 @@ void main() {
       final e1 = unsignedEvent(pubkey: f.ownPubkey);
       final e2 = unsignedEvent(
         pubkey: f.ownPubkey,
-        extensions: {'x': Uint8List.fromList([1, 2, 3])},
+        extensions: {
+          'x': Uint8List.fromList([1, 2, 3]),
+        },
       );
-      expect(
-        f.service.computeEventId(e1),
-        isNot(f.service.computeEventId(e2)),
-      );
+      expect(f.service.computeEventId(e1), isNot(f.service.computeEventId(e2)));
     });
 
     test('empty-extensions event produces stable id', () async {
@@ -197,34 +210,35 @@ void main() {
   });
 
   group('signAndEncryptForAudience', () {
-    test('returns the signed plaintext alongside the encrypted wire form',
-        () async {
-      final f = await buildFixture();
-      final unsigned = unsignedEvent(pubkey: f.ownPubkey);
+    test(
+      'returns the signed plaintext alongside the encrypted wire form',
+      () async {
+        final f = await buildFixture();
+        final unsigned = unsignedEvent(pubkey: f.ownPubkey);
 
-      final result = f.service.signAndEncryptForAudience(
-        unsigned,
-        Audience.broadcast,
-        msgSeq: 0,
-      );
+        final result = f.service.signAndEncryptForAudience(
+          unsigned,
+          Audience.broadcast,
+          msgSeq: 0,
+        );
 
-      expect(result.signed.id, isNotEmpty);
-      expect(result.signed.sig.length, equals(64));
-      expect(result.signed.pubkey, equals(f.ownPubkey));
-      expect(result.signed.content, equals(unsigned.content));
-      // Signature must verify against the owner's public key over the decoded
-      // id bytes (same contract as decryptEvent).
-      final idBytes = crockfordBase32Decode(result.signed.id);
-      expect(
-        crypto.verify(f.ownPublicKey, idBytes, result.signed.sig),
-        isTrue,
-      );
-      // Encrypted wire form decrypts back to the same signed event.
-      final decrypted =
-          f.service.decryptEvent(result.encrypted, f.feedKey);
-      expect(decrypted.id, equals(result.signed.id));
-      expect(decrypted.sig, equals(result.signed.sig));
-    });
+        expect(result.signed.id, isNotEmpty);
+        expect(result.signed.sig.length, equals(64));
+        expect(result.signed.pubkey, equals(f.ownPubkey));
+        expect(result.signed.content, equals(unsigned.content));
+        // Signature must verify against the owner's public key over the decoded
+        // id bytes (same contract as decryptEvent).
+        final idBytes = crockfordBase32Decode(result.signed.id);
+        expect(
+          crypto.verify(f.ownPublicKey, idBytes, result.signed.sig),
+          isTrue,
+        );
+        // Encrypted wire form decrypts back to the same signed event.
+        final decrypted = f.service.decryptEvent(result.encrypted, f.feedKey);
+        expect(decrypted.id, equals(result.signed.id));
+        expect(decrypted.sig, equals(result.signed.sig));
+      },
+    );
 
     test('encryptForAudience returns the same encrypted event', () async {
       final f = await buildFixture();
@@ -236,8 +250,11 @@ void main() {
         Audience.broadcast,
         msgSeq: 0,
       );
-      final viaEncryptOnly = f.service
-          .encryptForAudience(unsigned, Audience.broadcast, msgSeq: 0);
+      final viaEncryptOnly = f.service.encryptForAudience(
+        unsigned,
+        Audience.broadcast,
+        msgSeq: 0,
+      );
       final a = f.service.decryptEvent(pair.encrypted, f.feedKey);
       final b = f.service.decryptEvent(viaEncryptOnly, f.feedKey);
       expect(a.id, equals(b.id));

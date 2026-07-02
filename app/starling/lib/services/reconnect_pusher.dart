@@ -59,7 +59,7 @@ class ReconnectPusher {
     // immediately push to peers whose state was already "reachable" before
     // we subscribed (pump restart, lifecycle resume).
     for (final entry in _reachability.state.entries) {
-      if (_isReachable(entry.value)) {
+      if (entry.value.isReachable) {
         _reachableNow.add(entry.key);
       }
     }
@@ -77,7 +77,7 @@ class ReconnectPusher {
     final newlyReachable = <String>[];
     final stillReachable = <String>{};
     for (final entry in snapshot.entries) {
-      if (_isReachable(entry.value)) {
+      if (entry.value.isReachable) {
         stillReachable.add(entry.key);
         if (!_reachableNow.contains(entry.key)) {
           newlyReachable.add(entry.key);
@@ -89,13 +89,6 @@ class ReconnectPusher {
       ..addAll(stillReachable);
     if (newlyReachable.isEmpty) return;
     unawaited(_handleReconnects(newlyReachable));
-  }
-
-  bool _isReachable(PeerReachability p) {
-    for (final status in p.transports.values) {
-      if (status.state == TransportState.reachable) return true;
-    }
-    return false;
   }
 
   Future<void> _handleReconnects(List<String> pubkeys) async {

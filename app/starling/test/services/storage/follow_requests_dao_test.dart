@@ -39,10 +39,7 @@ void main() {
         ),
       );
 
-      await db.followRequestsDao.updateInboundStatus(
-        'requester-1',
-        'accepted',
-      );
+      await db.followRequestsDao.updateInboundStatus('requester-1', 'accepted');
 
       final pending = await db.followRequestsDao.getInboundPending();
       expect(pending, isEmpty);
@@ -73,10 +70,7 @@ void main() {
         ),
       );
 
-      await db.followRequestsDao.updateOutboundStatus(
-        'target-1',
-        'accepted',
-      );
+      await db.followRequestsDao.updateOutboundStatus('target-1', 'accepted');
 
       final outbound = await db.followRequestsDao.getOutbound();
       expect(outbound.first.status, equals('accepted'));

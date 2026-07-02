@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../providers/comments_provider.dart';
 import '../theme/starling_theme.dart';
+import '../utils/debug_log.dart';
 import 'avatar.dart';
 import 'buttons.dart';
 import 'inputs.dart';
@@ -44,6 +45,19 @@ class _CommentInputState extends ConsumerState<CommentInput> {
           .read(commentControllerProvider(widget.postId).notifier)
           .submit(text);
       _controller.clear();
+    } catch (e) {
+      // The typed text stays in the field; just say the send didn't land
+      // instead of the button silently doing nothing.
+      debugLog('comment_input', 'comment submit failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text("Couldn't post your comment — try again."),
+            ),
+          );
+      }
     } finally {
       if (mounted) setState(() => _sending = false);
     }

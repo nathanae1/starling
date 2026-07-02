@@ -48,4 +48,4 @@ final class SyncStatusProvider
   }
 }
 
-String _$syncStatusHash() => r'0ab9bf62fe2b5a28fa93be7dc77cb645390a83e3';
+String _$syncStatusHash() => r'edc88d7c035c62188e58564e120ffdcdf20fd82c';

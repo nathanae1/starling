@@ -11,7 +11,7 @@ import 'package:starling/sync/peer_reachability_monitor.dart';
 class FakePeerReachabilityMonitor implements PeerReachabilityMonitor {
   final Map<String, Map<PeerTransport, String>> _reachable = {};
   final List<({String pubkey, PeerTransport transport, Object reason})>
-      markedUnreachable = [];
+  markedUnreachable = [];
 
   /// When true, [probeCard] resolves to `null` regardless of the reachable
   /// map — models a frozen request card whose onion can't be reached over
@@ -88,8 +88,11 @@ class FakePeerReachabilityMonitor implements PeerReachabilityMonitor {
 
   @override
   void markUnreachable(String pubkey, PeerTransport transport, Object reason) {
-    markedUnreachable
-        .add((pubkey: pubkey, transport: transport, reason: reason));
+    markedUnreachable.add((
+      pubkey: pubkey,
+      transport: transport,
+      reason: reason,
+    ));
     _reachable[pubkey]?.remove(transport);
   }
 

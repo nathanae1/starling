@@ -36,11 +36,9 @@ void main() {
 
   Future<Response> postBytes(Uint8List body) async {
     final handler = followRequestHandler(storage: storage, clock: clock);
-    return handler(Request(
-      'POST',
-      Uri.parse('http://localhost/follow-request'),
-      body: body,
-    ));
+    return handler(
+      Request('POST', Uri.parse('http://localhost/follow-request'), body: body),
+    );
   }
 
   Uint8List validBody({String pubkey = 'REQUESTER', int timestamp = 4990}) {
@@ -99,31 +97,33 @@ void main() {
     expect(await storage.getInboundRequests(), isEmpty);
   });
 
-  test('over-1MB body → 413 (exercises body-size middleware via server)',
-      () async {
-    final tmpDir = await Directory.systemTemp.createTemp('starling-fr-');
-    final server = StarlingHttpServer.social(
-      storage: storage,
-      contentKey: MockContentKeyService(),
-      identityLookup: () async => identity,
-      appSupportDir: tmpDir,
-      clock: clock,
-      crypto: MockCryptoService(),
-      signalingInboundHandler: (_) {},
-      maxBodyBytes: 1024,
-    );
-    await server.start();
-    addTearDown(() async {
-      await server.stop();
-      await tmpDir.delete(recursive: true);
-    });
-    final oversize = List<int>.filled(2048, 0);
-    final res = await fetchHttp(
-      server.port!,
-      '/follow-request',
-      method: 'POST',
-      body: oversize,
-    );
-    expect(res.statusCode, 413);
-  });
+  test(
+    'over-1MB body → 413 (exercises body-size middleware via server)',
+    () async {
+      final tmpDir = await Directory.systemTemp.createTemp('starling-fr-');
+      final server = StarlingHttpServer.social(
+        storage: storage,
+        contentKey: MockContentKeyService(),
+        identityLookup: () async => identity,
+        appSupportDir: tmpDir,
+        clock: clock,
+        crypto: MockCryptoService(),
+        signalingInboundHandler: (_) {},
+        maxBodyBytes: 1024,
+      );
+      await server.start();
+      addTearDown(() async {
+        await server.stop();
+        await tmpDir.delete(recursive: true);
+      });
+      final oversize = List<int>.filled(2048, 0);
+      final res = await fetchHttp(
+        server.port!,
+        '/follow-request',
+        method: 'POST',
+        body: oversize,
+      );
+      expect(res.statusCode, 413);
+    },
+  );
 }

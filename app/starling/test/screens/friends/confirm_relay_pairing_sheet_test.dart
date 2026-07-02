@@ -34,11 +34,13 @@ void main() {
   }) async {
     final storage = MockStorageService();
     final kp = await crypto.generateKeyPair();
-    await storage.saveIdentity(Identity(
-      pubkey: crockfordBase32Encode(kp.publicKey),
-      feedKey: Uint8List(32),
-      createdAt: 0,
-    ));
+    await storage.saveIdentity(
+      Identity(
+        pubkey: crockfordBase32Encode(kp.publicKey),
+        feedKey: Uint8List(32),
+        createdAt: 0,
+      ),
+    );
     return RelayPairingService(
       initiator: RelayPairingInitiator(
         crypto: crypto,
@@ -67,9 +69,11 @@ void main() {
   }
 
   Widget harness(RelayPairingService service) {
-    final container = ProviderContainer(overrides: [
-      relayPairingServiceProvider.overrideWith((ref) async => service),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        relayPairingServiceProvider.overrideWith((ref) async => service),
+      ],
+    );
     addTearDown(container.dispose);
     return UncontrolledProviderScope(
       container: container,

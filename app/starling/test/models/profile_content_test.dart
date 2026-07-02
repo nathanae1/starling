@@ -15,16 +15,24 @@ void main() {
   });
 
   test('emits the exact wire keys name/bio/avatar_hash', () {
-    final map = jsonDecode(utf8.decode(
-      encodeProfileContent(name: 'Sam', bio: 'hi', avatarHash: 'h'),
-    )) as Map<String, dynamic>;
+    final map =
+        jsonDecode(
+              utf8.decode(
+                encodeProfileContent(name: 'Sam', bio: 'hi', avatarHash: 'h'),
+              ),
+            )
+            as Map<String, dynamic>;
     expect(map.keys.toSet(), {'name', 'bio', 'avatar_hash'});
   });
 
   test('omits blank/null optional fields', () {
-    final map = jsonDecode(utf8.decode(
-      encodeProfileContent(name: 'Sam', bio: '   ', avatarHash: null),
-    )) as Map<String, dynamic>;
+    final map =
+        jsonDecode(
+              utf8.decode(
+                encodeProfileContent(name: 'Sam', bio: '   ', avatarHash: null),
+              ),
+            )
+            as Map<String, dynamic>;
     expect(map.keys.toSet(), {'name'});
   });
 
@@ -34,7 +42,10 @@ void main() {
   });
 
   test('decode returns null on malformed (non-JSON) bytes', () {
-    expect(decodeProfileContent(Uint8List.fromList([0xff, 0x00, 0x12])), isNull);
+    expect(
+      decodeProfileContent(Uint8List.fromList([0xff, 0x00, 0x12])),
+      isNull,
+    );
   });
 
   test('blank name decodes to empty so callers apply their own fallback', () {

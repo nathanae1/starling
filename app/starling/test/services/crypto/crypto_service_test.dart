@@ -20,14 +20,16 @@ void main() {
       expect(kp.secretKey.length, 64);
     });
 
-    test('ed25519 → x25519 conversion returns 32 bytes for pk and sk',
-        () async {
-      final kp = await crypto.generateKeyPair();
-      final xpk = crypto.ed25519ToX25519PublicKey(kp.publicKey);
-      final xsk = crypto.ed25519ToX25519SecretKey(kp.secretKey);
-      expect(xpk.length, 32);
-      expect(xsk.length, 32);
-    });
+    test(
+      'ed25519 → x25519 conversion returns 32 bytes for pk and sk',
+      () async {
+        final kp = await crypto.generateKeyPair();
+        final xpk = crypto.ed25519ToX25519PublicKey(kp.publicKey);
+        final xsk = crypto.ed25519ToX25519SecretKey(kp.secretKey);
+        expect(xpk.length, 32);
+        expect(xsk.length, 32);
+      },
+    );
   });
 
   group('sign/verify', () {
@@ -170,10 +172,7 @@ void main() {
         // Extremely unlikely; pick another pair.
         tampered[0] = words.firstWhere((w) => w != words[0]);
       }
-      expect(
-        () => crypto.recoverFromPhrase(tampered),
-        throwsArgumentError,
-      );
+      expect(() => crypto.recoverFromPhrase(tampered), throwsArgumentError);
     });
   });
 
@@ -232,31 +231,33 @@ void main() {
       expect(t1, isNot(t2));
     });
 
-    test('swapped requester/responder produce different keys (anti-reflection)',
-        () async {
-      final alice = await crypto.generateKeyPair();
-      final bob = await crypto.generateKeyPair();
-      const timestamp = 1_712_000_000;
+    test(
+      'swapped requester/responder produce different keys (anti-reflection)',
+      () async {
+        final alice = await crypto.generateKeyPair();
+        final bob = await crypto.generateKeyPair();
+        const timestamp = 1_712_000_000;
 
-      final aliceXsk = crypto.ed25519ToX25519SecretKey(alice.secretKey);
-      final bobXpk = crypto.ed25519ToX25519PublicKey(bob.publicKey);
+        final aliceXsk = crypto.ed25519ToX25519SecretKey(alice.secretKey);
+        final bobXpk = crypto.ed25519ToX25519PublicKey(bob.publicKey);
 
-      final a = crypto.deriveSharedKey(
-        aliceXsk,
-        bobXpk,
-        alice.publicKey,
-        bob.publicKey,
-        timestamp,
-      );
-      final b = crypto.deriveSharedKey(
-        aliceXsk,
-        bobXpk,
-        bob.publicKey, // swapped
-        alice.publicKey,
-        timestamp,
-      );
-      expect(a, isNot(b));
-    });
+        final a = crypto.deriveSharedKey(
+          aliceXsk,
+          bobXpk,
+          alice.publicKey,
+          bob.publicKey,
+          timestamp,
+        );
+        final b = crypto.deriveSharedKey(
+          aliceXsk,
+          bobXpk,
+          bob.publicKey, // swapped
+          alice.publicKey,
+          timestamp,
+        );
+        expect(a, isNot(b));
+      },
+    );
 
     test('Alice encrypts feed key, Bob decrypts', () async {
       final alice = await crypto.generateKeyPair();

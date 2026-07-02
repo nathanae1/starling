@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../providers/onboarding_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../theme/starling_theme.dart';
+import '../../utils/friendly_error.dart';
 import '../../utils/avatar_picker.dart';
 import '../../widgets/avatar.dart';
 import '../../widgets/buttons.dart';
@@ -58,9 +59,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _creating = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not create identity: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyError(e, tag: 'create_identity'))),
+      );
     }
   }
 
@@ -81,7 +82,12 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               StarlingIconButton(
-                onPressed: () => context.go('/onboarding/welcome'),
+                // Gated while creating: backing out mid-create would land on
+                // Welcome, and once the identity reload finishes the router
+                // would bounce past the recovery screen entirely.
+                onPressed: _creating
+                    ? null
+                    : () => context.go('/onboarding/welcome'),
                 semanticLabel: 'Back',
                 child: const Icon(LucideIcons.arrowLeft, size: 20),
               ),

@@ -64,13 +64,25 @@ class _ReactionButtonState extends State<ReactionButton>
     widget.onTap();
   }
 
+  /// "Unlike. 3 likes" — the count belongs in the accessible name, and the
+  /// liked state must be legible without color.
+  String get _semanticsLabel {
+    final action = widget.liked ? 'Unlike' : 'Like';
+    if (widget.count == 0) return action;
+    final likes = widget.count == 1 ? '1 like' : '${widget.count} likes';
+    return '$action. $likes';
+  }
+
   @override
   Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
     final color = widget.liked
         ? starling.colors.clay
         : starling.colors.graphite;
-    final iconData = widget.liked ? LucideIcons.heart : LucideIcons.heart;
+    // Filled when liked: lucide has no filled heart variant, so the liked
+    // state borrows Material's — shape-distinct from the outline, which
+    // color alone (invisible to color-blind users) never was.
+    final iconData = widget.liked ? Icons.favorite : LucideIcons.heart;
 
     final scaled = ScaleTransition(
       scale: Tween<double>(
@@ -94,7 +106,7 @@ class _ReactionButtonState extends State<ReactionButton>
     if (widget.compact) {
       return Semantics(
         button: true,
-        label: widget.liked ? 'Unlike' : 'Like',
+        label: _semanticsLabel,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: _handleTap,
@@ -107,7 +119,7 @@ class _ReactionButtonState extends State<ReactionButton>
     }
     return StarlingIconButton(
       onPressed: _handleTap,
-      semanticLabel: widget.liked ? 'Unlike' : 'Like',
+      semanticLabel: _semanticsLabel,
       child: body,
     );
   }

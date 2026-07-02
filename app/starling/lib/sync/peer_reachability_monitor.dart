@@ -54,6 +54,13 @@ class PeerReachability {
   const PeerReachability({required this.pubkey, required this.transports});
   final String pubkey;
   final Map<PeerTransport, TransportStatus> transports;
+
+  /// True when any transport currently probes reachable. The canonical
+  /// "can I talk to this peer right now" predicate — consumers must not
+  /// derive their own (the mDNS-only variant of this is exactly how the
+  /// feed ended up saying "Offline" while Tor sync worked fine).
+  bool get isReachable =>
+      transports.values.any((s) => s.state == TransportState.reachable);
 }
 
 /// Centralized peer reachability state machine + probe loop.

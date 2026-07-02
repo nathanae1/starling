@@ -20,14 +20,20 @@ LastViewedTracker lastViewedTracker(Ref ref) {
 
 /// Reverse-chronological feed of kind=1 posts from own identity + active
 /// follows. Posts with a kind=6 tombstone from the same author are excluded
-/// at the storage layer. Plan 09 plugs sync into this — the provider shape
-/// doesn't change.
+/// at the storage layer.
+///
+/// Plan 18 C1: a reactive stream over the storage layer, not a one-shot
+/// future — content appears live regardless of which path stored it (sync
+/// pull, inbound push, background sync, own publish).
 @riverpod
-Future<List<Event>> feed(Ref ref) async {
+Stream<List<Event>> feed(Ref ref) async* {
   final identity = await ref.watch(identityControllerProvider.future);
-  if (identity == null) return const [];
+  if (identity == null) {
+    yield const [];
+    return;
+  }
   final storage = ref.watch(storageServiceProvider);
-  return storage.getFeedEvents();
+  yield* storage.watchFeedEvents();
 }
 
 /// Single event by id, used by the post-detail screen so it doesn't have
@@ -38,18 +44,21 @@ Future<Event?> eventById(Ref ref, String id) async {
   return storage.getEvent(id);
 }
 
-/// Own posts (kind=1, deletes excluded) for the "You"-tab grid.
+/// Own posts (kind=1, deletes excluded) for the "You"-tab grid. Reactive.
 @riverpod
-Future<List<Event>> ownPosts(Ref ref) async {
+Stream<List<Event>> ownPosts(Ref ref) async* {
   final identity = await ref.watch(identityControllerProvider.future);
-  if (identity == null) return const [];
+  if (identity == null) {
+    yield const [];
+    return;
+  }
   final storage = ref.watch(storageServiceProvider);
-  return storage.getProfilePosts(identity.pubkey);
+  yield* storage.watchProfilePosts(identity.pubkey);
 }
 
-/// Posts authored by a given pubkey, for other-profile grid.
+/// Posts authored by a given pubkey, for other-profile grid. Reactive.
 @riverpod
-Future<List<Event>> profilePosts(Ref ref, String pubkey) async {
+Stream<List<Event>> profilePosts(Ref ref, String pubkey) {
   final storage = ref.watch(storageServiceProvider);
-  return storage.getProfilePosts(pubkey);
+  return storage.watchProfilePosts(pubkey);
 }

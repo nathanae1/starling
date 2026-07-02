@@ -80,6 +80,15 @@ Future<FollowRequestIngestResult> ingestFollowRequestBytes({
       timestamp is! int) {
     return const FollowRequestIngestResult.invalid('invalid body');
   }
+  // Never downgrade an already-actioned row: the save below defaults
+  // status to 'pending', and the upsert would overwrite 'accepted' — the
+  // sender's "Follows you" state would vanish (and `isAcceptedFollower`
+  // break) just because they re-scanned an old QR. Accept the bytes,
+  // change nothing.
+  final existing = await storage.getInboundRequest(requesterPubkey);
+  if (existing != null && existing.status != 'pending') {
+    return const FollowRequestIngestResult.ok();
+  }
   await storage.saveInboundRequest(
     FollowRequest(
       pubkey: requesterPubkey,

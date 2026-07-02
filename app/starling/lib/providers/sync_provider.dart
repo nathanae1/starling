@@ -15,6 +15,7 @@ import '../sync/peer_connection_factory.dart';
 import '../sync/peer_reachability_provider.dart';
 import '../sync/sync_engine.dart';
 import '../sync/transport_router.dart';
+import '../utils/debug_log.dart';
 import 'app_paths_provider.dart';
 import 'follow_provider.dart';
 import 'relay_providers.dart';
@@ -262,6 +263,8 @@ class SyncController extends _$SyncController {
       unawaited(_reconcileRelay());
       return report;
     } catch (e) {
+      // Users see the fixed "Sync problem" copy; the raw detail lives here.
+      debugLog('sync', 'sync run failed: $e');
       state = state.copyWith(phase: SyncRunPhase.idle, lastError: e.toString());
       rethrow;
     }

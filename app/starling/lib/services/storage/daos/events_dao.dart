@@ -126,6 +126,61 @@ class EventsDao extends DatabaseAccessor<AppDatabase> with _$EventsDaoMixin {
     return q.get();
   }
 
+  /// Reactive variant of [getFeedEvents]: re-emits on any write to
+  /// `event_entries`, `follow_entries`, or `identity_entries`, regardless of
+  /// which path stored it (sync pull, inbound push, background sync on this
+  /// connection, own publish). Membership is expressed as subqueries rather
+  /// than pre-fetched pubkey sets so the whole thing is one watchable
+  /// statement — drift tracks all three tables as stream dependencies.
+  Stream<List<EventEntry>> watchFeedEvents({int? limit}) {
+    final identityPubkeys = selectOnly(identityEntries)
+      ..addColumns([identityEntries.pubkey]);
+    final followPubkeys = selectOnly(followEntries)
+      ..addColumns([followEntries.pubkey])
+      ..where(followEntries.status.equals('active'));
+
+    final q = select(eventEntries)
+      ..where(
+        (e) =>
+            (e.pubkey.isInQuery(identityPubkeys) |
+                e.pubkey.isInQuery(followPubkeys)) &
+            e.kind.equals(1) &
+            _notTombstoned(e),
+      )
+      ..orderBy([(e) => OrderingTerm.desc(e.createdAt)]);
+    if (limit != null) {
+      q.limit(limit);
+    }
+    return q.watch();
+  }
+
+  /// Reactive variant of [getProfilePosts].
+  Stream<List<EventEntry>> watchProfilePosts(String pubkey, {int? limit}) {
+    final q = select(eventEntries)
+      ..where(
+        (e) => e.pubkey.equals(pubkey) & e.kind.equals(1) & _notTombstoned(e),
+      )
+      ..orderBy([(e) => OrderingTerm.desc(e.createdAt)]);
+    if (limit != null) {
+      q.limit(limit);
+    }
+    return q.watch();
+  }
+
+  /// Reactive variant of [getEventsByRef].
+  Stream<List<EventEntry>> watchEventsByRef(String refId, {int? kind}) {
+    final q = select(eventEntries)
+      ..where((e) {
+        Expression<bool> condition = e.refId.equals(refId);
+        if (kind != null) {
+          condition = condition & e.kind.equals(kind);
+        }
+        return condition;
+      })
+      ..orderBy([(e) => OrderingTerm.asc(e.createdAt)]);
+    return q.watch();
+  }
+
   /// Posts authored by [pubkey] for grid display: kind=1 only, deletes
   /// (kind=6 with matching ref_id) excluded. Newest first.
   Future<List<EventEntry>> getProfilePosts(String pubkey, {int? limit}) {

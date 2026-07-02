@@ -42,33 +42,34 @@ void main() {
     // Carol syncs and decrypts P1.
     await scene.carolSyncWithAlice();
     expect(
-      (await scene.carol.storage.getEvents(pubkey: scene.alice.identity.pubkey))
-          .map((e) => _content(e.content))
-          .toSet(),
+      (await scene.carol.storage.getEvents(
+        pubkey: scene.alice.identity.pubkey,
+      )).map((e) => _content(e.content)).toSet(),
       equals({'P1'}),
     );
     // Bob syncs and decrypts P1.
     await scene.bobSyncWithAlice();
     expect(
-      (await scene.bob.storage.getEvents(pubkey: scene.alice.identity.pubkey))
-          .map((e) => _content(e.content))
-          .toSet(),
+      (await scene.bob.storage.getEvents(
+        pubkey: scene.alice.identity.pubkey,
+      )).map((e) => _content(e.content)).toSet(),
       equals({'P1'}),
     );
 
     // Alice removes bob: rotation fires, carol gets a pending distribution,
     // bob does not.
-    await scene.alice.followService
-        .removeFollower(scene.bob.identity.pubkey);
+    await scene.alice.followService.removeFollower(scene.bob.identity.pubkey);
 
     expect(
-      await scene.alice.storage
-          .latestPendingDistributionFor(scene.carol.identity.pubkey),
+      await scene.alice.storage.latestPendingDistributionFor(
+        scene.carol.identity.pubkey,
+      ),
       isNotNull,
     );
     expect(
-      await scene.alice.storage
-          .latestPendingDistributionFor(scene.bob.identity.pubkey),
+      await scene.alice.storage.latestPendingDistributionFor(
+        scene.bob.identity.pubkey,
+      ),
       isNull,
     );
 
@@ -78,23 +79,26 @@ void main() {
     // Carol syncs again — receives the new feed key in the manifest, then
     // decrypts P2 successfully.
     await scene.carolSyncWithAlice();
-    final carolStored =
-        await scene.carol.storage.getEvents(pubkey: scene.alice.identity.pubkey);
+    final carolStored = await scene.carol.storage.getEvents(
+      pubkey: scene.alice.identity.pubkey,
+    );
     expect(
       carolStored.map((e) => _content(e.content)).toSet(),
       equals({'P1', 'P2'}),
     );
 
     // Carol's follow row now reflects the rotation.
-    final carolFollow =
-        await scene.carol.storage.getFollow(scene.alice.identity.pubkey);
+    final carolFollow = await scene.carol.storage.getFollow(
+      scene.alice.identity.pubkey,
+    );
     expect(carolFollow!.lastReceivedRotationAt, isPositive);
 
     // Bob still has P1 locally. Bob syncs again; the manifest still lists
     // P1 + P2, but bob's feed key is the OLD one — P2 won't decrypt.
     await scene.bobSyncWithAlice();
-    final bobStored =
-        await scene.bob.storage.getEvents(pubkey: scene.alice.identity.pubkey);
+    final bobStored = await scene.bob.storage.getEvents(
+      pubkey: scene.alice.identity.pubkey,
+    );
     expect(
       bobStored.map((e) => _content(e.content)).toSet(),
       equals({'P1'}), // P2 dropped because decrypt fails
@@ -107,11 +111,7 @@ void main() {
 String _content(Uint8List bytes) => String.fromCharCodes(bytes);
 
 class _Scene {
-  _Scene({
-    required this.alice,
-    required this.bob,
-    required this.carol,
-  });
+  _Scene({required this.alice, required this.bob, required this.carol});
 
   final _Peer alice;
   final _Peer bob;
@@ -213,8 +213,7 @@ class _Scene {
       return;
     }
 
-    final envelope =
-        await _DirectSyncTransport(peer).fetchEnvelope(
+    final envelope = await _DirectSyncTransport(peer).fetchEnvelope(
       PeerConnection(
         pubkey: peer.identity.pubkey,
         baseUrl: peer.baseUrl,
@@ -226,8 +225,10 @@ class _Scene {
       if (item.type != 'event') continue;
       try {
         final encrypted = EncryptedEvent.fromBytes(item.payload);
-        final plain =
-            syncer.contentKey.decryptEvent(encrypted, currentFollow.feedKey);
+        final plain = syncer.contentKey.decryptEvent(
+          encrypted,
+          currentFollow.feedKey,
+        );
         await syncer.storage.saveEvent(plain);
       } catch (_) {
         // Drop undecryptable items — that's the expected outcome for bob
@@ -264,8 +265,8 @@ class _Peer {
     required this.cache,
     required this.contentKey,
     required this.publishLock,
-  })  : clock = MockClock(2_000_000),
-        baseUrl = 'http://$label.local:8080';
+  }) : clock = MockClock(2_000_000),
+       baseUrl = 'http://$label.local:8080';
 
   final String label;
   final CryptoService crypto;
@@ -281,7 +282,10 @@ class _Peer {
   late FollowService followService;
   late KeyRotationService keyRotation;
 
-  static Future<_Peer> build(CryptoService crypto, {required String label}) async {
+  static Future<_Peer> build(
+    CryptoService crypto, {
+    required String label,
+  }) async {
     final kp = await crypto.generateKeyPair();
     final identity = Identity(
       pubkey: crockfordBase32Encode(kp.publicKey),
@@ -322,14 +326,14 @@ class _Peer {
   }
 
   ConnectionCard connectionCard() => ConnectionCard(
-        pubkey: identity.pubkey,
-        endpoints: [
-          // sendFollowRequest refuses to send a card whose own endpoints
-          // lack an onion entry; the fake transport still dials via baseUrl.
-          Endpoint(type: 'onion', address: '$label.onion:80'),
-          Endpoint(type: 'direct', address: _hostFromUrl(baseUrl)),
-        ],
-      );
+    pubkey: identity.pubkey,
+    endpoints: [
+      // sendFollowRequest refuses to send a card whose own endpoints
+      // lack an onion entry; the fake transport still dials via baseUrl.
+      Endpoint(type: 'onion', address: '$label.onion:80'),
+      Endpoint(type: 'direct', address: _hostFromUrl(baseUrl)),
+    ],
+  );
 
   void attachFollowTransport(
     _ScenePairTransport transport,
@@ -353,30 +357,27 @@ class _Peer {
     );
   }
 
-  Future<void> publish(String text) =>
-      publishLock.synchronized(() async {
-        clock.advance(60);
-        final event = Event(
-          version: '2026-03-24',
-          id: '',
-          pubkey: identity.pubkey,
-          createdAt: clock.nowUnixSeconds(),
-          kind: EventKind.post,
-          content: Uint8List.fromList(text.codeUnits),
-          sig: Uint8List(64),
-        );
-        final identityRow = (await storage.getIdentity())!;
-        final msgSeq = identityRow.msgSeqCounter;
-        final result = contentKey.signAndEncryptForAudience(
-          event,
-          Audience.broadcast,
-          msgSeq: msgSeq,
-        );
-        await storage.saveEvent(result.signed);
-        await storage.saveIdentity(
-          identityRow.copyWith(msgSeqCounter: msgSeq + 1),
-        );
-      });
+  Future<void> publish(String text) => publishLock.synchronized(() async {
+    clock.advance(60);
+    final event = Event(
+      version: '2026-03-24',
+      id: '',
+      pubkey: identity.pubkey,
+      createdAt: clock.nowUnixSeconds(),
+      kind: EventKind.post,
+      content: Uint8List.fromList(text.codeUnits),
+      sig: Uint8List(64),
+    );
+    final identityRow = (await storage.getIdentity())!;
+    final msgSeq = identityRow.msgSeqCounter;
+    final result = contentKey.signAndEncryptForAudience(
+      event,
+      Audience.broadcast,
+      msgSeq: msgSeq,
+    );
+    await storage.saveEvent(result.signed);
+    await storage.saveIdentity(identityRow.copyWith(msgSeqCounter: msgSeq + 1));
+  });
 }
 
 String _hostFromUrl(String url) {
@@ -393,12 +394,14 @@ class _ScenePairTransport implements HandshakeTransport {
     final peer = peers[baseUrl]!;
     final outer = cbor.decode(body) as Map<dynamic, dynamic>;
     final timestamp = outer['timestamp'] as int;
-    await peer.storage.saveInboundRequest(FollowRequest(
-      pubkey: outer['requester_pubkey'] as String,
-      payload: body,
-      createdAt: peer.clock.nowUnixSeconds(),
-      requestTimestamp: timestamp,
-    ));
+    await peer.storage.saveInboundRequest(
+      FollowRequest(
+        pubkey: outer['requester_pubkey'] as String,
+        payload: body,
+        createdAt: peer.clock.nowUnixSeconds(),
+        requestTimestamp: timestamp,
+      ),
+    );
     return 202;
   }
 
@@ -441,8 +444,10 @@ class _DirectSyncTransport implements SyncTransport {
     Uint8List? ackSig,
   }) async {
     if (requesterPubkey != null && ackRotationAt != null && ackRotationAt > 0) {
-      await _source.storage
-          .markDistributionsDelivered(requesterPubkey, ackRotationAt);
+      await _source.storage.markDistributionsDelivered(
+        requesterPubkey,
+        ackRotationAt,
+      );
     }
     final events = await _source.storage.getEvents(
       pubkey: _source.identity.pubkey,
@@ -450,8 +455,9 @@ class _DirectSyncTransport implements SyncTransport {
     );
     SealedDelivery? delivery;
     if (requesterPubkey != null) {
-      final pending =
-          await _source.storage.latestPendingDistributionFor(requesterPubkey);
+      final pending = await _source.storage.latestPendingDistributionFor(
+        requesterPubkey,
+      );
       if (pending != null) {
         delivery = SealedDelivery(
           payload: pending.encryptedFeedKey,

@@ -18,15 +18,14 @@ void main() {
     required int receivedAt,
     String sourcePubkey = 'pk-source',
     String envelopeVersion = '2026-03-24',
-  }) =>
-      UnknownEnvelopeItemEntriesCompanion.insert(
-        sourcePubkey: sourcePubkey,
-        envelopeVersion: envelopeVersion,
-        type: type,
-        payload: Uint8List.fromList(List.filled(8, 0xAB)),
-        extensions: const Value(null),
-        receivedAt: receivedAt,
-      );
+  }) => UnknownEnvelopeItemEntriesCompanion.insert(
+    sourcePubkey: sourcePubkey,
+    envelopeVersion: envelopeVersion,
+    type: type,
+    payload: Uint8List.fromList(List.filled(8, 0xAB)),
+    extensions: const Value(null),
+    receivedAt: receivedAt,
+  );
 
   test('insert and getByType round-trip', () async {
     await db.unknownItemsDao.insert(makeItem(type: 'commit', receivedAt: 100));

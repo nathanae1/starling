@@ -31,10 +31,7 @@ void main() {
     setUp(() async {
       alice = await _Peer.build(crypto, label: 'alice');
       bob = await _Peer.build(crypto, label: 'bob');
-      transport = _PairTransport({
-        alice.baseUrl: alice,
-        bob.baseUrl: bob,
-      });
+      transport = _PairTransport({alice.baseUrl: alice, bob.baseUrl: bob});
       alice.attachTransport(transport, peer: bob);
       bob.attachTransport(transport, peer: alice);
     });
@@ -44,34 +41,38 @@ void main() {
       await bob.storage.dispose();
     });
 
-    test('alice → bob: alice ends up with bob\'s feed key + connection card',
-        () async {
-      await alice.service.sendFollowRequest(bob.connectionCard());
-      // Bob now has an inbound row.
-      expect(await bob.storage.getInboundRequests(), hasLength(1));
+    test(
+      'alice → bob: alice ends up with bob\'s feed key + connection card',
+      () async {
+        await alice.service.sendFollowRequest(bob.connectionCard());
+        // Bob now has an inbound row.
+        expect(await bob.storage.getInboundRequests(), hasLength(1));
 
-      final delivery =
-          await bob.service.acceptFollowRequest(alice.identity.pubkey);
-      expect(delivery, AcceptDelivery.delivered);
+        final delivery = await bob.service.acceptFollowRequest(
+          alice.identity.pubkey,
+        );
+        expect(delivery, AcceptDelivery.delivered);
 
-      final follow = await alice.storage.getFollow(bob.identity.pubkey);
-      expect(follow, isNotNull);
-      expect(follow!.feedKey, equals(bob.identity.feedKey));
-      expect(follow.feedKeyEpoch, equals(bob.identity.feedKeyEpoch));
+        final follow = await alice.storage.getFollow(bob.identity.pubkey);
+        expect(follow, isNotNull);
+        expect(follow!.feedKey, equals(bob.identity.feedKey));
+        expect(follow.feedKeyEpoch, equals(bob.identity.feedKeyEpoch));
 
-      // Inbound row marked accepted (so it disappears from pending).
-      expect(await bob.storage.getInboundRequests(), isEmpty);
-      // Outbound row consumed.
-      expect(await alice.storage.getOutboundRequests(), isEmpty);
-      // No leftover queue entries.
-      expect(await alice.storage.dequeue(bob.identity.pubkey), isEmpty);
-    });
+        // Inbound row marked accepted (so it disappears from pending).
+        expect(await bob.storage.getInboundRequests(), isEmpty);
+        // Outbound row consumed.
+        expect(await alice.storage.getOutboundRequests(), isEmpty);
+        // No leftover queue entries.
+        expect(await alice.storage.dequeue(bob.identity.pubkey), isEmpty);
+      },
+    );
 
     test('duplicate accept after the follow exists is idempotent (re-acks, '
         'not 404 → no stuck retry)', () async {
       await alice.service.sendFollowRequest(bob.connectionCard());
-      final first =
-          await bob.service.acceptFollowRequest(alice.identity.pubkey);
+      final first = await bob.service.acceptFollowRequest(
+        alice.identity.pubkey,
+      );
       expect(first, AcceptDelivery.delivered);
       expect(await alice.storage.getFollow(bob.identity.pubkey), isNotNull);
       // Outbound row consumed on the first ingest.
@@ -82,8 +83,9 @@ void main() {
       // deleted the outbound row, so a non-idempotent ingest would 404 and
       // bob would re-queue forever ("accept queued"). The re-delivery must
       // instead succeed so bob's retry pump can settle.
-      final second =
-          await bob.service.acceptFollowRequest(alice.identity.pubkey);
+      final second = await bob.service.acceptFollowRequest(
+        alice.identity.pubkey,
+      );
       expect(second, AcceptDelivery.delivered);
       // Nothing left stuck in bob's retry queue.
       expect(await bob.storage.dequeue(alice.identity.pubkey), isEmpty);
@@ -104,13 +106,15 @@ void main() {
 
       // Make the transport fail when bob tries to deliver to alice.
       transport.failNextAcceptTo = alice.baseUrl;
-      final delivery =
-          await bob.service.acceptFollowRequest(alice.identity.pubkey);
+      final delivery = await bob.service.acceptFollowRequest(
+        alice.identity.pubkey,
+      );
       expect(delivery, AcceptDelivery.queued);
 
       // Inbound row stays around in pending-send state.
-      final pending =
-          await bob.storage.getInboundRequestsByStatus('pending-send');
+      final pending = await bob.storage.getInboundRequestsByStatus(
+        'pending-send',
+      );
       expect(pending, hasLength(1));
       // A queue entry exists for alice.
       final queued = await bob.storage.dequeue(alice.identity.pubkey);
@@ -150,12 +154,14 @@ void main() {
       await bob.storage.removeFromQueue(queued.first.id);
       await bob.storage.enqueue(
         alice.identity.pubkey,
-        Uint8List.fromList(cbor.encode(<String, dynamic>{
-          'url': 'http://stale.invalid:1/follow-accept',
-          // Coerce back to bytes so it re-encodes as a CBOR byte string and
-          // isFollowAcceptQueueEntry still recognizes it.
-          'body': Uint8List.fromList(List<int>.from(wrapper['body'] as List)),
-        })),
+        Uint8List.fromList(
+          cbor.encode(<String, dynamic>{
+            'url': 'http://stale.invalid:1/follow-accept',
+            // Coerce back to bytes so it re-encodes as a CBOR byte string and
+            // isFollowAcceptQueueEntry still recognizes it.
+            'body': Uint8List.fromList(List<int>.from(wrapper['body'] as List)),
+          }),
+        ),
       );
 
       // Transport works now. Alice is still reachable at her real baseUrl,
@@ -167,7 +173,8 @@ void main() {
       expect(
         await alice.storage.getFollow(bob.identity.pubkey),
         isNotNull,
-        reason: 'accept must deliver via the freshly-resolved endpoint, '
+        reason:
+            'accept must deliver via the freshly-resolved endpoint, '
             'not the stale queued URL',
       );
       expect(await bob.storage.dequeue(alice.identity.pubkey), isEmpty);
@@ -192,11 +199,13 @@ void main() {
       // Make this a MUTUAL pair: bob also follows alice — the exact case the
       // Friends screen surfaces as "Finishing connection…". A working feed
       // sync means the monitor holds a live, validated transport for alice.
-      await bob.storage.saveFollow(Follow(
-        pubkey: alice.identity.pubkey,
-        connectionCard: '{}',
-        feedKey: Uint8List(32),
-      ));
+      await bob.storage.saveFollow(
+        Follow(
+          pubkey: alice.identity.pubkey,
+          connectionCard: '{}',
+          feedKey: Uint8List(32),
+        ),
+      );
 
       // The frozen request card can no longer be resolved over Tor (onion
       // absent / unpublished at request time) AND the queued URL is dead, so
@@ -210,10 +219,12 @@ void main() {
       await bob.storage.removeFromQueue(queued.single.id);
       await bob.storage.enqueue(
         alice.identity.pubkey,
-        Uint8List.fromList(cbor.encode(<String, dynamic>{
-          'url': 'http://stale.invalid:1/follow-accept',
-          'body': Uint8List.fromList(List<int>.from(wrapper['body'] as List)),
-        })),
+        Uint8List.fromList(
+          cbor.encode(<String, dynamic>{
+            'url': 'http://stale.invalid:1/follow-accept',
+            'body': Uint8List.fromList(List<int>.from(wrapper['body'] as List)),
+          }),
+        ),
       );
 
       transport.failNextAcceptTo = null;
@@ -222,7 +233,8 @@ void main() {
       expect(
         await alice.storage.getFollow(bob.identity.pubkey),
         isNotNull,
-        reason: 'accept must deliver via the monitor\'s validated transport '
+        reason:
+            'accept must deliver via the monitor\'s validated transport '
             'for the mutual follow, not the dead URL or unresolvable card',
       );
       expect(await bob.storage.dequeue(alice.identity.pubkey), isEmpty);
@@ -251,10 +263,12 @@ void main() {
       await bob.storage.removeFromQueue(queued.single.id);
       await bob.storage.enqueue(
         alice.identity.pubkey,
-        Uint8List.fromList(cbor.encode(<String, dynamic>{
-          'url': 'http://stale.invalid:1/follow-accept',
-          'body': Uint8List.fromList(List<int>.from(wrapper['body'] as List)),
-        })),
+        Uint8List.fromList(
+          cbor.encode(<String, dynamic>{
+            'url': 'http://stale.invalid:1/follow-accept',
+            'body': Uint8List.fromList(List<int>.from(wrapper['body'] as List)),
+          }),
+        ),
       );
 
       transport.failNextAcceptTo = null;
@@ -268,45 +282,47 @@ void main() {
       expect(await bob.storage.dequeue(alice.identity.pubkey), hasLength(1));
     });
 
-    test('flips to send-failed at threshold, keeps the entry, then recovers',
-        () async {
-      await alice.service.sendFollowRequest(bob.connectionCard());
-      transport.failNextAcceptTo = alice.baseUrl;
-      transport.failPersistently = true;
-      expect(
-        await bob.service.acceptFollowRequest(alice.identity.pubkey),
-        AcceptDelivery.queued,
-      );
+    test(
+      'flips to send-failed at threshold, keeps the entry, then recovers',
+      () async {
+        await alice.service.sendFollowRequest(bob.connectionCard());
+        transport.failNextAcceptTo = alice.baseUrl;
+        transport.failPersistently = true;
+        expect(
+          await bob.service.acceptFollowRequest(alice.identity.pubkey),
+          AcceptDelivery.queued,
+        );
 
-      // Three failing attempts reach the threshold. Advancing the clock past
-      // each backoff window guarantees an attempt every pass.
-      for (var i = 0; i < 3; i++) {
+        // Three failing attempts reach the threshold. Advancing the clock past
+        // each backoff window guarantees an attempt every pass.
+        for (var i = 0; i < 3; i++) {
+          bob.clock.advance(3600);
+          await bob.service.retryQueuedAccepts(failedStatusThreshold: 3);
+        }
+
+        // Row flips to send-failed for the UI...
+        expect(
+          await bob.storage.getInboundRequestsByStatus('send-failed'),
+          hasLength(1),
+        );
+        // ...but the queue entry is KEPT and keeps retrying (never stranded).
+        expect(await bob.storage.dequeue(alice.identity.pubkey), hasLength(1));
+
+        // A later success recovers the row to accepted and delivers the key.
+        transport.failPersistently = false;
+        transport.failNextAcceptTo = null;
         bob.clock.advance(3600);
         await bob.service.retryQueuedAccepts(failedStatusThreshold: 3);
-      }
 
-      // Row flips to send-failed for the UI...
-      expect(
-        await bob.storage.getInboundRequestsByStatus('send-failed'),
-        hasLength(1),
-      );
-      // ...but the queue entry is KEPT and keeps retrying (never stranded).
-      expect(await bob.storage.dequeue(alice.identity.pubkey), hasLength(1));
-
-      // A later success recovers the row to accepted and delivers the key.
-      transport.failPersistently = false;
-      transport.failNextAcceptTo = null;
-      bob.clock.advance(3600);
-      await bob.service.retryQueuedAccepts(failedStatusThreshold: 3);
-
-      expect(await bob.storage.dequeue(alice.identity.pubkey), isEmpty);
-      expect(
-        await bob.storage.getInboundRequestsByStatus('send-failed'),
-        isEmpty,
-      );
-      final follow = await alice.storage.getFollow(bob.identity.pubkey);
-      expect(follow!.feedKey, equals(bob.identity.feedKey));
-    });
+        expect(await bob.storage.dequeue(alice.identity.pubkey), isEmpty);
+        expect(
+          await bob.storage.getInboundRequestsByStatus('send-failed'),
+          isEmpty,
+        );
+        final follow = await alice.storage.getFollow(bob.identity.pubkey);
+        expect(follow!.feedKey, equals(bob.identity.feedKey));
+      },
+    );
 
     test('backoff: no second attempt before the window, one after', () async {
       await alice.service.sendFollowRequest(bob.connectionCard());
@@ -366,8 +382,10 @@ void main() {
       transport.failPersistently = true;
       await bob.service.acceptFollowRequest(alice.identity.pubkey);
       // Force the terminal-looking status directly; the entry is still queued.
-      await bob.storage
-          .updateInboundRequestStatus(alice.identity.pubkey, 'send-failed');
+      await bob.storage.updateInboundRequestStatus(
+        alice.identity.pubkey,
+        'send-failed',
+      );
 
       transport.failPersistently = false;
       transport.failNextAcceptTo = null;
@@ -406,7 +424,10 @@ void main() {
       await bob.service.acceptFollowRequest(alice.identity.pubkey);
       // A comment/reaction event queued for the same pubkey shares the table.
       final foreign = Uint8List.fromList(
-        cbor.encode(<String, dynamic>{'pubkey': 'x', 'payload': [1, 2, 3]}),
+        cbor.encode(<String, dynamic>{
+          'pubkey': 'x',
+          'payload': [1, 2, 3],
+        }),
       );
       await bob.storage.enqueue(alice.identity.pubkey, foreign);
 
@@ -422,48 +443,53 @@ void main() {
   });
 
   group('FollowService.removeFollower', () {
-    test('clears queued card distributions for the removed follower (S4)',
-        () async {
-      final alice = await _Peer.build(crypto, label: 'alice');
-      final bob = await _Peer.build(crypto, label: 'bob');
-      final transport = _PairTransport({
-        alice.baseUrl: alice,
-        bob.baseUrl: bob,
-      });
-      alice.attachTransport(transport, peer: bob);
-      bob.attachTransport(transport, peer: alice);
+    test(
+      'clears queued card distributions for the removed follower (S4)',
+      () async {
+        final alice = await _Peer.build(crypto, label: 'alice');
+        final bob = await _Peer.build(crypto, label: 'bob');
+        final transport = _PairTransport({
+          alice.baseUrl: alice,
+          bob.baseUrl: bob,
+        });
+        alice.attachTransport(transport, peer: bob);
+        bob.attachTransport(transport, peer: alice);
 
-      // Alice is an accepted follower of bob with a queued card update.
-      await bob.storage.saveInboundRequest(FollowRequest(
-        pubkey: alice.identity.pubkey,
-        payload: Uint8List(0),
-        createdAt: 0,
-        requestTimestamp: 0,
-        status: 'accepted',
-      ));
-      await bob.storage.queueCardDistribution(
-        targetPubkey: alice.identity.pubkey,
-        encryptedCard: Uint8List.fromList([1, 2, 3]),
-        nonce: Uint8List.fromList(List.filled(24, 1)),
-        createdAt: 600,
-      );
+        // Alice is an accepted follower of bob with a queued card update.
+        await bob.storage.saveInboundRequest(
+          FollowRequest(
+            pubkey: alice.identity.pubkey,
+            payload: Uint8List(0),
+            createdAt: 0,
+            requestTimestamp: 0,
+            status: 'accepted',
+          ),
+        );
+        await bob.storage.queueCardDistribution(
+          targetPubkey: alice.identity.pubkey,
+          encryptedCard: Uint8List.fromList([1, 2, 3]),
+          nonce: Uint8List.fromList(List.filled(24, 1)),
+          createdAt: 600,
+        );
 
-      await bob.service.removeFollower(alice.identity.pubkey);
+        await bob.service.removeFollower(alice.identity.pubkey);
 
-      expect(
-        await bob.storage.isAcceptedFollower(alice.identity.pubkey),
-        isFalse,
-      );
-      expect(
-        await bob.storage.latestPendingCardFor(alice.identity.pubkey),
-        isNull,
-        reason: 'removal must drop the pending card so a removed follower '
-            'polling /manifest is never handed the new endpoints',
-      );
+        expect(
+          await bob.storage.isAcceptedFollower(alice.identity.pubkey),
+          isFalse,
+        );
+        expect(
+          await bob.storage.latestPendingCardFor(alice.identity.pubkey),
+          isNull,
+          reason:
+              'removal must drop the pending card so a removed follower '
+              'polling /manifest is never handed the new endpoints',
+        );
 
-      await alice.storage.dispose();
-      await bob.storage.dispose();
-    });
+        await alice.storage.dispose();
+        await bob.storage.dispose();
+      },
+    );
   });
 }
 
@@ -474,8 +500,8 @@ class _Peer {
     required this.identity,
     required this.secretKey,
     required this.storage,
-  })  : clock = MockClock(2_000_000),
-        baseUrl = 'http://$label.local:8080';
+  }) : clock = MockClock(2_000_000),
+       baseUrl = 'http://$label.local:8080';
 
   final String label;
   final CryptoService crypto;
@@ -488,7 +514,10 @@ class _Peer {
   late FollowService service;
   late FakePeerReachabilityMonitor monitor;
 
-  static Future<_Peer> build(CryptoService crypto, {required String label}) async {
+  static Future<_Peer> build(
+    CryptoService crypto, {
+    required String label,
+  }) async {
     final kp = await crypto.generateKeyPair();
     final identity = Identity(
       pubkey: crockfordBase32Encode(kp.publicKey),
@@ -508,14 +537,14 @@ class _Peer {
   }
 
   ConnectionCard connectionCard() => ConnectionCard(
-        pubkey: identity.pubkey,
-        endpoints: [
-          // sendFollowRequest refuses to send a card whose own endpoints
-          // lack an onion entry; the fake transport still dials via baseUrl.
-          Endpoint(type: 'onion', address: '$label.onion:80'),
-          Endpoint(type: 'direct', address: _hostFromUrl(baseUrl)),
-        ],
-      );
+    pubkey: identity.pubkey,
+    endpoints: [
+      // sendFollowRequest refuses to send a card whose own endpoints
+      // lack an onion entry; the fake transport still dials via baseUrl.
+      Endpoint(type: 'onion', address: '$label.onion:80'),
+      Endpoint(type: 'direct', address: _hostFromUrl(baseUrl)),
+    ],
+  );
 
   void attachTransport(_PairTransport transport, {required _Peer peer}) {
     monitor = FakePeerReachabilityMonitor()
@@ -582,7 +611,10 @@ class _PairTransport implements HandshakeTransport {
     acceptPostCount++;
     if (failNextAcceptTo == baseUrl) {
       if (!failPersistently) failNextAcceptTo = null;
-      throw http.ClientException('simulated network failure', Uri.parse(baseUrl));
+      throw http.ClientException(
+        'simulated network failure',
+        Uri.parse(baseUrl),
+      );
     }
     final peer = _resolve(baseUrl);
     final outer = cbor.decode(body) as Map<dynamic, dynamic>;

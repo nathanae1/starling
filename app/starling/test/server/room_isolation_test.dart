@@ -75,46 +75,57 @@ void main() {
     await storage.saveIdentity(me);
   });
 
-  test('room kinds are excluded from GET /events, feed kinds survive', () async {
-    final post = await saveOwn(EventKind.post);
-    final roomCreate = await saveOwn(EventKind.roomCreate);
-    final ownRoomMsg = await saveOwn(EventKind.roomMessage, ref: roomCreate.id);
-    // Incoming comment on our post — must still be re-served.
-    final incomingComment = await saveIncoming(
-      EventKind.comment,
-      'BPUBKEY',
-      ref: post.id,
-    );
-    // Incoming room message referencing our roomCreate — the trap: it matches
-    // getOwnAndIncomingRefs by ref, and must be dropped by the kind filter.
-    final incomingRoomMsg = await saveIncoming(
-      EventKind.roomMessage,
-      'BPUBKEY',
-      ref: roomCreate.id,
-    );
+  test(
+    'room kinds are excluded from GET /events, feed kinds survive',
+    () async {
+      final post = await saveOwn(EventKind.post);
+      final roomCreate = await saveOwn(EventKind.roomCreate);
+      final ownRoomMsg = await saveOwn(
+        EventKind.roomMessage,
+        ref: roomCreate.id,
+      );
+      // Incoming comment on our post — must still be re-served.
+      final incomingComment = await saveIncoming(
+        EventKind.comment,
+        'BPUBKEY',
+        ref: post.id,
+      );
+      // Incoming room message referencing our roomCreate — the trap: it matches
+      // getOwnAndIncomingRefs by ref, and must be dropped by the kind filter.
+      final incomingRoomMsg = await saveIncoming(
+        EventKind.roomMessage,
+        'BPUBKEY',
+        ref: roomCreate.id,
+      );
 
-    final envelope = await buildEventsEnvelope(
-      storage: storage,
-      contentKey: contentKey,
-      identity: me,
-    );
-    final served = envelope.items
-        .map((i) => contentKey.decryptEvent(EncryptedEvent.fromBytes(i.payload), me.feedKey))
-        .toList();
-    final servedKinds = served.map((e) => e.kind.value).toSet();
-    final servedIds = served.map((e) => e.id).toSet();
+      final envelope = await buildEventsEnvelope(
+        storage: storage,
+        contentKey: contentKey,
+        identity: me,
+      );
+      final served = envelope.items
+          .map(
+            (i) => contentKey.decryptEvent(
+              EncryptedEvent.fromBytes(i.payload),
+              me.feedKey,
+            ),
+          )
+          .toList();
+      final servedKinds = served.map((e) => e.kind.value).toSet();
+      final servedIds = served.map((e) => e.id).toSet();
 
-    expect(servedKinds.contains(EventKind.post.value), isTrue);
-    expect(servedKinds.contains(EventKind.comment.value), isTrue);
-    expect(servedIds.contains(incomingComment.id), isTrue);
+      expect(servedKinds.contains(EventKind.post.value), isTrue);
+      expect(servedKinds.contains(EventKind.comment.value), isTrue);
+      expect(servedIds.contains(incomingComment.id), isTrue);
 
-    for (final v in [100, 101, 102, 103]) {
-      expect(servedKinds.contains(v), isFalse, reason: 'kind $v leaked');
-    }
-    expect(servedIds.contains(roomCreate.id), isFalse);
-    expect(servedIds.contains(ownRoomMsg.id), isFalse);
-    expect(servedIds.contains(incomingRoomMsg.id), isFalse);
-  });
+      for (final v in [100, 101, 102, 103]) {
+        expect(servedKinds.contains(v), isFalse, reason: 'kind $v leaked');
+      }
+      expect(servedIds.contains(roomCreate.id), isFalse);
+      expect(servedIds.contains(ownRoomMsg.id), isFalse);
+      expect(servedIds.contains(incomingRoomMsg.id), isFalse);
+    },
+  );
 
   test('room kinds are excluded from the /manifest event list', () async {
     final post = await saveOwn(EventKind.post);

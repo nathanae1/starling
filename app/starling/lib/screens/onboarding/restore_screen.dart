@@ -100,6 +100,14 @@ class _RestoreScreenState extends ConsumerState<RestoreScreen> {
                   maxLines: null,
                   expands: true,
                   textAlignVertical: TextAlignVertical.top,
+                  // Secret words: don't let the OS mangle them (autocorrect,
+                  // smart quotes/dashes) or learn them (suggestions feed the
+                  // keyboard's personal dictionary).
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  smartDashesType: SmartDashesType.disabled,
+                  smartQuotesType: SmartQuotesType.disabled,
+                  textCapitalization: TextCapitalization.none,
                   // Clear a stale validation error as soon as the user edits,
                   // so the word-count progress takes the slot back while typing.
                   onChanged: (_) => setState(() => _error = null),

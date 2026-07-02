@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../services/crypto/crockford_base32.dart';
@@ -126,6 +127,13 @@ class OnboardingController extends _$OnboardingController {
   /// Clears the in-memory recovery phrase once the user has acknowledged it.
   void clearRecoveryPhrase() {
     state = const OnboardingSession();
+  }
+
+  /// Test-only: seeds the session with a phrase without running the full
+  /// [createIdentity] flow (which needs real crypto + keychain).
+  @visibleForTesting
+  void debugSeedPhrase(List<String> phrase) {
+    state = OnboardingSession(recoveryPhrase: phrase);
   }
 
   Future<void> _writeSecretKey(Uint8List secretKey) async {

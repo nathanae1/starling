@@ -11,6 +11,7 @@ import '../../providers/follows_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../providers/voice_provider.dart';
 import '../../theme/starling_theme.dart';
+import '../../utils/friendly_error.dart';
 import '../../utils/feature_flags.dart';
 import '../../widgets/avatar.dart';
 import '../../widgets/buttons.dart';
@@ -57,7 +58,7 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
       if (!mounted) return;
       setState(() => _starting = false);
       messenger.showSnackBar(
-        SnackBar(content: Text('Couldn\'t create the room: $e')),
+        SnackBar(content: Text(friendlyError(e, tag: 'create_room'))),
       );
     }
   }
@@ -87,7 +88,7 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
       if (!mounted) return;
       setState(() => _starting = false);
       messenger.showSnackBar(
-        SnackBar(content: Text('Couldn\'t start the room: $e')),
+        SnackBar(content: Text(friendlyError(e, tag: 'create_room'))),
       );
     }
   }

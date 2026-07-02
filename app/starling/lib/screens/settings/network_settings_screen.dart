@@ -6,11 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../providers/discovery_provider.dart';
+import '../../providers/follows_provider.dart';
 import '../../providers/foreground_service_provider.dart';
 import '../../providers/server_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../providers/sync_provider.dart';
 import '../../providers/sync_status_provider.dart';
+import '../../providers/tor_status_provider.dart';
 import '../../theme/starling_theme.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/starling_badge.dart';
@@ -33,10 +36,18 @@ class NetworkSettingsScreen extends ConsumerWidget {
     final starling = StarlingTheme.of(context);
     final syncStatus = ref.watch(syncStatusProvider);
     final engineState = ref.watch(syncControllerProvider);
-    final tor = ref.watch(torServiceProvider);
-    final torStatus = tor.getStatus();
+    // Polled provider, not a one-shot getStatus() — the bootstrap % and
+    // circuit count stay live while this screen is open.
+    final torStatus = ref.watch(torStatusPollerProvider);
     final onion = ref.watch(onionAddressProvider);
     final port = ref.watch(httpServerControllerProvider).value;
+    // LAN-only count: `syncStatus.reachableFriends` spans every transport
+    // (Tor included), which would overcount "on this network".
+    final lanPeers = ref.watch(discoveryControllerProvider).value ?? const {};
+    final follows = ref.watch(followsStreamProvider).value ?? const [];
+    final lanReachable = follows
+        .where((f) => lanPeers.containsKey(f.pubkey))
+        .length;
 
     return Scaffold(
       backgroundColor: starling.colors.paper,
@@ -76,7 +87,7 @@ class NetworkSettingsScreen extends ConsumerWidget {
                     onionAddress: onion,
                   ),
                   const SizedBox(height: 12),
-                  _LanCard(reachableFriends: syncStatus.reachableFriends),
+                  _LanCard(reachableFriends: lanReachable),
                   const SizedBox(height: 12),
                   _ServerCard(port: port),
                   const SizedBox(height: 12),
@@ -169,7 +180,9 @@ class _QuickStatus extends StatelessWidget {
     final (syncLabel, syncColor) = switch (syncState) {
       SyncState.synced => ('Up to date', colors.success),
       SyncState.syncing => ('Syncing…', colors.warning),
+      SyncState.connecting => ('Connecting…', colors.warning),
       SyncState.offline => ('Offline', colors.stone),
+      SyncState.problem => ('Sync problem', colors.warning),
     };
     final torColor = torReady
         ? colors.success
@@ -304,7 +317,9 @@ class _SyncCard extends StatelessWidget {
   static String _syncLabel(SyncState s) => switch (s) {
     SyncState.synced => 'Up to date',
     SyncState.syncing => 'Syncing…',
+    SyncState.connecting => 'Connecting…',
     SyncState.offline => 'Offline',
+    SyncState.problem => 'Sync problem',
   };
 }
 

@@ -57,24 +57,27 @@ void main() {
   /// Register [pubkey] as an accepted inbound follower — pending payloads
   /// are only attached for accepted followers (S4).
   Future<void> seedAcceptedFollower(String pubkey) =>
-      storage.saveInboundRequest(FollowRequest(
-        pubkey: pubkey,
-        payload: Uint8List(0),
-        createdAt: 0,
-        requestTimestamp: 0,
-        status: 'accepted',
-      ));
+      storage.saveInboundRequest(
+        FollowRequest(
+          pubkey: pubkey,
+          payload: Uint8List(0),
+          createdAt: 0,
+          requestTimestamp: 0,
+          status: 'accepted',
+        ),
+      );
 
   /// Hex `ack_sig` query value proving [followerKp] acks these values
   /// against the test owner (S3a).
-  String ackSig({int ackRotationAt = 0, int cardSeenAt = 0}) =>
-      hexEncodeAckSig(signManifestAck(
-        crypto,
-        requesterSecretKey: followerKp.secretKey,
-        ownerPubkey: ownerKp.publicKey,
-        ackRotationAt: ackRotationAt,
-        cardSeenAt: cardSeenAt,
-      ));
+  String ackSig({int ackRotationAt = 0, int cardSeenAt = 0}) => hexEncodeAckSig(
+    signManifestAck(
+      crypto,
+      requesterSecretKey: followerKp.secretKey,
+      ownerPubkey: ownerKp.publicKey,
+      ackRotationAt: ackRotationAt,
+      cardSeenAt: cardSeenAt,
+    ),
+  );
 
   test('empty DB → empty events, has_older false', () async {
     final res = await get('/manifest?since=0');
@@ -123,36 +126,39 @@ void main() {
     expect(body['has_older'], isTrue);
   });
 
-  test('same-second events page losslessly with until_id (keyset cursor)',
-      () async {
-    // Three events share one created_at, straddling a page boundary — the
-    // old `until = oldest - 1` contract skipped the truncated ones.
-    for (final id in ['eA', 'eB', 'eC']) {
+  test(
+    'same-second events page losslessly with until_id (keyset cursor)',
+    () async {
+      // Three events share one created_at, straddling a page boundary — the
+      // old `until = oldest - 1` contract skipped the truncated ones.
+      for (final id in ['eA', 'eB', 'eC']) {
+        await storage.saveEvent(
+          buildEvent(id: id, pubkey: identity.pubkey, createdAt: 100),
+        );
+      }
       await storage.saveEvent(
-        buildEvent(id: id, pubkey: identity.pubkey, createdAt: 100),
+        buildEvent(id: 'eD', pubkey: identity.pubkey, createdAt: 200),
       );
-    }
-    await storage.saveEvent(
-      buildEvent(id: 'eD', pubkey: identity.pubkey, createdAt: 200),
-    );
 
-    final seen = <String>[];
-    String path = '/manifest';
-    while (true) {
-      final res = await get(path, pageLimit: 2);
-      final body = decodeBody(
-        Uint8List.fromList(await res.read().expand((c) => c).toList()),
-      );
-      final events =
-          (body['events'] as List<dynamic>).cast<Map<dynamic, dynamic>>();
-      seen.addAll(events.map((e) => e['id'] as String));
-      if (body['has_older'] != true) break;
-      final oldest = events.last;
-      path = '/manifest?until=${oldest['created_at']}&until_id=${oldest['id']}';
-    }
-    // Every id exactly once, (created_at DESC, id DESC) order.
-    expect(seen, ['eD', 'eC', 'eB', 'eA']);
-  });
+      final seen = <String>[];
+      String path = '/manifest';
+      while (true) {
+        final res = await get(path, pageLimit: 2);
+        final body = decodeBody(
+          Uint8List.fromList(await res.read().expand((c) => c).toList()),
+        );
+        final events = (body['events'] as List<dynamic>)
+            .cast<Map<dynamic, dynamic>>();
+        seen.addAll(events.map((e) => e['id'] as String));
+        if (body['has_older'] != true) break;
+        final oldest = events.last;
+        path =
+            '/manifest?until=${oldest['created_at']}&until_id=${oldest['id']}';
+      }
+      // Every id exactly once, (created_at DESC, id DESC) order.
+      expect(seen, ['eD', 'eC', 'eB', 'eA']);
+    },
+  );
 
   test('bare until keeps the old inclusive semantics', () async {
     for (var i = 0; i < 3; i++) {
@@ -164,8 +170,9 @@ void main() {
     final body = decodeBody(
       Uint8List.fromList(await res.read().expand((c) => c).toList()),
     );
-    final ids =
-        (body['events'] as List<dynamic>).map((e) => (e as Map)['id']).toSet();
+    final ids = (body['events'] as List<dynamic>)
+        .map((e) => (e as Map)['id'])
+        .toSet();
     expect(ids, {'e0', 'e1'});
   });
 
@@ -175,8 +182,9 @@ void main() {
       crypto: crypto,
       identityLookup: () async => null,
     );
-    final res =
-        await handler(Request('GET', Uri.parse('http://localhost/manifest')));
+    final res = await handler(
+      Request('GET', Uri.parse('http://localhost/manifest')),
+    );
     expect(res.statusCode, 503);
   });
 
@@ -198,8 +206,7 @@ void main() {
     expect(body.containsKey('new_feed_key'), isFalse);
   });
 
-  test('includes new_feed_key when requester has an undelivered row',
-      () async {
+  test('includes new_feed_key when requester has an undelivered row', () async {
     await seedAcceptedFollower(followerPubkey);
     await storage.addPendingKeyDistribution(
       targetPubkey: followerPubkey,
@@ -215,38 +222,35 @@ void main() {
     final newFeedKey = body['new_feed_key'] as Map<dynamic, dynamic>;
     expect(newFeedKey['created_at'], equals(500));
     expect(newFeedKey['encrypted_feed_key'], equals([1, 2, 3]));
-    expect(
-      (newFeedKey['nonce'] as List<dynamic>).first,
-      equals(0xAA),
-    );
+    expect((newFeedKey['nonce'] as List<dynamic>).first, equals(0xAA));
   });
 
   test(
-      'returns the latest pending row when multiple rotations are stacked',
-      () async {
-    await seedAcceptedFollower(followerPubkey);
-    await storage.addPendingKeyDistribution(
-      targetPubkey: followerPubkey,
-      encryptedFeedKey: Uint8List.fromList([1]),
-      nonce: Uint8List.fromList(List.filled(24, 0x01)),
-      createdAt: 500,
-    );
-    await storage.addPendingKeyDistribution(
-      targetPubkey: followerPubkey,
-      encryptedFeedKey: Uint8List.fromList([2]),
-      nonce: Uint8List.fromList(List.filled(24, 0x02)),
-      createdAt: 700,
-    );
-    final res = await get('/manifest?requester_pubkey=$followerPubkey');
-    final body = decodeBody(
-      Uint8List.fromList(await res.read().expand((c) => c).toList()),
-    );
-    final newFeedKey = body['new_feed_key'] as Map<dynamic, dynamic>;
-    expect(newFeedKey['created_at'], equals(700));
-  });
+    'returns the latest pending row when multiple rotations are stacked',
+    () async {
+      await seedAcceptedFollower(followerPubkey);
+      await storage.addPendingKeyDistribution(
+        targetPubkey: followerPubkey,
+        encryptedFeedKey: Uint8List.fromList([1]),
+        nonce: Uint8List.fromList(List.filled(24, 0x01)),
+        createdAt: 500,
+      );
+      await storage.addPendingKeyDistribution(
+        targetPubkey: followerPubkey,
+        encryptedFeedKey: Uint8List.fromList([2]),
+        nonce: Uint8List.fromList(List.filled(24, 0x02)),
+        createdAt: 700,
+      );
+      final res = await get('/manifest?requester_pubkey=$followerPubkey');
+      final body = decodeBody(
+        Uint8List.fromList(await res.read().expand((c) => c).toList()),
+      );
+      final newFeedKey = body['new_feed_key'] as Map<dynamic, dynamic>;
+      expect(newFeedKey['created_at'], equals(700));
+    },
+  );
 
-  test(
-      'signed ack_rotation_at marks rows delivered; subsequent calls omit '
+  test('signed ack_rotation_at marks rows delivered; subsequent calls omit '
       'new_feed_key', () async {
     await seedAcceptedFollower(followerPubkey);
     await storage.addPendingKeyDistribution(
@@ -276,8 +280,9 @@ void main() {
   });
 
   test('invalid ack_rotation_at → 400', () async {
-    final res =
-        await get('/manifest?requester_pubkey=follower-1&ack_rotation_at=abc');
+    final res = await get(
+      '/manifest?requester_pubkey=follower-1&ack_rotation_at=abc',
+    );
     expect(res.statusCode, 400);
   });
 
@@ -301,8 +306,11 @@ void main() {
     final body = decodeBody(
       Uint8List.fromList(await after.read().expand((c) => c).toList()),
     );
-    expect(body.containsKey('new_feed_key'), isTrue,
-        reason: 'unsigned ack must not suppress the pending rotation');
+    expect(
+      body.containsKey('new_feed_key'),
+      isTrue,
+      reason: 'unsigned ack must not suppress the pending rotation',
+    );
   });
 
   test('ack signed for different values is ignored', () async {
@@ -363,8 +371,7 @@ void main() {
 
   // --- Plan 15: connection card distribution piggybacked on /manifest ---
 
-  test('omits new_connection_card when no requester_pubkey is given',
-      () async {
+  test('omits new_connection_card when no requester_pubkey is given', () async {
     await seedAcceptedFollower(followerPubkey);
     await storage.queueCardDistribution(
       targetPubkey: followerPubkey,
@@ -380,50 +387,54 @@ void main() {
     expect(body.containsKey('new_connection_card'), isFalse);
   });
 
-  test('includes new_connection_card when requester has an undelivered card',
-      () async {
-    await seedAcceptedFollower(followerPubkey);
-    await storage.queueCardDistribution(
-      targetPubkey: followerPubkey,
-      encryptedCard: Uint8List.fromList([10, 20, 30]),
-      nonce: Uint8List.fromList(List.filled(24, 0xCC)),
-      createdAt: 600,
-    );
-    final res = await get('/manifest?requester_pubkey=$followerPubkey');
-    final body = decodeBody(
-      Uint8List.fromList(await res.read().expand((c) => c).toList()),
-    );
-    final card = body['new_connection_card'] as Map<dynamic, dynamic>;
-    expect(card['created_at'], equals(600));
-    expect(card['encrypted_card'], equals([10, 20, 30]));
-    expect((card['nonce'] as List<dynamic>).first, equals(0xCC));
-  });
+  test(
+    'includes new_connection_card when requester has an undelivered card',
+    () async {
+      await seedAcceptedFollower(followerPubkey);
+      await storage.queueCardDistribution(
+        targetPubkey: followerPubkey,
+        encryptedCard: Uint8List.fromList([10, 20, 30]),
+        nonce: Uint8List.fromList(List.filled(24, 0xCC)),
+        createdAt: 600,
+      );
+      final res = await get('/manifest?requester_pubkey=$followerPubkey');
+      final body = decodeBody(
+        Uint8List.fromList(await res.read().expand((c) => c).toList()),
+      );
+      final card = body['new_connection_card'] as Map<dynamic, dynamic>;
+      expect(card['created_at'], equals(600));
+      expect(card['encrypted_card'], equals([10, 20, 30]));
+      expect((card['nonce'] as List<dynamic>).first, equals(0xCC));
+    },
+  );
 
-  test('signed card_seen_at marks card delivered; subsequent calls omit it',
-      () async {
-    await seedAcceptedFollower(followerPubkey);
-    await storage.queueCardDistribution(
-      targetPubkey: followerPubkey,
-      encryptedCard: Uint8List.fromList([10, 20, 30]),
-      nonce: Uint8List.fromList(List.filled(24, 0xCC)),
-      createdAt: 600,
-    );
-    final first = await get('/manifest?requester_pubkey=$followerPubkey');
-    final firstBody = decodeBody(
-      Uint8List.fromList(await first.read().expand((c) => c).toList()),
-    );
-    expect(firstBody.containsKey('new_connection_card'), isTrue);
+  test(
+    'signed card_seen_at marks card delivered; subsequent calls omit it',
+    () async {
+      await seedAcceptedFollower(followerPubkey);
+      await storage.queueCardDistribution(
+        targetPubkey: followerPubkey,
+        encryptedCard: Uint8List.fromList([10, 20, 30]),
+        nonce: Uint8List.fromList(List.filled(24, 0xCC)),
+        createdAt: 600,
+      );
+      final first = await get('/manifest?requester_pubkey=$followerPubkey');
+      final firstBody = decodeBody(
+        Uint8List.fromList(await first.read().expand((c) => c).toList()),
+      );
+      expect(firstBody.containsKey('new_connection_card'), isTrue);
 
-    final sig = ackSig(cardSeenAt: 600);
-    final second = await get(
-      '/manifest?requester_pubkey=$followerPubkey'
-      '&card_seen_at=600&ack_sig=$sig',
-    );
-    final secondBody = decodeBody(
-      Uint8List.fromList(await second.read().expand((c) => c).toList()),
-    );
-    expect(secondBody.containsKey('new_connection_card'), isFalse);
-  });
+      final sig = ackSig(cardSeenAt: 600);
+      final second = await get(
+        '/manifest?requester_pubkey=$followerPubkey'
+        '&card_seen_at=600&ack_sig=$sig',
+      );
+      final secondBody = decodeBody(
+        Uint8List.fromList(await second.read().expand((c) => c).toList()),
+      );
+      expect(secondBody.containsKey('new_connection_card'), isFalse);
+    },
+  );
 
   test('unsigned card_seen_at does not suppress the pending card', () async {
     await seedAcceptedFollower(followerPubkey);
@@ -435,21 +446,23 @@ void main() {
     );
     // Spoofed ack (no sig) — e.g. an attacker asserting the victim's
     // pubkey with card_seen_at=MAX.
-    await get(
-      '/manifest?requester_pubkey=$followerPubkey&card_seen_at=999999',
-    );
+    await get('/manifest?requester_pubkey=$followerPubkey&card_seen_at=999999');
 
     final after = await get('/manifest?requester_pubkey=$followerPubkey');
     final body = decodeBody(
       Uint8List.fromList(await after.read().expand((c) => c).toList()),
     );
-    expect(body.containsKey('new_connection_card'), isTrue,
-        reason: 'unsigned card_seen_at must not mark the card delivered');
+    expect(
+      body.containsKey('new_connection_card'),
+      isTrue,
+      reason: 'unsigned card_seen_at must not mark the card delivered',
+    );
   });
 
   test('invalid card_seen_at → 400', () async {
-    final res =
-        await get('/manifest?requester_pubkey=follower-1&card_seen_at=abc');
+    final res = await get(
+      '/manifest?requester_pubkey=follower-1&card_seen_at=abc',
+    );
     expect(res.statusCode, 400);
   });
 }

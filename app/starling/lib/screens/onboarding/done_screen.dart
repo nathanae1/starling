@@ -57,9 +57,7 @@ class DoneScreen extends StatelessWidget {
                 'friend to start sharing — every post stays end-to-end '
                 'encrypted.',
                 textAlign: TextAlign.center,
-                style: starling.typography.small.copyWith(
-                  color: colors.stone,
-                ),
+                style: starling.typography.small.copyWith(color: colors.stone),
               ),
               const Spacer(),
               PrimaryButton(

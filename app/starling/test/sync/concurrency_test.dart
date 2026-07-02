@@ -12,13 +12,15 @@ void main() {
     final completers = List.generate(5, (_) => Completer<void>());
     final futures = <Future<int>>[];
     for (var i = 0; i < 5; i++) {
-      futures.add(pool.run<int>(() async {
-        running++;
-        if (running > peak) peak = running;
-        await completers[i].future;
-        running--;
-        return i;
-      }));
+      futures.add(
+        pool.run<int>(() async {
+          running++;
+          if (running > peak) peak = running;
+          await completers[i].future;
+          running--;
+          return i;
+        }),
+      );
     }
 
     // Let the first batch enter the pool.

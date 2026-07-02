@@ -8,6 +8,7 @@ import '../../providers/follows_provider.dart';
 import '../../providers/search_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../theme/starling_theme.dart';
+import '../../utils/friendly_error.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/empty_feed.dart';
 import 'feed_sync_search_bar.dart';
@@ -52,16 +53,20 @@ class _FeedList extends ConsumerWidget {
     final feedAsync = ref.watch(feedProvider);
     return RefreshIndicator(
       onRefresh: () async {
-        // Trigger a real LAN sync, then re-read local storage so any
-        // newly-stored events surface in the list.
+        // Kick a real sync, but release the spinner after ~6 s — a full
+        // multi-peer pass can take minutes over Tor with offline friends.
+        // The sync keeps running; the status row's "Loading feeds…" carries
+        // the long tail, and the reactive feed stream surfaces results as
+        // they're stored.
         try {
-          await ref.read(syncControllerProvider.notifier).syncNow();
+          await ref
+              .read(syncControllerProvider.notifier)
+              .syncNow()
+              .timeout(const Duration(seconds: 6));
         } catch (_) {
-          // Sync errors are surfaced through `syncStatusProvider`; the
-          // refresh gesture itself shouldn't throw.
+          // Sync errors (and the timeout) are surfaced through
+          // `syncStatusProvider`; the refresh gesture itself shouldn't throw.
         }
-        ref.invalidate(feedProvider);
-        await ref.read(feedProvider.future);
       },
       child: feedAsync.when(
         data: (events) {
@@ -75,7 +80,10 @@ class _FeedList extends ConsumerWidget {
           return _PostListView(events: events);
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => _ErrorState(message: '$e'),
+        error: (e, _) => _ErrorState(
+          message: friendlyError(e, tag: 'feed'),
+          onRetry: () => ref.invalidate(feedProvider),
+        ),
       ),
     );
   }
@@ -105,7 +113,10 @@ class _SearchResultsList extends ConsumerWidget {
         return _PostListView(events: results.events, trailing: false);
       },
       loading: () => const SizedBox.shrink(),
-      error: (e, _) => _ErrorState(message: '$e'),
+      error: (e, _) => _ErrorState(
+        message: friendlyError(e, tag: 'search'),
+        onRetry: () => ref.invalidate(searchResultsProvider),
+      ),
     );
   }
 }
@@ -198,22 +209,33 @@ class _EmptyScroll extends StatelessWidget {
   }
 }
 
+/// Scrollable (so `RefreshIndicator` can still arm on top of it) error state
+/// with an in-UI retry — never a dead-end `Center`.
 class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.message});
+  const _ErrorState({required this.message, this.onRetry});
   final String message;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
-    return Center(
+    return _EmptyScroll(
       child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(
-          message,
-          textAlign: TextAlign.center,
-          style: starling.typography.small.copyWith(
-            color: starling.colors.danger,
-          ),
+        padding: const EdgeInsets.fromLTRB(24, 96, 24, 64),
+        child: Column(
+          children: [
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: starling.typography.small.copyWith(
+                color: starling.colors.danger,
+              ),
+            ),
+            if (onRetry != null) ...[
+              const SizedBox(height: 16),
+              SecondaryButton(label: 'Try again', onPressed: onRetry),
+            ],
+          ],
         ),
       ),
     );

@@ -5,14 +5,14 @@ VoiceParticipant _p(String pk, ParticipantConnectionState state) =>
     VoiceParticipant(pubkey: pk, connectionState: state);
 
 VoiceRoomState _state(List<VoiceParticipant> participants) => VoiceRoomState(
-      room: VoiceRoom(
-        id: 'r',
-        name: 'Room',
-        creatorPubkey: 'me',
-        createdAt: 0,
-        participants: participants,
-      ),
-    );
+  room: VoiceRoom(
+    id: 'r',
+    name: 'Room',
+    creatorPubkey: 'me',
+    createdAt: 0,
+    participants: participants,
+  ),
+);
 
 void main() {
   group('VoiceRoomState.anyReconnecting', () {

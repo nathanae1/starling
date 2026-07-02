@@ -59,7 +59,7 @@ class FollowRetryPump {
       // Seed from the current snapshot so peers already reachable before we
       // subscribed don't immediately trigger a (redundant) drain.
       for (final entry in monitor.state.entries) {
-        if (_isReachable(entry.value)) _reachableNow.add(entry.key);
+        if (entry.value.isReachable) _reachableNow.add(entry.key);
       }
       _sub = monitor.stateStream.listen(_onState);
     }
@@ -92,7 +92,7 @@ class FollowRetryPump {
     final newlyReachable = <String>[];
     final stillReachable = <String>{};
     for (final entry in snapshot.entries) {
-      if (_isReachable(entry.value)) {
+      if (entry.value.isReachable) {
         stillReachable.add(entry.key);
         if (!_reachableNow.contains(entry.key)) {
           newlyReachable.add(entry.key);
@@ -129,12 +129,5 @@ class FollowRetryPump {
         name: 'follow_retry_pump',
       );
     }
-  }
-
-  bool _isReachable(PeerReachability p) {
-    for (final status in p.transports.values) {
-      if (status.state == TransportState.reachable) return true;
-    }
-    return false;
   }
 }

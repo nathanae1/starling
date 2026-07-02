@@ -97,8 +97,12 @@ class StarlingTextarea extends StatelessWidget {
       maxLines: maxLines,
       maxLength: maxLength,
       buildCounter:
-          (_, {required currentLength, required maxLength, required isFocused}) =>
-              null,
+          (
+            _, {
+            required currentLength,
+            required maxLength,
+            required isFocused,
+          }) => null,
       cursorColor: starling.colors.sage,
       style: starling.typography.body,
       decoration: InputDecoration(

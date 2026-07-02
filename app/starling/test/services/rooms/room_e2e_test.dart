@@ -144,7 +144,10 @@ void main() {
     final envelope = Envelope(
       version: kStarlingProtocolVersion,
       items: queued
-          .map((q) => EnvelopeItem(type: q.itemType ?? 'event', payload: q.eventBlob))
+          .map(
+            (q) =>
+                EnvelopeItem(type: q.itemType ?? 'event', payload: q.eventBlob),
+          )
           .toList(),
     );
     await ingestPushedEnvelope(
@@ -169,32 +172,35 @@ void main() {
     return msgs.map((e) => utf8.decode(e.content)).toList();
   }
 
-  test('3-member convergence: create → fan-out → both timelines equal', () async {
-    final a = await makeParty();
-    final b = await makeParty();
-    final c = await makeParty();
-    await link(a, b);
-    await link(a, c);
+  test(
+    '3-member convergence: create → fan-out → both timelines equal',
+    () async {
+      final a = await makeParty();
+      final b = await makeParty();
+      final c = await makeParty();
+      await link(a, b);
+      await link(a, c);
 
-    a.clock.value = 1000;
-    final roomId = await a.rooms.createRoom(
-      name: 'Book club',
-      memberPubkeys: [b.pubkey, c.pubkey],
-    );
-    await deliver(a, b);
-    await deliver(a, c);
+      a.clock.value = 1000;
+      final roomId = await a.rooms.createRoom(
+        name: 'Book club',
+        memberPubkeys: [b.pubkey, c.pubkey],
+      );
+      await deliver(a, b);
+      await deliver(a, c);
 
-    expect((await b.storage.getRoom(roomId))?.name, 'Book club');
-    expect((await c.storage.getRoom(roomId))?.name, 'Book club');
+      expect((await b.storage.getRoom(roomId))?.name, 'Book club');
+      expect((await c.storage.getRoom(roomId))?.name, 'Book club');
 
-    a.clock.value = 1001;
-    await a.messages.send(roomId: roomId, text: 'hello all');
-    await deliver(a, b);
-    await deliver(a, c);
+      a.clock.value = 1001;
+      await a.messages.send(roomId: roomId, text: 'hello all');
+      await deliver(a, b);
+      await deliver(a, c);
 
-    expect(await texts(b, roomId), contains('hello all'));
-    expect(await texts(c, roomId), equals(await texts(b, roomId)));
-  });
+      expect(await texts(b, roomId), contains('hello all'));
+      expect(await texts(c, roomId), equals(await texts(b, roomId)));
+    },
+  );
 
   test('offline member converges after reconnect', () async {
     final a = await makeParty();
@@ -238,34 +244,40 @@ void main() {
     // C reads history that predates its join (bounded replay + current key).
     expect(await texts(c, roomId), contains('early message'));
     final members = await c.storage.getRoomMembers(roomId);
-    expect(members.where((m) => m.isActive).map((m) => m.pubkey), contains(c.pubkey));
+    expect(
+      members.where((m) => m.isActive).map((m) => m.pubkey),
+      contains(c.pubkey),
+    );
   });
 
-  test('announceCall authors a durable roomCallStarted seen by members', () async {
-    final a = await makeParty();
-    final b = await makeParty();
-    await link(a, b);
+  test(
+    'announceCall authors a durable roomCallStarted seen by members',
+    () async {
+      final a = await makeParty();
+      final b = await makeParty();
+      await link(a, b);
 
-    a.clock.value = 5000;
-    final roomId = await a.rooms.createRoom(
-      name: 'Call room',
-      memberPubkeys: [b.pubkey],
-    );
-    await deliver(a, b);
+      a.clock.value = 5000;
+      final roomId = await a.rooms.createRoom(
+        name: 'Call room',
+        memberPubkeys: [b.pubkey],
+      );
+      await deliver(a, b);
 
-    a.clock.value = 5001;
-    await a.rooms.announceCall(roomId: roomId, callId: 'call-abc');
-    await deliver(a, b);
+      a.clock.value = 5001;
+      await a.rooms.announceCall(roomId: roomId, callId: 'call-abc');
+      await deliver(a, b);
 
-    final calls = await b.storage.getEventsByRef(
-      roomId,
-      kind: EventKind.roomCallStarted,
-    );
-    expect(calls, hasLength(1));
-    final content = decodeRoomCallStartedContent(calls.first.content);
-    expect(content.callId, 'call-abc');
-    expect(content.starterPubkey, a.pubkey);
-  });
+      final calls = await b.storage.getEventsByRef(
+        roomId,
+        kind: EventKind.roomCallStarted,
+      );
+      expect(calls, hasLength(1));
+      final content = decodeRoomCallStartedContent(calls.first.content);
+      expect(content.callId, 'call-abc');
+      expect(content.starterPubkey, a.pubkey);
+    },
+  );
 
   test('removing a member rotates the key — backward secrecy', () async {
     final a = await makeParty();
@@ -317,9 +329,6 @@ void main() {
 
     // B's roster reflects the removal.
     final bMembers = await b.storage.getRoomMembers(roomId);
-    expect(
-      bMembers.firstWhere((m) => m.pubkey == c.pubkey).isActive,
-      isFalse,
-    );
+    expect(bMembers.firstWhere((m) => m.pubkey == c.pubkey).isActive, isFalse);
   });
 }

@@ -38,27 +38,25 @@ Widget _harness(ProviderContainer container) {
 }
 
 Event _post(String id, {int createdAt = 1000}) => Event(
-      version: '2026-03-24',
-      id: id,
-      pubkey: 'me',
-      createdAt: createdAt,
-      kind: EventKind.post,
-      content: Uint8List.fromList('hello world'.codeUnits),
-      sig: Uint8List.fromList(List.filled(64, 0)),
-    );
+  version: '2026-03-24',
+  id: id,
+  pubkey: 'me',
+  createdAt: createdAt,
+  kind: EventKind.post,
+  content: Uint8List.fromList('hello world'.codeUnits),
+  sig: Uint8List.fromList(List.filled(64, 0)),
+);
 
 void main() {
   testWidgets('empty feed renders the EmptyFeed CTA', (tester) async {
     final storage = MockStorageService();
-    await storage.saveIdentity(Identity(
-      pubkey: 'me',
-      feedKey: Uint8List(32),
-      createdAt: 0,
-    ));
+    await storage.saveIdentity(
+      Identity(pubkey: 'me', feedKey: Uint8List(32), createdAt: 0),
+    );
 
-    final container = ProviderContainer(overrides: [
-      storageServiceProvider.overrideWithValue(storage),
-    ]);
+    final container = ProviderContainer(
+      overrides: [storageServiceProvider.overrideWithValue(storage)],
+    );
     addTearDown(container.dispose);
 
     await tester.pumpWidget(_harness(container));
@@ -68,20 +66,19 @@ void main() {
     expect(find.text('Add a friend to get started'), findsOneWidget);
   });
 
-  testWidgets('populated feed renders one PostCard per event + trailing line',
-      (tester) async {
+  testWidgets('populated feed renders one PostCard per event + trailing line', (
+    tester,
+  ) async {
     final storage = MockStorageService();
-    await storage.saveIdentity(Identity(
-      pubkey: 'me',
-      feedKey: Uint8List(32),
-      createdAt: 0,
-    ));
+    await storage.saveIdentity(
+      Identity(pubkey: 'me', feedKey: Uint8List(32), createdAt: 0),
+    );
     await storage.saveEvent(_post('e1', createdAt: 1000));
     await storage.saveEvent(_post('e2', createdAt: 2000));
 
-    final container = ProviderContainer(overrides: [
-      storageServiceProvider.overrideWithValue(storage),
-    ]);
+    final container = ProviderContainer(
+      overrides: [storageServiceProvider.overrideWithValue(storage)],
+    );
     addTearDown(container.dispose);
 
     await tester.pumpWidget(_harness(container));

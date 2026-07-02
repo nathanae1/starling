@@ -1,6 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../models/models.dart';
+import 'follows_provider.dart';
 import 'identity_provider.dart';
 import 'service_providers.dart';
 
@@ -14,30 +15,41 @@ part 'comments_provider.g.dart';
 /// Storage holds every received comment regardless of follow status — the
 /// filter is at the read layer so following someone retroactively reveals
 /// their old comments without a backfill.
+///
+/// Plan 18 C1: reactive — an inbound comment (sync pull or push) re-emits
+/// without any invalidation. Tombstone writes also re-fire the stream (the
+/// storage watch is table-granular), so deletes disappear live too.
 @riverpod
-Future<List<Event>> comments(Ref ref, String postId) async {
+Stream<List<Event>> comments(Ref ref, String postId) async* {
   final storage = ref.watch(storageServiceProvider);
+  // Rebuild when the follows set changes so a newly-followed author's old
+  // comments reveal themselves without a manual refresh.
+  ref.watch(followsStreamProvider);
   final identity = await ref.watch(identityControllerProvider.future);
-  final follows = await storage.getFollows();
-  final allowed = <String>{
-    if (identity != null) identity.pubkey,
-    ...follows.map((f) => f.pubkey),
-  };
 
-  final raw = await storage.getEventsByRef(postId, kind: EventKind.comment);
-  final visible = raw.where((e) => allowed.contains(e.pubkey)).toList();
+  await for (final raw in storage.watchEventsByRef(
+    postId,
+    kind: EventKind.comment,
+  )) {
+    final follows = await storage.getFollows();
+    final allowed = <String>{
+      if (identity != null) identity.pubkey,
+      ...follows.map((f) => f.pubkey),
+    };
+    final visible = raw.where((e) => allowed.contains(e.pubkey)).toList();
 
-  // Filter out comments that have a kind=6 tombstone from the same author.
-  final filtered = <Event>[];
-  for (final comment in visible) {
-    final tombstones = await storage.getEventsByRef(
-      comment.id,
-      kind: EventKind.delete,
-    );
-    final tombstoned = tombstones.any((t) => t.pubkey == comment.pubkey);
-    if (!tombstoned) filtered.add(comment);
+    // Filter out comments that have a kind=6 tombstone from the same author.
+    final filtered = <Event>[];
+    for (final comment in visible) {
+      final tombstones = await storage.getEventsByRef(
+        comment.id,
+        kind: EventKind.delete,
+      );
+      final tombstoned = tombstones.any((t) => t.pubkey == comment.pubkey);
+      if (!tombstoned) filtered.add(comment);
+    }
+    yield filtered;
   }
-  return filtered;
 }
 
 /// Create / delete a comment on [postId]. Invalidates [commentsProvider]

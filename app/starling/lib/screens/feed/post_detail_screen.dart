@@ -12,6 +12,7 @@ import '../../providers/identity_provider.dart';
 import '../../providers/reactions_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../theme/starling_theme.dart';
+import '../../utils/friendly_error.dart';
 import '../../utils/time_ago.dart';
 import '../../widgets/avatar.dart';
 import '../../widgets/bookmark_button.dart';
@@ -59,7 +60,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Text(
-              '$e',
+              friendlyError(e, tag: 'post_detail'),
               style: starling.typography.small.copyWith(
                 color: starling.colors.danger,
               ),

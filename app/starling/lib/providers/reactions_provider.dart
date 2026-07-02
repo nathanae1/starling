@@ -26,43 +26,48 @@ class ReactionSummary {
   final String? myLikeId;
 }
 
+/// Plan 18 C1: reactive — an inbound like (or unlike tombstone) from any
+/// storage path re-emits without invalidation.
 @riverpod
-Future<ReactionSummary> reactions(Ref ref, String postId) async {
+Stream<ReactionSummary> reactions(Ref ref, String postId) async* {
   final storage = ref.watch(storageServiceProvider);
   final identity = await ref.watch(identityControllerProvider.future);
 
-  final likes = await storage.getEventsByRef(postId, kind: EventKind.like);
+  await for (final likes in storage.watchEventsByRef(
+    postId,
+    kind: EventKind.like,
+  )) {
+    // Per-author latest like with no tombstone wins.
+    final activeByAuthor = <String, Event>{};
+    for (final like in likes) {
+      final tombstones = await storage.getEventsByRef(
+        like.id,
+        kind: EventKind.delete,
+      );
+      final tombstoned = tombstones.any((t) => t.pubkey == like.pubkey);
+      if (tombstoned) continue;
+      final prior = activeByAuthor[like.pubkey];
+      if (prior == null || like.createdAt > prior.createdAt) {
+        activeByAuthor[like.pubkey] = like;
+      }
+    }
 
-  // Per-author latest like with no tombstone wins.
-  final activeByAuthor = <String, Event>{};
-  for (final like in likes) {
-    final tombstones = await storage.getEventsByRef(
-      like.id,
-      kind: EventKind.delete,
+    String? myLikeId;
+    var likedByMe = false;
+    if (identity != null) {
+      final mine = activeByAuthor[identity.pubkey];
+      if (mine != null) {
+        likedByMe = true;
+        myLikeId = mine.id;
+      }
+    }
+
+    yield ReactionSummary(
+      count: activeByAuthor.length,
+      likedByMe: likedByMe,
+      myLikeId: myLikeId,
     );
-    final tombstoned = tombstones.any((t) => t.pubkey == like.pubkey);
-    if (tombstoned) continue;
-    final prior = activeByAuthor[like.pubkey];
-    if (prior == null || like.createdAt > prior.createdAt) {
-      activeByAuthor[like.pubkey] = like;
-    }
   }
-
-  String? myLikeId;
-  var likedByMe = false;
-  if (identity != null) {
-    final mine = activeByAuthor[identity.pubkey];
-    if (mine != null) {
-      likedByMe = true;
-      myLikeId = mine.id;
-    }
-  }
-
-  return ReactionSummary(
-    count: activeByAuthor.length,
-    likedByMe: likedByMe,
-    myLikeId: myLikeId,
-  );
 }
 
 @riverpod

@@ -34,27 +34,29 @@ void main() {
       expect(await service.toggle('e1'), isTrue);
     });
 
-    test('produces no event — toggling never inserts into events table',
-        () async {
-      // Seed one unrelated event to baseline.
-      final e = Event(
-        version: '2026-03-24',
-        id: 'pre-existing',
-        pubkey: 'p',
-        createdAt: 1,
-        kind: EventKind.post,
-        content: Uint8List(0),
-        sig: Uint8List(64),
-      );
-      await storage.saveEvent(e);
-      final before = (await storage.getEvents()).length;
+    test(
+      'produces no event — toggling never inserts into events table',
+      () async {
+        // Seed one unrelated event to baseline.
+        final e = Event(
+          version: '2026-03-24',
+          id: 'pre-existing',
+          pubkey: 'p',
+          createdAt: 1,
+          kind: EventKind.post,
+          content: Uint8List(0),
+          sig: Uint8List(64),
+        );
+        await storage.saveEvent(e);
+        final before = (await storage.getEvents()).length;
 
-      await service.toggle('any-id');
-      await service.toggle('another-id');
-      await service.setSaved('third-id', true);
+        await service.toggle('any-id');
+        await service.toggle('another-id');
+        await service.setSaved('third-id', true);
 
-      final after = (await storage.getEvents()).length;
-      expect(after, equals(before));
-    });
+        final after = (await storage.getEvents()).length;
+        expect(after, equals(before));
+      },
+    );
   });
 }

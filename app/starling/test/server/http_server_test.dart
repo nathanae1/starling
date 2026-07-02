@@ -50,7 +50,10 @@ void main() {
     if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
   });
 
-  StarlingHttpServer makeServer({Random? random, int rateLimitPerMinute = 120}) {
+  StarlingHttpServer makeServer({
+    Random? random,
+    int rateLimitPerMinute = 120,
+  }) {
     return StarlingHttpServer.social(
       storage: storage,
       contentKey: MockContentKeyService(),

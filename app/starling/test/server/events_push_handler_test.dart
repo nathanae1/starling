@@ -38,11 +38,9 @@ void main() {
       contentKey: contentKey,
       clock: MockClock(),
     );
-    return handler(Request(
-      'POST',
-      Uri.parse('http://localhost/events'),
-      body: body,
-    ));
+    return handler(
+      Request('POST', Uri.parse('http://localhost/events'), body: body),
+    );
   }
 
   EncryptedEvent buildEncryptedEvent(String pubkey, String id) {
@@ -76,11 +74,13 @@ void main() {
 
   test('events from a known follow are accepted and stored', () async {
     const friendPubkey = 'FRIEND-PUBKEY-A';
-    await storage.saveFollow(Follow(
-      pubkey: friendPubkey,
-      connectionCard: '{}',
-      feedKey: Uint8List.fromList(List.filled(32, 0xAA)),
-    ));
+    await storage.saveFollow(
+      Follow(
+        pubkey: friendPubkey,
+        connectionCard: '{}',
+        feedKey: Uint8List.fromList(List.filled(32, 0xAA)),
+      ),
+    );
 
     final encrypted = buildEncryptedEvent(friendPubkey, 'comment-1');
     final envelope = Envelope(
@@ -97,26 +97,30 @@ void main() {
     expect(stored.pubkey, equals(friendPubkey));
   });
 
-  test('events from a NON-followed pubkey are silently dropped (still 202)',
-      () async {
-    final encrypted = buildEncryptedEvent('STRANGER-PUBKEY', 'mystery-1');
-    final envelope = Envelope(
-      version: kStarlingProtocolVersion,
-      items: [EnvelopeItem(type: 'event', payload: encrypted.toBytes())],
-    );
+  test(
+    'events from a NON-followed pubkey are silently dropped (still 202)',
+    () async {
+      final encrypted = buildEncryptedEvent('STRANGER-PUBKEY', 'mystery-1');
+      final envelope = Envelope(
+        version: kStarlingProtocolVersion,
+        items: [EnvelopeItem(type: 'event', payload: encrypted.toBytes())],
+      );
 
-    final res = await postBytes(envelope.toBytes());
-    expect(res.statusCode, 202);
-    expect(await storage.getEvent('mystery-1'), isNull);
-  });
+      final res = await postBytes(envelope.toBytes());
+      expect(res.statusCode, 202);
+      expect(await storage.getEvent('mystery-1'), isNull);
+    },
+  );
 
   test('mixed envelope: known follow accepted, stranger dropped', () async {
     const friendPubkey = 'FRIEND-PUBKEY-B';
-    await storage.saveFollow(Follow(
-      pubkey: friendPubkey,
-      connectionCard: '{}',
-      feedKey: Uint8List.fromList(List.filled(32, 0xAA)),
-    ));
+    await storage.saveFollow(
+      Follow(
+        pubkey: friendPubkey,
+        connectionCard: '{}',
+        feedKey: Uint8List.fromList(List.filled(32, 0xAA)),
+      ),
+    );
 
     final friendEvent = buildEncryptedEvent(friendPubkey, 'good');
     final strangerEvent = buildEncryptedEvent('NOT-A-FRIEND', 'bad');

@@ -16,16 +16,16 @@ import '../helpers/fake_peer_reachability_monitor.dart';
 /// the real implementation.
 class _RecordingFollowService extends FollowService {
   _RecordingFollowService()
-      : super(
-          crypto: MockCryptoService(),
-          storage: MockStorageService(),
-          clock: MockClock(),
-          transport: _NoopTransport(),
-          reachabilityMonitor: FakePeerReachabilityMonitor(),
-          identityLookup: () async => null,
-          ownSecretKeyLookup: () async => null,
-          ownEndpointsLookup: () async => const <Endpoint>[],
-        );
+    : super(
+        crypto: MockCryptoService(),
+        storage: MockStorageService(),
+        clock: MockClock(),
+        transport: _NoopTransport(),
+        reachabilityMonitor: FakePeerReachabilityMonitor(),
+        identityLookup: () async => null,
+        ownSecretKeyLookup: () async => null,
+        ownEndpointsLookup: () async => const <Endpoint>[],
+      );
 
   final List<({String? onlyPubkey, bool ignoreBackoff})> calls = [];
 
@@ -87,45 +87,49 @@ void main() {
     expect(service.calls.single.ignoreBackoff, isTrue);
   });
 
-  test('cooldown suppresses a re-trigger within the window, allows it after',
-      () async {
-    monitor.emitReachable(alice, PeerTransport.lan, 'http://alice.local');
-    await _settle();
-    expect(service.calls, hasLength(1));
+  test(
+    'cooldown suppresses a re-trigger within the window, allows it after',
+    () async {
+      monitor.emitReachable(alice, PeerTransport.lan, 'http://alice.local');
+      await _settle();
+      expect(service.calls, hasLength(1));
 
-    // Flap within the cooldown window → no second drain.
-    monitor.emitUnreachable(alice);
-    await _settle();
-    monitor.emitReachable(alice, PeerTransport.lan, 'http://alice.local');
-    await _settle();
-    expect(service.calls, hasLength(1));
+      // Flap within the cooldown window → no second drain.
+      monitor.emitUnreachable(alice);
+      await _settle();
+      monitor.emitReachable(alice, PeerTransport.lan, 'http://alice.local');
+      await _settle();
+      expect(service.calls, hasLength(1));
 
-    // Flap again past the cooldown → drains once more.
-    clock.advance(61);
-    monitor.emitUnreachable(alice);
-    await _settle();
-    monitor.emitReachable(alice, PeerTransport.lan, 'http://alice.local');
-    await _settle();
-    expect(service.calls, hasLength(2));
-  });
+      // Flap again past the cooldown → drains once more.
+      clock.advance(61);
+      monitor.emitUnreachable(alice);
+      await _settle();
+      monitor.emitReachable(alice, PeerTransport.lan, 'http://alice.local');
+      await _settle();
+      expect(service.calls, hasLength(2));
+    },
+  );
 
-  test('a peer already reachable at start does not trigger on re-emit',
-      () async {
-    // Seed the monitor BEFORE a fresh pump starts.
-    await pump.stop();
-    monitor.emitReachable(alice, PeerTransport.lan, 'http://alice.local');
-    final seeded = _RecordingFollowService();
-    final seededPump = FollowRetryPump(
-      followService: seeded,
-      reachability: monitor,
-      clock: clock,
-    )..start();
+  test(
+    'a peer already reachable at start does not trigger on re-emit',
+    () async {
+      // Seed the monitor BEFORE a fresh pump starts.
+      await pump.stop();
+      monitor.emitReachable(alice, PeerTransport.lan, 'http://alice.local');
+      final seeded = _RecordingFollowService();
+      final seededPump = FollowRetryPump(
+        followService: seeded,
+        reachability: monitor,
+        clock: clock,
+      )..start();
 
-    // Same peer, still reachable → not a transition → no drain.
-    monitor.emitReachable(alice, PeerTransport.lan, 'http://alice.local');
-    await _settle();
-    expect(seeded.calls, isEmpty);
+      // Same peer, still reachable → not a transition → no drain.
+      monitor.emitReachable(alice, PeerTransport.lan, 'http://alice.local');
+      await _settle();
+      expect(seeded.calls, isEmpty);
 
-    await seededPump.stop();
-  });
+      await seededPump.stop();
+    },
+  );
 }

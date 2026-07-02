@@ -111,10 +111,7 @@ void main() {
     test('different roots under same seq produce different keys', () {
       final r0 = Uint8List.fromList(List.filled(32, 0x42));
       final r1 = Uint8List.fromList(List.filled(32, 0x43));
-      expect(
-        deriveMsgKey(r0, 0, crypto),
-        isNot(deriveMsgKey(r1, 0, crypto)),
-      );
+      expect(deriveMsgKey(r0, 0, crypto), isNot(deriveMsgKey(r1, 0, crypto)));
     });
 
     test('msg_key is distinct from chainRoot', () {
@@ -128,7 +125,10 @@ void main() {
       // Domain separation: msg_key derivation uses a different domain
       // string than the epoch ratchet.
       final root = Uint8List.fromList(List.generate(32, (i) => i * 5));
-      expect(deriveMsgKey(root, 0, crypto), isNot(ratchetFeedKey(root, crypto)));
+      expect(
+        deriveMsgKey(root, 0, crypto),
+        isNot(ratchetFeedKey(root, crypto)),
+      );
     });
 
     test('negative seq throws', () {

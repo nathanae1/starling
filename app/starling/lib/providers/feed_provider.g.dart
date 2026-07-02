@@ -68,29 +68,38 @@ String _$lastViewedTrackerHash() => r'96e1cb52d02aab043d964b7b9131a8bdafaf6b87';
 
 /// Reverse-chronological feed of kind=1 posts from own identity + active
 /// follows. Posts with a kind=6 tombstone from the same author are excluded
-/// at the storage layer. Plan 09 plugs sync into this — the provider shape
-/// doesn't change.
+/// at the storage layer.
+///
+/// Plan 18 C1: a reactive stream over the storage layer, not a one-shot
+/// future — content appears live regardless of which path stored it (sync
+/// pull, inbound push, background sync, own publish).
 
 @ProviderFor(feed)
 final feedProvider = FeedProvider._();
 
 /// Reverse-chronological feed of kind=1 posts from own identity + active
 /// follows. Posts with a kind=6 tombstone from the same author are excluded
-/// at the storage layer. Plan 09 plugs sync into this — the provider shape
-/// doesn't change.
+/// at the storage layer.
+///
+/// Plan 18 C1: a reactive stream over the storage layer, not a one-shot
+/// future — content appears live regardless of which path stored it (sync
+/// pull, inbound push, background sync, own publish).
 
 final class FeedProvider
     extends
         $FunctionalProvider<
           AsyncValue<List<Event>>,
           List<Event>,
-          FutureOr<List<Event>>
+          Stream<List<Event>>
         >
-    with $FutureModifier<List<Event>>, $FutureProvider<List<Event>> {
+    with $FutureModifier<List<Event>>, $StreamProvider<List<Event>> {
   /// Reverse-chronological feed of kind=1 posts from own identity + active
   /// follows. Posts with a kind=6 tombstone from the same author are excluded
-  /// at the storage layer. Plan 09 plugs sync into this — the provider shape
-  /// doesn't change.
+  /// at the storage layer.
+  ///
+  /// Plan 18 C1: a reactive stream over the storage layer, not a one-shot
+  /// future — content appears live regardless of which path stored it (sync
+  /// pull, inbound push, background sync, own publish).
   FeedProvider._()
     : super(
         from: null,
@@ -107,17 +116,17 @@ final class FeedProvider
 
   @$internal
   @override
-  $FutureProviderElement<List<Event>> $createElement(
+  $StreamProviderElement<List<Event>> $createElement(
     $ProviderPointer pointer,
-  ) => $FutureProviderElement(pointer);
+  ) => $StreamProviderElement(pointer);
 
   @override
-  FutureOr<List<Event>> create(Ref ref) {
+  Stream<List<Event>> create(Ref ref) {
     return feed(ref);
   }
 }
 
-String _$feedHash() => r'7b48a5dbe60b144ea3bf37dbea65d161355a8186';
+String _$feedHash() => r'8b0eb9a5d69fa0d3d3e94f6c2e2618ec0497985c';
 
 /// Single event by id, used by the post-detail screen so it doesn't have
 /// to re-query the whole feed.
@@ -202,22 +211,22 @@ final class EventByIdFamily extends $Family
   String toString() => r'eventByIdProvider';
 }
 
-/// Own posts (kind=1, deletes excluded) for the "You"-tab grid.
+/// Own posts (kind=1, deletes excluded) for the "You"-tab grid. Reactive.
 
 @ProviderFor(ownPosts)
 final ownPostsProvider = OwnPostsProvider._();
 
-/// Own posts (kind=1, deletes excluded) for the "You"-tab grid.
+/// Own posts (kind=1, deletes excluded) for the "You"-tab grid. Reactive.
 
 final class OwnPostsProvider
     extends
         $FunctionalProvider<
           AsyncValue<List<Event>>,
           List<Event>,
-          FutureOr<List<Event>>
+          Stream<List<Event>>
         >
-    with $FutureModifier<List<Event>>, $FutureProvider<List<Event>> {
-  /// Own posts (kind=1, deletes excluded) for the "You"-tab grid.
+    with $FutureModifier<List<Event>>, $StreamProvider<List<Event>> {
+  /// Own posts (kind=1, deletes excluded) for the "You"-tab grid. Reactive.
   OwnPostsProvider._()
     : super(
         from: null,
@@ -234,34 +243,34 @@ final class OwnPostsProvider
 
   @$internal
   @override
-  $FutureProviderElement<List<Event>> $createElement(
+  $StreamProviderElement<List<Event>> $createElement(
     $ProviderPointer pointer,
-  ) => $FutureProviderElement(pointer);
+  ) => $StreamProviderElement(pointer);
 
   @override
-  FutureOr<List<Event>> create(Ref ref) {
+  Stream<List<Event>> create(Ref ref) {
     return ownPosts(ref);
   }
 }
 
-String _$ownPostsHash() => r'2f4352c8fdc7bc624452fca2403100d0e82e85ee';
+String _$ownPostsHash() => r'7a42b0943dddb938f79c32501c497b087bf463b7';
 
-/// Posts authored by a given pubkey, for other-profile grid.
+/// Posts authored by a given pubkey, for other-profile grid. Reactive.
 
 @ProviderFor(profilePosts)
 final profilePostsProvider = ProfilePostsFamily._();
 
-/// Posts authored by a given pubkey, for other-profile grid.
+/// Posts authored by a given pubkey, for other-profile grid. Reactive.
 
 final class ProfilePostsProvider
     extends
         $FunctionalProvider<
           AsyncValue<List<Event>>,
           List<Event>,
-          FutureOr<List<Event>>
+          Stream<List<Event>>
         >
-    with $FutureModifier<List<Event>>, $FutureProvider<List<Event>> {
-  /// Posts authored by a given pubkey, for other-profile grid.
+    with $FutureModifier<List<Event>>, $StreamProvider<List<Event>> {
+  /// Posts authored by a given pubkey, for other-profile grid. Reactive.
   ProfilePostsProvider._({
     required ProfilePostsFamily super.from,
     required String super.argument,
@@ -285,12 +294,12 @@ final class ProfilePostsProvider
 
   @$internal
   @override
-  $FutureProviderElement<List<Event>> $createElement(
+  $StreamProviderElement<List<Event>> $createElement(
     $ProviderPointer pointer,
-  ) => $FutureProviderElement(pointer);
+  ) => $StreamProviderElement(pointer);
 
   @override
-  FutureOr<List<Event>> create(Ref ref) {
+  Stream<List<Event>> create(Ref ref) {
     final argument = this.argument as String;
     return profilePosts(ref, argument);
   }
@@ -306,12 +315,12 @@ final class ProfilePostsProvider
   }
 }
 
-String _$profilePostsHash() => r'57f87e6321e83224bd2535b309c5703fe7c9cbf9';
+String _$profilePostsHash() => r'f8f15d7a962fc05f43d7e0fb49d7efe76ef3dae5';
 
-/// Posts authored by a given pubkey, for other-profile grid.
+/// Posts authored by a given pubkey, for other-profile grid. Reactive.
 
 final class ProfilePostsFamily extends $Family
-    with $FunctionalFamilyOverride<FutureOr<List<Event>>, String> {
+    with $FunctionalFamilyOverride<Stream<List<Event>>, String> {
   ProfilePostsFamily._()
     : super(
         retry: null,
@@ -321,7 +330,7 @@ final class ProfilePostsFamily extends $Family
         isAutoDispose: true,
       );
 
-  /// Posts authored by a given pubkey, for other-profile grid.
+  /// Posts authored by a given pubkey, for other-profile grid. Reactive.
 
   ProfilePostsProvider call(String pubkey) =>
       ProfilePostsProvider._(argument: pubkey, from: this);

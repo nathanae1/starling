@@ -47,7 +47,6 @@ void main() {
 
       expect(ab, isNot(equals(ac)));
     });
-
   });
 
   group('encryptEphemeral / decryptEphemeral', () {

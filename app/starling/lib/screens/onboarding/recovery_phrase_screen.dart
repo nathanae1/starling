@@ -19,6 +19,10 @@ class RecoveryPhraseScreen extends ConsumerStatefulWidget {
 class _RecoveryPhraseScreenState extends ConsumerState<RecoveryPhraseScreen> {
   bool _copied = false;
 
+  // Gates the continue button. One unguarded tap here used to clear the
+  // phrase forever — it's viewable nowhere else in the app.
+  bool _confirmed = false;
+
   Future<void> _copy(String joined) async {
     await Clipboard.setData(ClipboardData(text: joined));
     if (!mounted) return;
@@ -144,15 +148,47 @@ class _RecoveryPhraseScreenState extends ConsumerState<RecoveryPhraseScreen> {
                 ),
               ),
               const SizedBox(height: 16),
+              // Checkbox confirm (no spot-check quiz in v1) — makes clearing
+              // the phrase a deliberate two-step act instead of one tap.
+              InkWell(
+                onTap: () => setState(() => _confirmed = !_confirmed),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Checkbox(
+                        value: _confirmed,
+                        onChanged: (v) =>
+                            setState(() => _confirmed = v ?? false),
+                        activeColor: starling.colors.sageDeep,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          "I've written these 24 words down somewhere safe",
+                          style: starling.typography.small.copyWith(
+                            color: starling.colors.ink,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
               PrimaryButton(
                 label: 'I wrote it down',
                 block: true,
-                onPressed: () {
-                  ref
-                      .read(onboardingControllerProvider.notifier)
-                      .clearRecoveryPhrase();
-                  context.go('/onboarding/done');
-                },
+                onPressed: _confirmed
+                    ? () {
+                        ref
+                            .read(onboardingControllerProvider.notifier)
+                            .clearRecoveryPhrase();
+                        context.go('/onboarding/done');
+                      }
+                    : null,
               ),
             ],
           ),

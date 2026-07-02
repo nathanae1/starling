@@ -31,16 +31,18 @@ Uint8List _tinyJpeg() {
 /// onboarding flow.
 Future<ProviderContainer> _buildContainer() async {
   final db = AppDatabase.memory();
-  await db.identityDao.upsertIdentity(IdentityEntriesCompanion.insert(
-    pubkey: 'pk',
-    feedKey: Uint8List(32),
-    recoveryPhrase: const Value(null),
-    createdAt: 0,
-  ));
+  await db.identityDao.upsertIdentity(
+    IdentityEntriesCompanion.insert(
+      pubkey: 'pk',
+      feedKey: Uint8List(32),
+      recoveryPhrase: const Value(null),
+      createdAt: 0,
+    ),
+  );
   final storage = DriftStorageService(db, const SystemClock());
-  final container = ProviderContainer(overrides: [
-    storageServiceProvider.overrideWithValue(storage),
-  ]);
+  final container = ProviderContainer(
+    overrides: [storageServiceProvider.overrideWithValue(storage)],
+  );
   addTearDown(() {
     container.dispose();
     db.close();
@@ -54,7 +56,9 @@ void main() {
     final container = await _buildContainer();
 
     // Seed compose state as if the user selected a photo + typed a caption.
-    container.read(composeControllerProvider.notifier).debugSeedState(
+    container
+        .read(composeControllerProvider.notifier)
+        .debugSeedState(
           ComposeState(
             photoBytes: _tinyJpeg(),
             phase: ComposePhase.ready,
@@ -84,22 +88,31 @@ void main() {
     unawaited(router.push('/compose'));
     await tester.pumpAndSettle();
     expect(find.byType(ComposeScreen), findsOneWidget);
-    expect(container.read(composeControllerProvider).caption, 'meadow',
-        reason: 'caption should survive mounting ComposeScreen');
+    expect(
+      container.read(composeControllerProvider).caption,
+      'meadow',
+      reason: 'caption should survive mounting ComposeScreen',
+    );
 
     // Push /compose/preview.
     unawaited(router.push('/compose/preview'));
     await tester.pumpAndSettle();
     expect(find.byType(PreviewScreen), findsOneWidget);
-    expect(container.read(composeControllerProvider).caption, 'meadow',
-        reason: 'caption should survive mounting PreviewScreen');
+    expect(
+      container.read(composeControllerProvider).caption,
+      'meadow',
+      reason: 'caption should survive mounting PreviewScreen',
+    );
 
     // Pop preview → compose is visible, caption preserved.
     router.pop();
     await tester.pumpAndSettle();
     expect(find.byType(PreviewScreen), findsNothing);
     expect(find.byType(ComposeScreen), findsOneWidget);
-    expect(container.read(composeControllerProvider).caption, 'meadow',
-        reason: 'caption should survive popping back to compose');
+    expect(
+      container.read(composeControllerProvider).caption,
+      'meadow',
+      reason: 'caption should survive popping back to compose',
+    );
   });
 }

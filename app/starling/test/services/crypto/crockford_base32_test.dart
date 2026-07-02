@@ -76,8 +76,7 @@ void main() {
       final bytes = Uint8List.fromList([0x08, 0x40]); // 0000 1000 0100 0000
       final encoded = crockfordBase32Encode(bytes);
       // Whatever the canonical form, check that I/L/O variants round-trip.
-      final withILookalike =
-          encoded.replaceAll('1', 'I').replaceAll('0', 'O');
+      final withILookalike = encoded.replaceAll('1', 'I').replaceAll('0', 'O');
       final decoded1 = crockfordBase32Decode(withILookalike);
       expect(decoded1, bytes);
       final withLLookalike = encoded.replaceAll('1', 'l');
@@ -86,14 +85,8 @@ void main() {
     });
 
     test('decode throws on illegal character', () {
-      expect(
-        () => crockfordBase32Decode('u'),
-        throwsFormatException,
-      );
-      expect(
-        () => crockfordBase32Decode('!'),
-        throwsFormatException,
-      );
+      expect(() => crockfordBase32Decode('u'), throwsFormatException);
+      expect(() => crockfordBase32Decode('!'), throwsFormatException);
     });
 
     test('known-answer: all zeros', () {

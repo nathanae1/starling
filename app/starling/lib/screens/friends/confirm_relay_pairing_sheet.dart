@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/relay_providers.dart';
 import '../../services/relay_pairing_initiator.dart';
 import '../../theme/starling_theme.dart';
+import '../../utils/friendly_error.dart';
 import '../../widgets/buttons.dart';
 
 /// Confirmation sheet for pairing an always-on Relay (Plan 15). Shown when
@@ -154,7 +155,7 @@ class _ConfirmRelayPairingSheetState
       if (!mounted) return;
       setState(() {
         _pairing = false;
-        _error = 'Unexpected error: $e';
+        _error = friendlyError(e, tag: 'relay_pairing');
       });
     }
   }

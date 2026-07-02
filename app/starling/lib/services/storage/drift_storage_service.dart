@@ -158,16 +158,33 @@ class DriftStorageService implements StorageService {
   }
 
   @override
+  Stream<List<Event>> watchFeedEvents({int? limit}) => _db.eventsDao
+      .watchFeedEvents(limit: limit)
+      .map((rows) => rows.map(eventFromRow).toList());
+
+  @override
   Future<List<Event>> getProfilePosts(String pubkey, {int? limit}) async {
     final rows = await _db.eventsDao.getProfilePosts(pubkey, limit: limit);
     return rows.map(eventFromRow).toList();
   }
 
   @override
+  Stream<List<Event>> watchProfilePosts(String pubkey, {int? limit}) => _db
+      .eventsDao
+      .watchProfilePosts(pubkey, limit: limit)
+      .map((rows) => rows.map(eventFromRow).toList());
+
+  @override
   Future<List<Event>> getEventsByRef(String refId, {EventKind? kind}) async {
     final rows = await _db.eventsDao.getEventsByRef(refId, kind: kind?.value);
     return rows.map(eventFromRow).toList();
   }
+
+  @override
+  Stream<List<Event>> watchEventsByRef(String refId, {EventKind? kind}) => _db
+      .eventsDao
+      .watchEventsByRef(refId, kind: kind?.value)
+      .map((rows) => rows.map(eventFromRow).toList());
 
   @override
   Future<List<Event>> getOwnAndIncomingRefs(

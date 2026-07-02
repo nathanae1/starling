@@ -127,8 +127,9 @@ class _SignalBars extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = StarlingTheme.of(context).colors;
     final lit = quality == ConnectionQuality.fair ? 2 : 1;
-    final litColor =
-        quality == ConnectionQuality.fair ? colors.warning : colors.danger;
+    final litColor = quality == ConnectionQuality.fair
+        ? colors.warning
+        : colors.danger;
     final dimColor = colors.stone.withValues(alpha: 0.5);
     return Semantics(
       label: quality == ConnectionQuality.fair

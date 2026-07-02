@@ -10,6 +10,7 @@ import '../../providers/comments_provider.dart';
 import '../../providers/feed_provider.dart';
 import '../../providers/follow_profile_provider.dart';
 import '../../providers/identity_provider.dart';
+import '../../providers/minute_ticker_provider.dart';
 import '../../providers/reactions_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../theme/starling_theme.dart';
@@ -52,6 +53,8 @@ class _PostCardState extends ConsumerState<PostCard> {
     final starling = StarlingTheme.of(context);
     final profile = ref.watch(followProfileProvider(event.pubkey));
     final clock = ref.watch(clockProvider);
+    // Re-render each minute so the relative timestamp stays honest.
+    ref.watch(minuteTickerProvider);
     final isOwnPost =
         ref.watch(identityControllerProvider).value?.pubkey == event.pubkey;
     final caption = event.content.isEmpty

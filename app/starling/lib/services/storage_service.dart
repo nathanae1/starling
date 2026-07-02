@@ -93,14 +93,26 @@ abstract class StorageService {
   /// from the same author.
   Future<List<Event>> getFeedEvents({int? since, int? limit});
 
+  /// Reactive [getFeedEvents]: emits the current rows immediately, then
+  /// re-emits on any event/follow/identity write — regardless of which path
+  /// stored it (sync pull, inbound push, own publish). Plan 18 C1: the feed
+  /// UI watches this instead of polling a one-shot future.
+  Stream<List<Event>> watchFeedEvents({int? limit});
+
   /// Posts (kind=1) authored by [pubkey] for profile-grid rendering.
   /// Excludes tombstoned (kind=6 ref'd) posts. Ordered DESC.
   Future<List<Event>> getProfilePosts(String pubkey, {int? limit});
+
+  /// Reactive [getProfilePosts].
+  Stream<List<Event>> watchProfilePosts(String pubkey, {int? limit});
 
   /// Events whose `ref` points to [refId]. Used to load comments (kind=4),
   /// likes (kind=5), and tombstones (kind=6) for a single post. Ordered
   /// ASC by `created_at`. If [kind] is provided, filters to that kind.
   Future<List<Event>> getEventsByRef(String refId, {EventKind? kind});
+
+  /// Reactive [getEventsByRef].
+  Stream<List<Event>> watchEventsByRef(String refId, {EventKind? kind});
 
   /// Events the local server should hand out to peers asking for the
   /// owner's content: own-authored events plus events from others whose
@@ -279,7 +291,11 @@ abstract class StorageService {
   Future<void> saveRoomMember(RoomMember member);
 
   /// Stamp a member as removed (soft delete; row is retained for history).
-  Future<void> setRoomMemberRemoved(String roomId, String pubkey, int removedAt);
+  Future<void> setRoomMemberRemoved(
+    String roomId,
+    String pubkey,
+    int removedAt,
+  );
 
   /// All member rows for [roomId] (active and removed). Callers filter
   /// `isActive` for fan-out / member counts.

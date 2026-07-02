@@ -83,10 +83,9 @@ class DefaultRoomKeyRotationService implements RoomKeyRotationService {
     final newEpoch = room.roomKeyEpoch + 1;
     final newMembershipEpoch = room.membershipEpoch + 1;
 
-    final roster = (await _storage.getRoomMembers(roomId))
-        .where((m) => m.isActive)
-        .map((m) => m.pubkey)
-        .toList(growable: false);
+    final roster = (await _storage.getRoomMembers(
+      roomId,
+    )).where((m) => m.isActive).map((m) => m.pubkey).toList(growable: false);
 
     // seq 0 under the NEW key → the post-rotation roomMembership (roster
     // without X, pinned to the new key epoch).

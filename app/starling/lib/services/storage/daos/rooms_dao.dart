@@ -21,10 +21,9 @@ class RoomsDao extends DatabaseAccessor<AppDatabase> with _$RoomsDaoMixin {
       (select(roomEntries)..where((r) => r.id.equals(id))).getSingleOrNull();
 
   /// All rooms, newest activity first. Callers filter `isMember`.
-  Future<List<RoomEntry>> getRooms() =>
-      (select(roomEntries)
-            ..orderBy([(r) => OrderingTerm.desc(r.lastActivityAt)]))
-          .get();
+  Future<List<RoomEntry>> getRooms() => (select(
+    roomEntries,
+  )..orderBy([(r) => OrderingTerm.desc(r.lastActivityAt)])).get();
 
   Future<void> updateRoomActivity(String roomId, int timestamp) =>
       (update(roomEntries)..where((r) => r.id.equals(roomId))).write(

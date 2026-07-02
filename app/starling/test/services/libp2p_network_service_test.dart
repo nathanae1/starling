@@ -16,10 +16,10 @@ void main() {
     const remotePeerId = '12D3KooW-fake';
 
     PeerConnection peer() => const PeerConnection(
-          pubkey: remotePubkey,
-          baseUrl: 'libp2p://$remotePeerId',
-          transport: PeerTransport.libp2pDirect,
-        );
+      pubkey: remotePubkey,
+      baseUrl: 'libp2p://$remotePeerId',
+      transport: PeerTransport.libp2pDirect,
+    );
 
     setUp(() {
       fake = FakeLibp2pService();
@@ -27,14 +27,17 @@ void main() {
     });
 
     test('fetchManifest writes CBOR query + decodes CBOR response', () async {
-      fake.respond('/starling/sync/manifest/1', _encode({
-        'pubkey': remotePubkey,
-        'events': [
-          {'id': 'evt1', 'created_at': 1700000000},
-          {'id': 'evt2', 'created_at': 1700000100},
-        ],
-        'has_older': true,
-      }));
+      fake.respond(
+        '/starling/sync/manifest/1',
+        _encode({
+          'pubkey': remotePubkey,
+          'events': [
+            {'id': 'evt1', 'created_at': 1700000000},
+            {'id': 'evt2', 'created_at': 1700000100},
+          ],
+          'has_older': true,
+        }),
+      );
 
       final manifest = await service.fetchManifest(
         peer(),
@@ -49,8 +52,9 @@ void main() {
       expect(manifest.hasOlder, isTrue);
 
       // Verify the request CBOR.
-      final req = cbor.decode(fake.lastWrite('/starling/sync/manifest/1'))
-          as Map<dynamic, dynamic>;
+      final req =
+          cbor.decode(fake.lastWrite('/starling/sync/manifest/1'))
+              as Map<dynamic, dynamic>;
       expect(req['since'], 1699999000);
       expect(req['requester_pubkey'], 'me-pk');
       // ack_rotation_at == 0 should NOT be sent (matches LAN/HTTP behavior)
@@ -60,9 +64,7 @@ void main() {
     test('fetchEnvelope round-trips an Envelope unchanged', () async {
       final outboundEnv = Envelope(
         version: '2026-03-24',
-        items: [
-          EnvelopeItem(type: 'event', payload: Uint8List(0)),
-        ],
+        items: [EnvelopeItem(type: 'event', payload: Uint8List(0))],
       );
       fake.respond('/starling/sync/events/1', outboundEnv.toBytes());
 
@@ -78,8 +80,9 @@ void main() {
       final got = await service.fetchMedia(peer(), 'somehash');
       expect(got, equals(blob));
 
-      final req = cbor.decode(fake.lastWrite('/starling/sync/media/1'))
-          as Map<dynamic, dynamic>;
+      final req =
+          cbor.decode(fake.lastWrite('/starling/sync/media/1'))
+              as Map<dynamic, dynamic>;
       expect(req['hash'], 'somehash');
     });
 
@@ -89,10 +92,7 @@ void main() {
         baseUrl: 'http://10.0.0.1:8080',
         transport: PeerTransport.libp2pDirect,
       );
-      expect(
-        () => service.fetchManifest(bad),
-        throwsA(isA<Exception>()),
-      );
+      expect(() => service.fetchManifest(bad), throwsA(isA<Exception>()));
     });
 
     test('translates Libp2pStreamException into NetworkException', () async {
@@ -100,10 +100,7 @@ void main() {
         '/starling/sync/events/1',
         const Libp2pStreamException('stream reset'),
       );
-      expect(
-        () => service.fetchEnvelope(peer()),
-        throwsA(isA<Exception>()),
-      );
+      expect(() => service.fetchEnvelope(peer()), throwsA(isA<Exception>()));
     });
   });
 }
@@ -127,8 +124,7 @@ class FakeLibp2pService implements Libp2pService {
     _errors[protocol] = err;
   }
 
-  Uint8List lastWrite(String protocol) =>
-      _lastWrites[protocol] ?? Uint8List(0);
+  Uint8List lastWrite(String protocol) => _lastWrites[protocol] ?? Uint8List(0);
 
   // --- Libp2pService ---
 
@@ -163,10 +159,7 @@ class FakeLibp2pService implements Libp2pService {
   }) async {}
 
   @override
-  Future<Libp2pStream> openStream(
-    String remotePeerId,
-    String protocol,
-  ) async {
+  Future<Libp2pStream> openStream(String remotePeerId, String protocol) async {
     final err = _errors[protocol];
     if (err != null) throw err;
     return _FakeStream(
@@ -195,8 +188,8 @@ class _FakeStream implements Libp2pStream {
     required this.protocol,
     required void Function(Uint8List) onWrite,
     required Uint8List response,
-  })  : _onWrite = onWrite,
-        _response = response;
+  }) : _onWrite = onWrite,
+       _response = response;
 
   @override
   final String remotePeerId;

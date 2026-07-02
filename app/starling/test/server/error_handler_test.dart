@@ -11,8 +11,7 @@ void main() {
       final handler = errorHandlerMiddleware()(
         (Request _) async => throw const FormatException('bad'),
       );
-      final res =
-          await handler(Request('GET', Uri.parse('http://localhost/')));
+      final res = await handler(Request('GET', Uri.parse('http://localhost/')));
       expect(res.statusCode, 400);
     });
 
@@ -20,8 +19,7 @@ void main() {
       final handler = errorHandlerMiddleware()(
         (Request _) async => throw ArgumentError('bad'),
       );
-      final res =
-          await handler(Request('GET', Uri.parse('http://localhost/')));
+      final res = await handler(Request('GET', Uri.parse('http://localhost/')));
       expect(res.statusCode, 400);
     });
 
@@ -29,8 +27,7 @@ void main() {
       final handler = errorHandlerMiddleware()(
         (Request _) async => throw Exception('SECRET-LEAK'),
       );
-      final res =
-          await handler(Request('GET', Uri.parse('http://localhost/')));
+      final res = await handler(Request('GET', Uri.parse('http://localhost/')));
       expect(res.statusCode, 500);
       final body = await res.readAsString();
       expect(body.contains('SECRET-LEAK'), isFalse);
@@ -43,20 +40,19 @@ void main() {
       final handler = bodySizeLimitMiddleware(maxBytes: 4)(
         (Request _) async => Response.ok('done'),
       );
-      final res =
-          await handler(Request('GET', Uri.parse('http://localhost/')));
+      final res = await handler(Request('GET', Uri.parse('http://localhost/')));
       expect(res.statusCode, 200);
     });
 
     test('rejects POST with content-length over the cap', () async {
       var bodyRead = false;
-      final handler = bodySizeLimitMiddleware(maxBytes: 4)(
-        (Request request) async {
-          await request.read().drain<void>();
-          bodyRead = true;
-          return Response.ok('done');
-        },
-      );
+      final handler = bodySizeLimitMiddleware(maxBytes: 4)((
+        Request request,
+      ) async {
+        await request.read().drain<void>();
+        bodyRead = true;
+        return Response.ok('done');
+      });
       final res = await handler(
         Request(
           'POST',
@@ -65,8 +61,11 @@ void main() {
         ),
       );
       expect(res.statusCode, 413);
-      expect(bodyRead, isFalse,
-          reason: 'middleware should reject before invoking the inner handler');
+      expect(
+        bodyRead,
+        isFalse,
+        reason: 'middleware should reject before invoking the inner handler',
+      );
     });
 
     test('rejects POST with chunked over-cap stream', () async {
@@ -76,12 +75,12 @@ void main() {
         List<int>.filled(3, 0),
         List<int>.filled(5, 0),
       ]);
-      final handler = bodySizeLimitMiddleware(maxBytes: 4)(
-        (Request request) async {
-          await request.read().drain<void>();
-          return Response.ok('done');
-        },
-      );
+      final handler = bodySizeLimitMiddleware(maxBytes: 4)((
+        Request request,
+      ) async {
+        await request.read().drain<void>();
+        return Response.ok('done');
+      });
       final res = await handler(
         Request('POST', Uri.parse('http://localhost/'), body: chunks),
       );
@@ -89,14 +88,15 @@ void main() {
     });
 
     test('passes through POST under the cap', () async {
-      final handler = bodySizeLimitMiddleware(maxBytes: 1024)(
-        (Request request) async {
-          final bytes = await request
-              .read()
-              .fold<BytesBuilder>(BytesBuilder(), (b, c) => b..add(c));
-          return Response.ok('${bytes.length}');
-        },
-      );
+      final handler = bodySizeLimitMiddleware(maxBytes: 1024)((
+        Request request,
+      ) async {
+        final bytes = await request.read().fold<BytesBuilder>(
+          BytesBuilder(),
+          (b, c) => b..add(c),
+        );
+        return Response.ok('${bytes.length}');
+      });
       final res = await handler(
         Request(
           'POST',
