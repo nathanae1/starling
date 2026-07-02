@@ -159,6 +159,20 @@ void main() {
       expect(recovered.secretKey.sublist(0, 32), seed);
     });
 
+    test('settings re-display path: the phrase re-derived from the stored '
+        'secret key reproduces the identity keypair', () async {
+      // ViewRecoveryPhraseScreen derives from keychain sk[0..32] (libsodium
+      // Ed25519 layout: seed || pubkey) and must round-trip to the SAME
+      // identity — a mismatch renders an error, never a wrong phrase.
+      final kp = await crypto.generateKeyPair();
+      final words = await crypto.deriveRecoveryPhrase(
+        Uint8List.fromList(kp.secretKey.sublist(0, 32)),
+      );
+      final recovered = await crypto.recoverFromPhrase(words);
+      expect(recovered.publicKey, kp.publicKey);
+      expect(recovered.secretKey, kp.secretKey);
+    });
+
     test('tampered phrase fails checksum', () async {
       final seed = crypto.randomBytes(32);
       final words = await crypto.deriveRecoveryPhrase(seed);

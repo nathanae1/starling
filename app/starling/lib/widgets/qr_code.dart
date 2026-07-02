@@ -24,6 +24,7 @@ class StarlingQRCode extends StatelessWidget {
         data: data,
         version: QrVersions.auto,
         size: size,
+        semanticsLabel: 'Your Starling invite QR code',
         backgroundColor: starling.colors.paper,
         eyeStyle: QrEyeStyle(
           eyeShape: QrEyeShape.square,

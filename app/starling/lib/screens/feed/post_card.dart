@@ -75,101 +75,161 @@ class _PostCardState extends ConsumerState<PostCard> {
       orElse: () => null,
     );
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: widget.onTap,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 36),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-              child: Row(
-                children: [
-                  // Avatar + name open the author's profile. The nested
-                  // GestureDetector wins the tap over the whole-card
-                  // handler, which still routes to the post detail.
-                  Expanded(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () =>
-                          context.push('/feed/profile/${event.pubkey}'),
-                      child: Row(
-                        children: [
-                          _AuthorAvatar(
-                            pubkey: event.pubkey,
-                            name: displayName,
-                            avatarHash: avatarHash,
-                            avatarMsgSeq: avatarMsgSeq,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              displayName,
-                              style: starling.typography.small.copyWith(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: starling.colors.ink,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+    return Semantics(
+      // The whole-card tap opens the post detail; without a label the
+      // gesture exists but a screen reader announces nothing about it.
+      button: true,
+      label: 'Post by $displayName',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 36),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                child: Row(
+                  children: [
+                    // Avatar + name open the author's profile. The nested
+                    // GestureDetector wins the tap over the whole-card
+                    // handler, which still routes to the post detail.
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () =>
+                            context.push('/feed/profile/${event.pubkey}'),
+                        child: Row(
+                          children: [
+                            _AuthorAvatar(
+                              pubkey: event.pubkey,
+                              name: displayName,
+                              avatarHash: avatarHash,
+                              avatarMsgSeq: avatarMsgSeq,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                displayName,
+                                style: starling.typography.small.copyWith(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: starling.colors.ink,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  Text(
-                    timeAgo(
-                      event.createdAt,
-                      nowUnixSeconds: clock.nowUnixSeconds(),
+                    Text(
+                      timeAgo(
+                        event.createdAt,
+                        nowUnixSeconds: clock.nowUnixSeconds(),
+                      ),
+                      style: starling.typography.micro,
                     ),
-                    style: starling.typography.micro,
-                  ),
-                  if (isOwnPost) ...[
-                    const SizedBox(width: 4),
-                    _OverflowButton(eventId: event.id),
+                    if (isOwnPost) ...[
+                      const SizedBox(width: 4),
+                      _OverflowButton(eventId: event.id),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            // Photo: full-bleed 4:5 with hairline top/bottom; no radii.
-            if (mediaHash != null)
-              Container(
-                decoration: BoxDecoration(
-                  border: Border(
-                    top: BorderSide(color: starling.colors.hairline),
-                    bottom: BorderSide(color: starling.colors.hairline),
+              // Photo: full-bleed 4:5 with hairline top/bottom; no radii.
+              if (mediaHash != null)
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border(
+                      top: BorderSide(color: starling.colors.hairline),
+                      bottom: BorderSide(color: starling.colors.hairline),
+                    ),
+                  ),
+                  child: EncryptedImage(
+                    hash: mediaHash,
+                    pubkey: event.pubkey,
+                    msgSeq: event.msgSeq,
+                    aspectRatio: 4 / 5,
                   ),
                 ),
-                child: EncryptedImage(
-                  hash: mediaHash,
-                  pubkey: event.pubkey,
-                  msgSeq: event.msgSeq,
-                  aspectRatio: 4 / 5,
+              if (caption.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: _ClampedCaption(
+                    caption: caption,
+                    onMore: widget.onTap,
+                  ),
                 ),
-              ),
-            if (caption.isNotEmpty) ...[
-              const SizedBox(height: 12),
+              ],
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Text(
-                  caption,
-                  style: starling.typography.body.copyWith(
-                    fontSize: 15,
-                    height: 1.5,
-                  ),
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                child: _CardActionRow(
+                  eventId: event.id,
+                  onComment: widget.onTap,
                 ),
               ),
             ],
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-              child: _CardActionRow(eventId: event.id, onComment: widget.onTap),
-            ),
-          ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+/// Feed captions clamp to a few lines with a "more" affordance that opens
+/// the post detail — a long caption shouldn't push the next photo off
+/// screen.
+class _ClampedCaption extends StatelessWidget {
+  const _ClampedCaption({required this.caption, this.onMore});
+
+  static const int _maxLines = 4;
+
+  final String caption;
+  final VoidCallback? onMore;
+
+  @override
+  Widget build(BuildContext context) {
+    final starling = StarlingTheme.of(context);
+    final style = starling.typography.body.copyWith(fontSize: 15, height: 1.5);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(text: caption, style: style),
+          maxLines: _maxLines,
+          textDirection: TextDirection.ltr,
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout(maxWidth: constraints.maxWidth);
+        final overflows = painter.didExceedMaxLines;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              caption,
+              style: style,
+              maxLines: _maxLines,
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (overflows)
+              GestureDetector(
+                onTap: onMore,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'more',
+                    style: starling.typography.small.copyWith(
+                      color: starling.colors.stone,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

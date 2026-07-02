@@ -410,6 +410,7 @@ class DriftStorageService implements StorageService {
       participantCount: Value(
         room.participants.isEmpty ? 1 : room.participants.length,
       ),
+      missed: Value(room.missed),
     ),
   );
 
@@ -435,6 +436,16 @@ class DriftStorageService implements StorageService {
   @override
   Future<List<VoiceRoom>> getRecentVoiceRooms({int limit = 10}) async {
     final rooms = await _db.voiceRoomsDao.recentRooms(limit);
+    return _withParticipants(rooms);
+  }
+
+  @override
+  Stream<List<VoiceRoom>> watchRecentVoiceRooms({int limit = 10}) =>
+      _db.voiceRoomsDao.watchRecentRooms(limit).asyncMap(_withParticipants);
+
+  Future<List<VoiceRoom>> _withParticipants(
+    List<VoiceRoomEntry> rooms,
+  ) async {
     final out = <VoiceRoom>[];
     for (final r in rooms) {
       final parts = await _db.voiceRoomsDao.participantsFor(r.id);
@@ -445,6 +456,7 @@ class DriftStorageService implements StorageService {
           creatorPubkey: r.creatorPubkey,
           createdAt: r.createdAt,
           endedAt: r.endedAt,
+          missed: r.missed,
           participants: parts
               .map(
                 (p) => VoiceParticipant(

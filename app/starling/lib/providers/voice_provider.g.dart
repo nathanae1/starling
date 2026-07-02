@@ -245,22 +245,117 @@ final class IncomingVoiceInvitesProvider
 String _$incomingVoiceInvitesHash() =>
     r'1169122fae7cc06dd15c8526912f92111c117572';
 
-/// Recent local call history for the room list.
+/// Room ids whose pending invite was retired unanswered (TTL expiry or the
+/// creator closed the call) — the ringing sheet closes on this.
+
+@ProviderFor(retiredVoiceInvites)
+final retiredVoiceInvitesProvider = RetiredVoiceInvitesProvider._();
+
+/// Room ids whose pending invite was retired unanswered (TTL expiry or the
+/// creator closed the call) — the ringing sheet closes on this.
+
+final class RetiredVoiceInvitesProvider
+    extends $FunctionalProvider<AsyncValue<String>, String, Stream<String>>
+    with $FutureModifier<String>, $StreamProvider<String> {
+  /// Room ids whose pending invite was retired unanswered (TTL expiry or the
+  /// creator closed the call) — the ringing sheet closes on this.
+  RetiredVoiceInvitesProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'retiredVoiceInvitesProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$retiredVoiceInvitesHash();
+
+  @$internal
+  @override
+  $StreamProviderElement<String> $createElement($ProviderPointer pointer) =>
+      $StreamProviderElement(pointer);
+
+  @override
+  Stream<String> create(Ref ref) {
+    return retiredVoiceInvites(ref);
+  }
+}
+
+String _$retiredVoiceInvitesHash() =>
+    r'473a303283ff0398310630ea7d10ba696377e669';
+
+/// Why the last call ended — drives the non-creator "Call ended" snackbar.
+
+@ProviderFor(roomEndReason)
+final roomEndReasonProvider = RoomEndReasonProvider._();
+
+/// Why the last call ended — drives the non-creator "Call ended" snackbar.
+
+final class RoomEndReasonProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<RoomEndReason>,
+          RoomEndReason,
+          Stream<RoomEndReason>
+        >
+    with $FutureModifier<RoomEndReason>, $StreamProvider<RoomEndReason> {
+  /// Why the last call ended — drives the non-creator "Call ended" snackbar.
+  RoomEndReasonProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'roomEndReasonProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$roomEndReasonHash();
+
+  @$internal
+  @override
+  $StreamProviderElement<RoomEndReason> $createElement(
+    $ProviderPointer pointer,
+  ) => $StreamProviderElement(pointer);
+
+  @override
+  Stream<RoomEndReason> create(Ref ref) {
+    return roomEndReason(ref);
+  }
+}
+
+String _$roomEndReasonHash() => r'f412f057e99c69566bb0395744bc9af98914ffb2';
+
+/// Recent local call history for the room list. A drift watch stream (not a
+/// one-shot read): missed-call rows land invitee-side with NO live-state
+/// transition to invalidate on, and a just-finished call must appear
+/// without an app restart.
 
 @ProviderFor(recentVoiceRooms)
 final recentVoiceRoomsProvider = RecentVoiceRoomsProvider._();
 
-/// Recent local call history for the room list.
+/// Recent local call history for the room list. A drift watch stream (not a
+/// one-shot read): missed-call rows land invitee-side with NO live-state
+/// transition to invalidate on, and a just-finished call must appear
+/// without an app restart.
 
 final class RecentVoiceRoomsProvider
     extends
         $FunctionalProvider<
           AsyncValue<List<VoiceRoom>>,
           List<VoiceRoom>,
-          FutureOr<List<VoiceRoom>>
+          Stream<List<VoiceRoom>>
         >
-    with $FutureModifier<List<VoiceRoom>>, $FutureProvider<List<VoiceRoom>> {
-  /// Recent local call history for the room list.
+    with $FutureModifier<List<VoiceRoom>>, $StreamProvider<List<VoiceRoom>> {
+  /// Recent local call history for the room list. A drift watch stream (not a
+  /// one-shot read): missed-call rows land invitee-side with NO live-state
+  /// transition to invalidate on, and a just-finished call must appear
+  /// without an app restart.
   RecentVoiceRoomsProvider._()
     : super(
         from: null,
@@ -277,17 +372,17 @@ final class RecentVoiceRoomsProvider
 
   @$internal
   @override
-  $FutureProviderElement<List<VoiceRoom>> $createElement(
+  $StreamProviderElement<List<VoiceRoom>> $createElement(
     $ProviderPointer pointer,
-  ) => $FutureProviderElement(pointer);
+  ) => $StreamProviderElement(pointer);
 
   @override
-  FutureOr<List<VoiceRoom>> create(Ref ref) {
+  Stream<List<VoiceRoom>> create(Ref ref) {
     return recentVoiceRooms(ref);
   }
 }
 
-String _$recentVoiceRoomsHash() => r'6fb687aa75159345eeaa84f2708b3b68e526148a';
+String _$recentVoiceRoomsHash() => r'7d1fdade1ff779c78fed9c449eb995559e87a1af';
 
 /// Active follows who also follow us — the only contacts invitable to a room
 /// (Plan 16 §Room access model).

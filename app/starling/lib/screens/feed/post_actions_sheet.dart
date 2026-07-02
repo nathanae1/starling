@@ -6,6 +6,8 @@ import '../../providers/events_provider.dart';
 import '../../providers/feed_provider.dart';
 import '../../providers/post_provider.dart';
 import '../../theme/starling_theme.dart';
+import '../../utils/friendly_error.dart';
+import '../../widgets/starling_alert_dialog.dart';
 
 class PostActionsSheet extends ConsumerWidget {
   const PostActionsSheet({super.key, required this.eventId, this.onDeleted});
@@ -40,31 +42,29 @@ class PostActionsSheet extends ConsumerWidget {
   }
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Delete post?'),
-          content: const Text(
-            'Followers will stop seeing this post the next time they sync. '
-            'This cannot be undone.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Delete'),
-            ),
-          ],
-        );
-      },
+    final confirm = await showStarlingConfirm(
+      context,
+      title: 'Delete post?',
+      message:
+          'Followers will stop seeing this post the next time they sync. '
+          'This cannot be undone.',
+      confirmLabel: 'Delete',
+      destructive: true,
     );
-    if (confirm != true) return;
-    if (!context.mounted) return;
-    await ref.read(postServiceProvider).deletePost(eventId);
+    if (!confirm || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await runWithStarlingProgress(
+        context,
+        message: 'Deleting…',
+        op: () => ref.read(postServiceProvider).deletePost(eventId),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(friendlyError(e, tag: 'delete_post'))),
+      );
+      return;
+    }
     ref.invalidate(feedProvider);
     ref.invalidate(ownPostsProvider);
     ref.invalidate(ownEventsProvider);

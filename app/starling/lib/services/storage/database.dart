@@ -87,7 +87,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -201,6 +201,10 @@ class AppDatabase extends _$AppDatabase {
         // follow_entries from the new schema, copying every remaining column
         // and row — NEVER a DROP TABLE, which would wipe the friend list.
         await m.alterTable(TableMigration(followEntries));
+      }
+      if (from < 11) {
+        // Plan 19: invitee-side missed-call flag on voice-room history.
+        await m.addColumn(voiceRoomEntries, voiceRoomEntries.missed);
       }
     },
   );

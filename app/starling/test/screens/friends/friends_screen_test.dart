@@ -180,6 +180,54 @@ void main() {
     expect(find.byType(QrInviteSheet), findsOneWidget);
   });
 
+  testWidgets('outbound pending row: queued label, age, cancel flow', (
+    tester,
+  ) async {
+    final storage = MockStorageService();
+    await storage.saveIdentity(
+      Identity(
+        pubkey: crockfordBase32Encode(Uint8List.fromList(List.filled(32, 9))),
+        feedKey: Uint8List(32),
+        createdAt: 0,
+      ),
+    );
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    await storage.saveOutboundRequest(
+      FollowRequest(
+        pubkey: crockfordBase32Encode(Uint8List.fromList(List.filled(32, 10))),
+        payload: Uint8List(0),
+        createdAt: now - 7200,
+        requestTimestamp: now - 7200,
+        status: 'pending-send',
+      ),
+    );
+    final container = await _container(storage: storage);
+    // LIFO: dispose the container (cancelling its stream subscriptions)
+    // before storage closes the controllers they listen to.
+    addTearDown(storage.dispose);
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(_harness(container));
+    await tester.pumpAndSettle();
+
+    // Honest queue copy (never "no endpoints") + the request age.
+    expect(
+      find.textContaining('Queued — they look offline'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('· 2h'), findsOneWidget);
+
+    // Cancel: confirm dialog → row deleted.
+    await tester.tap(find.byIcon(LucideIcons.x));
+    await tester.pumpAndSettle();
+    expect(find.text('Cancel request?'), findsOneWidget);
+    await tester.tap(find.text('Cancel request'));
+    await tester.pumpAndSettle();
+
+    expect(await storage.getOutboundRequests(), isEmpty);
+    expect(find.textContaining('Queued — they look offline'), findsNothing);
+  });
+
   testWidgets('friend rows render reachable / last-seen status', (
     tester,
   ) async {

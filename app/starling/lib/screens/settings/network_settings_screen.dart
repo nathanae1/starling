@@ -345,11 +345,19 @@ class _TorCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Plain-language status, not Tor internals ("bootstrap",
+          // "circuits") — this screen is read by people debugging "why
+          // can't my friend see my posts".
           _KeyValue(
-            label: 'Bootstrap',
-            value: isReady ? '100% (ready)' : '$bootstrapPercent%',
+            label: 'Status',
+            value: isReady
+                ? 'Connected'
+                : 'Connecting to Tor ($bootstrapPercent%)',
           ),
-          _KeyValue(label: 'Circuits', value: '$circuitCount'),
+          _KeyValue(
+            label: 'Connections',
+            value: circuitCount == 0 ? 'None yet' : '$circuitCount active',
+          ),
           _KeyValue(
             label: 'Onion',
             value: '',
@@ -443,7 +451,10 @@ class _ServerCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _KeyValue(label: 'Port', value: port == null ? 'Not bound' : '$port'),
-          const _KeyValue(label: 'Binding', value: '0.0.0.0 (LAN + Tor onion)'),
+          const _KeyValue(
+            label: 'Reachable via',
+            value: 'Wi-Fi and Tor',
+          ),
         ],
       ),
     );
@@ -515,8 +526,10 @@ class _AndroidBackgroundCard extends ConsumerWidget {
           const SizedBox(height: 12),
           Text(
             running
-                ? 'Background sync also runs every 15 min via WorkManager.'
-                : 'Background sync runs every 15 min via WorkManager when possible.',
+                ? 'The system also syncs in the background about every '
+                      '15 minutes.'
+                : 'The system syncs in the background about every 15 '
+                      'minutes when it can.',
             style: starling.typography.micro.copyWith(
               color: StarlingTheme.of(context).colors.stone,
             ),

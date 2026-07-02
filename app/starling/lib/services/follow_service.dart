@@ -34,6 +34,13 @@ class FollowFailure implements Exception {
 /// failed and the encoded body was enqueued for the retry pump.
 enum AcceptDelivery { delivered, queued, failed }
 
+/// Outcome of [FollowService.sendFollowRequest]. `delivered` means the target
+/// POSTed 202; `queued` means the target (or our own onion) wasn't reachable
+/// and the scanned card was persisted as a 'pending-send' outbound row for
+/// the retry pump. Unreachability is the NORMAL case over Tor — the other
+/// phone is asleep most of the time — so it is not an error.
+enum RequestDelivery { delivered, queued }
+
 /// Result type for the round-trip ingest of an inbound `/follow-accept`.
 /// Used by the server handler to choose its response code.
 class IngestAcceptResult {
@@ -76,6 +83,12 @@ class HandshakeTransport {
   final http.Client _defaultClient;
   final http.Client? Function()? _torClientLookup;
 
+  /// Cap on each handshake POST. Tor round-trips are slow but bounded — a
+  /// stalled circuit would otherwise hang "Sending…" forever. On timeout the
+  /// caller queues the payload and the retry pump takes over. Lives here so
+  /// one choke point covers the UI sends and both retry drains.
+  static const Duration postTimeout = Duration(seconds: 30);
+
   http.Client _pick(Uri uri) {
     if (uri.host.endsWith('.onion')) {
       final tor = _torClientLookup?.call();
@@ -91,21 +104,25 @@ class HandshakeTransport {
 
   Future<int> postFollowRequest(String baseUrl, Uint8List body) async {
     final uri = Uri.parse('$baseUrl/follow-request');
-    final res = await _pick(uri).post(
-      uri,
-      headers: const {'content-type': 'application/cbor'},
-      body: body,
-    );
+    final res = await _pick(uri)
+        .post(
+          uri,
+          headers: const {'content-type': 'application/cbor'},
+          body: body,
+        )
+        .timeout(postTimeout);
     return res.statusCode;
   }
 
   Future<int> postFollowAccept(String baseUrl, Uint8List body) async {
     final uri = Uri.parse('$baseUrl/follow-accept');
-    final res = await _pick(uri).post(
-      uri,
-      headers: const {'content-type': 'application/cbor'},
-      body: body,
-    );
+    final res = await _pick(uri)
+        .post(
+          uri,
+          headers: const {'content-type': 'application/cbor'},
+          body: body,
+        )
+        .timeout(postTimeout);
     return res.statusCode;
   }
 }
@@ -170,11 +187,12 @@ class FollowService {
   final FeedKeyCache? _feedKeyCache;
   final KeyRotationService? _keyRotationService;
 
-  /// Backoff schedule for queued-accept redelivery. Index is the entry's
-  /// persisted `retryCount`, clamped to the last bucket. We never stop
-  /// retrying — a follower's phone is offline most of the time, so a
-  /// permanent give-up would silently strand the handshake.
-  static const List<Duration> _acceptBackoff = [
+  /// Backoff schedule for queued handshake redelivery (both the accept and
+  /// the request drains). Index is the entry's retry count, clamped to the
+  /// last bucket. We never stop retrying — a friend's phone is offline most
+  /// of the time, so a permanent give-up would silently strand the
+  /// handshake.
+  static const List<Duration> _retryBackoff = [
     Duration(seconds: 30),
     Duration(minutes: 1),
     Duration(minutes: 2),
@@ -195,30 +213,100 @@ class FollowService {
   /// across restarts.
   final Map<int, int> _acceptLastAttemptSec = {};
 
+  /// Outbound-request retry state, keyed by target pubkey. Session-scoped
+  /// like [_acceptLastAttemptSec]; outbound rows carry no persisted
+  /// retryCount, so a fresh launch retries immediately with reset backoff —
+  /// desirable for the same reason as the accept leg (see
+  /// [_acceptLastAttemptSec]).
+  final Map<String, int> _requestLastAttemptSec = {};
+  final Map<String, int> _requestRetryCounts = {};
+
   // --- Outbound: send a follow request ---
 
-  Future<void> sendFollowRequest(ConnectionCard target) async {
+  /// Sends (or queues) a follow request to [target]. Unreachability — theirs
+  /// or ours — is not an error: the scanned card is persisted as a
+  /// 'pending-send' outbound row and [retryQueuedRequests] keeps trying
+  /// indefinitely. Only a missing identity/secret key still throws.
+  ///
+  /// Re-sending to a pubkey with an existing outbound row overwrites it
+  /// (upsert on the pubkey PK) with a fresh card and timestamp. If the old
+  /// row was already delivered ('pending'), that re-keys the handshake and
+  /// orphans any in-flight accept — same as re-scanning did before the
+  /// queue existed.
+  Future<RequestDelivery> sendFollowRequest(ConnectionCard target) async {
     final identity = await _requireIdentity();
     final secretKey = await _requireSecretKey();
-    final ownEndpoints = await _ownEndpointsLookup();
-    // Refuse to send a card with no onion. The responder persists this
-    // payload as our `inbound_follow_requests` row and dials it on
-    // follow-back, so an empty card permanently poisons the return path.
-    if (ownEndpoints.where((e) => e.type == 'onion').isEmpty) {
-      throw const FollowFailure(
-        FollowFailureKind.noEndpoints,
-        'our onion is not published yet — cannot send follow-request',
-      );
-    }
-    final connection = await _reachability.probeCard(target);
-    if (connection == null) {
-      throw const FollowFailure(
-        FollowFailureKind.noEndpoints,
-        'no reachable endpoint in target connection card',
-      );
-    }
-
     final timestamp = _clock.nowUnixSeconds();
+
+    final delivered = await _attemptRequestDelivery(
+      identity: identity,
+      secretKey: secretKey,
+      target: target,
+      timestamp: timestamp,
+    );
+
+    // The row's requestTimestamp is the wire timestamp for the WHOLE
+    // handshake: the responder echoes it back in /follow-accept, and
+    // `ingestFollowAccept` both derives the shared key from it and rejects
+    // accepts that don't match it. Retries MUST therefore re-encode the
+    // body with this stored timestamp — a fresh one would orphan the accept
+    // from any earlier attempt that was delivered but looked failed to us.
+    await _storage.saveOutboundRequest(
+      FollowRequest(
+        pubkey: target.pubkey,
+        payload: target.toBytes(),
+        createdAt: timestamp,
+        requestTimestamp: timestamp,
+        status: delivered ? 'pending' : 'pending-send',
+      ),
+    );
+    return delivered ? RequestDelivery.delivered : RequestDelivery.queued;
+  }
+
+  /// One delivery attempt. True on a 202; any unreachability or transport
+  /// failure returns false so the caller queues.
+  Future<bool> _attemptRequestDelivery({
+    required Identity identity,
+    required Uint8List secretKey,
+    required ConnectionCard target,
+    required int timestamp,
+  }) async {
+    final ownEndpoints = await _ownEndpointsLookup();
+    // Never POST a card with no onion. The responder persists this payload
+    // as our `inbound_follow_requests` row and dials it on follow-back, so
+    // an empty card permanently poisons the return path. Queued sends
+    // rebuild the card from current endpoints, so waiting is safe.
+    if (ownEndpoints.where((e) => e.type == 'onion').isEmpty) return false;
+    final connection = await _reachability.probeCard(target);
+    if (connection == null) return false;
+
+    final body = _buildRequestBody(
+      identity: identity,
+      secretKey: secretKey,
+      target: target,
+      ownEndpoints: ownEndpoints,
+      timestamp: timestamp,
+    );
+    try {
+      return await _transport.postFollowRequest(connection.baseUrl, body) ==
+          202;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Encodes the /follow-request body. [timestamp] is the wire timestamp the
+  /// shared key derives from — for retries this is the STORED
+  /// `requestTimestamp`, never a fresh clock read (see [sendFollowRequest]).
+  /// Own endpoints and feed_key_epoch are read fresh each attempt: the
+  /// responder wants our CURRENT contact info, and epoch is informational.
+  Uint8List _buildRequestBody({
+    required Identity identity,
+    required Uint8List secretKey,
+    required ConnectionCard target,
+    required List<Endpoint> ownEndpoints,
+    required int timestamp,
+  }) {
     final myEdPk = crockfordBase32Decode(identity.pubkey);
     final theirEdPk = crockfordBase32Decode(target.pubkey);
     final myXSk = _crypto.ed25519ToX25519SecretKey(secretKey);
@@ -245,35 +333,13 @@ class FollowService {
     final nonce = _crypto.randomBytes(24);
     final ciphertext = _crypto.encrypt(innerCbor, nonce, sharedKey);
 
-    final body = Uint8List.fromList(
+    return Uint8List.fromList(
       cbor.encode(<String, dynamic>{
         'requester_pubkey': identity.pubkey,
         'encrypted_return_endpoints': ciphertext,
         'nonce': nonce,
         'timestamp': timestamp,
       }),
-    );
-
-    final int status;
-    try {
-      status = await _transport.postFollowRequest(connection.baseUrl, body);
-    } catch (e) {
-      throw FollowFailure(FollowFailureKind.network, 'send failed: $e');
-    }
-    if (status != 202) {
-      throw FollowFailure(
-        FollowFailureKind.network,
-        'unexpected response: $status',
-      );
-    }
-
-    await _storage.saveOutboundRequest(
-      FollowRequest(
-        pubkey: target.pubkey,
-        payload: target.toBytes(),
-        createdAt: timestamp,
-        requestTimestamp: timestamp,
-      ),
     );
   }
 
@@ -365,8 +431,9 @@ class FollowService {
   /// inbound payload (same path as `acceptFollowRequest`), so the user
   /// doesn't need to re-scan their QR. Live endpoint resolution is
   /// handled by the reachability monitor inside `sendFollowRequest`'s
-  /// `probeCard` call — no caller-side mDNS lookup needed.
-  Future<void> followBack(String requesterPubkey) async {
+  /// `probeCard` call — no caller-side mDNS lookup needed. Returns the
+  /// delivery outcome ("Request sent" vs "queued, we'll keep trying").
+  Future<RequestDelivery> followBack(String requesterPubkey) async {
     final inbound = await _storage.getInboundRequest(requesterPubkey);
     if (inbound == null) {
       throw FollowFailure(
@@ -386,7 +453,7 @@ class FollowService {
     final card = ConnectionCard.fromMap(
       inner['connection_card'] as Map<dynamic, dynamic>,
     );
-    await sendFollowRequest(card);
+    return sendFollowRequest(card);
   }
 
   // --- Inbound /follow-accept handler entry point ---
@@ -624,10 +691,10 @@ class FollowService {
   bool _backoffNotElapsed(QueuedEvent entry) {
     final last = _acceptLastAttemptSec[entry.id];
     if (last == null) return false;
-    final idx = entry.retryCount < _acceptBackoff.length
+    final idx = entry.retryCount < _retryBackoff.length
         ? entry.retryCount
-        : _acceptBackoff.length - 1;
-    return _clock.nowUnixSeconds() - last < _acceptBackoff[idx].inSeconds;
+        : _retryBackoff.length - 1;
+    return _clock.nowUnixSeconds() - last < _retryBackoff[idx].inSeconds;
   }
 
   Future<void> _onAcceptFailure(
@@ -647,6 +714,152 @@ class FollowService {
     if (entry.retryCount + 1 >= failedStatusThreshold &&
         inbound.status == 'pending-send') {
       await _storage.updateInboundRequestStatus(inbound.pubkey, 'send-failed');
+    }
+  }
+
+  /// Drains queued outbound follow requests — 'pending-send'/'send-failed'
+  /// rows, the requester-side mirror of [retryQueuedAccepts]. Each attempt
+  /// re-encodes the body from the stored card + stored `requestTimestamp`
+  /// (key-derivation invariant — see [sendFollowRequest]) and CURRENT own
+  /// endpoints, then re-probes the card for a live address.
+  ///
+  /// Retries indefinitely. At [failedStatusThreshold] consecutive failures
+  /// the row flips to 'send-failed' for honest UI ("still trying") but keeps
+  /// retrying; a later success flips it to 'pending' (delivered, awaiting
+  /// their accept). Serialized with the accept drain via [_retryChain] —
+  /// the two share the transport and must not interleave.
+  Future<void> retryQueuedRequests({
+    int failedStatusThreshold = 10,
+    String? onlyPubkey,
+    bool ignoreBackoff = false,
+  }) {
+    return _retryChain = _retryChain.then(
+      (_) => _retryQueuedRequestsNow(
+        failedStatusThreshold: failedStatusThreshold,
+        onlyPubkey: onlyPubkey,
+        ignoreBackoff: ignoreBackoff,
+      ),
+    );
+  }
+
+  Future<void> _retryQueuedRequestsNow({
+    required int failedStatusThreshold,
+    required String? onlyPubkey,
+    required bool ignoreBackoff,
+  }) async {
+    // 'send-failed' rows are still actively retried — that status is a UI
+    // signal, not a terminal state (same policy as the accept drain).
+    final rows = (await _storage.getOutboundRequests())
+        .where((r) => r.status == 'pending-send' || r.status == 'send-failed')
+        .where((r) => onlyPubkey == null || r.pubkey == onlyPubkey)
+        .toList();
+    if (rows.isEmpty) return;
+
+    final identity = await _identityLookup();
+    final secretKey = await _ownSecretKeyLookup();
+    if (identity == null || secretKey == null) return;
+
+    final ownEndpoints = await _ownEndpointsLookup();
+    if (ownEndpoints.where((e) => e.type == 'onion').isEmpty) {
+      // Our own onion isn't published — a local condition, not the peers'.
+      // Skip the whole pass without spending retries or attempt stamps
+      // (mirrors the HandshakeTransportException skip in the accept drain),
+      // and never POST an onion-less card (see _attemptRequestDelivery).
+      _log('request retry skip: own onion not published yet');
+      return;
+    }
+
+    for (final row in rows) {
+      if (!ignoreBackoff && _requestBackoffNotElapsed(row.pubkey)) continue;
+
+      final ConnectionCard card;
+      try {
+        card = ConnectionCard.fromBytes(row.payload);
+      } catch (e) {
+        // Undecodable card — nothing to retry against. Leave the row
+        // visible so the user can cancel it from the Friends list.
+        _log('request retry skip ${row.pubkey}: bad card: $e');
+        continue;
+      }
+
+      _requestLastAttemptSec[row.pubkey] = _clock.nowUnixSeconds();
+
+      final connection = await _reachability.probeCard(card);
+      if (connection == null) {
+        await _onRequestFailure(row, failedStatusThreshold, 'unreachable');
+        continue;
+      }
+
+      final body = _buildRequestBody(
+        identity: identity,
+        secretKey: secretKey,
+        target: card,
+        ownEndpoints: ownEndpoints,
+        timestamp: row.requestTimestamp,
+      );
+
+      final int status;
+      try {
+        status = await _transport.postFollowRequest(connection.baseUrl, body);
+      } on HandshakeTransportException catch (e) {
+        // Our own Tor isn't ready — a local failure, not the peer's. Clear
+        // the stamp so the first pass after Tor recovers fires immediately.
+        _requestLastAttemptSec.remove(row.pubkey);
+        _log(
+          'request retry skip ${row.pubkey} transport-not-ready: ${e.message}',
+        );
+        continue;
+      } catch (e) {
+        await _onRequestFailure(row, failedStatusThreshold, e);
+        continue;
+      }
+
+      if (status == 202) {
+        _requestLastAttemptSec.remove(row.pubkey);
+        _requestRetryCounts.remove(row.pubkey);
+        await _storage.updateOutboundRequestStatus(row.pubkey, 'pending');
+        _log('request retry delivered ${row.pubkey}');
+        continue;
+      }
+      await _onRequestFailure(row, failedStatusThreshold, 'status $status');
+    }
+
+    // Hygiene: forget retry state for pubkeys no longer queued (delivered
+    // this pass, or their row was deleted by accept ingestion / cancel).
+    // Only safe on a full pass — a targeted pass didn't visit every row.
+    if (onlyPubkey == null) {
+      final queued = rows.map((r) => r.pubkey).toSet();
+      _requestLastAttemptSec.removeWhere((pk, _) => !queued.contains(pk));
+      _requestRetryCounts.removeWhere((pk, _) => !queued.contains(pk));
+    }
+  }
+
+  /// True when [pubkey]'s backoff window hasn't elapsed since its last
+  /// outbound-request attempt this session. Never-attempted rows return
+  /// false → attempt immediately.
+  bool _requestBackoffNotElapsed(String pubkey) {
+    final last = _requestLastAttemptSec[pubkey];
+    if (last == null) return false;
+    final count = _requestRetryCounts[pubkey] ?? 0;
+    final idx = count < _retryBackoff.length
+        ? count
+        : _retryBackoff.length - 1;
+    return _clock.nowUnixSeconds() - last < _retryBackoff[idx].inSeconds;
+  }
+
+  Future<void> _onRequestFailure(
+    FollowRequest row,
+    int failedStatusThreshold,
+    Object reason,
+  ) async {
+    final count = (_requestRetryCounts[row.pubkey] ?? 0) + 1;
+    _requestRetryCounts[row.pubkey] = count;
+    _log('request retry failed ${row.pubkey} attempt=$count reason=$reason');
+    // Flip to 'send-failed' once, only from 'pending-send' — re-writing the
+    // same status would re-emit `watchOutboundRequests` needlessly, and we
+    // must not stomp a 'pending' row a concurrent path may have set.
+    if (count >= failedStatusThreshold && row.status == 'pending-send') {
+      await _storage.updateOutboundRequestStatus(row.pubkey, 'send-failed');
     }
   }
 

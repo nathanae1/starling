@@ -32,6 +32,14 @@ class VoiceRoomsDao extends DatabaseAccessor<AppDatabase>
             ..limit(limit))
           .get();
 
+  /// Live view of [recentRooms] — re-emits on any voice_rooms write, so a
+  /// just-finished (or just-missed) call appears without an app restart.
+  Stream<List<VoiceRoomEntry>> watchRecentRooms(int limit) =>
+      (select(voiceRoomEntries)
+            ..orderBy([(r) => OrderingTerm.desc(r.createdAt)])
+            ..limit(limit))
+          .watch();
+
   Future<List<VoiceRoomParticipantEntry>> participantsFor(String roomId) =>
       (select(voiceRoomParticipantEntries)
             ..where((p) => p.roomId.equals(roomId))

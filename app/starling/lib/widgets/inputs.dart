@@ -14,6 +14,10 @@ class StarlingInput extends StatelessWidget {
     this.textInputAction,
     this.style,
     this.padding,
+    this.maxLength,
+    this.maxLines = 1,
+    this.minLines,
+    this.textCapitalization = TextCapitalization.none,
   });
 
   final TextEditingController? controller;
@@ -26,6 +30,17 @@ class StarlingInput extends StatelessWidget {
   final TextStyle? style;
   final EdgeInsets? padding;
 
+  /// Hard character cap enforced on input. The built-in counter is
+  /// suppressed (like [StarlingTextarea]); callers render their own where
+  /// a count matters.
+  final int? maxLength;
+
+  /// Line behavior — defaults to a single line; pass e.g. `maxLines: 4,
+  /// minLines: 1` for a growing multiline field (comment input).
+  final int? maxLines;
+  final int? minLines;
+  final TextCapitalization textCapitalization;
+
   @override
   Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
@@ -37,6 +52,18 @@ class StarlingInput extends StatelessWidget {
       focusNode: focusNode,
       autofocus: autofocus,
       textInputAction: textInputAction,
+      maxLength: maxLength,
+      maxLines: maxLines,
+      minLines: minLines,
+      textCapitalization: textCapitalization,
+      buildCounter: maxLength == null
+          ? null
+          : (
+              _, {
+              required currentLength,
+              required maxLength,
+              required isFocused,
+            }) => null,
       cursorColor: starling.colors.sage,
       style: textStyle,
       decoration: InputDecoration(

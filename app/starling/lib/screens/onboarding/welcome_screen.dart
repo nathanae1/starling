@@ -48,8 +48,10 @@ class WelcomeScreen extends StatelessWidget {
                 ],
               ),
               const Spacer(),
-              RichText(
-                text: TextSpan(
+              // Text.rich (not RichText) so the headline honors system font
+              // scaling.
+              Text.rich(
+                TextSpan(
                   style: starling.typography.displayLarge,
                   children: [
                     const TextSpan(text: 'A social feed\nfor your '),
@@ -78,12 +80,14 @@ class WelcomeScreen extends StatelessWidget {
               PrimaryButton(
                 label: 'Get started',
                 block: true,
-                onPressed: () => context.go('/onboarding/setup'),
+                // push (not go): Android system back returns here instead
+                // of exiting the app mid-onboarding.
+                onPressed: () => context.push('/onboarding/setup'),
               ),
               const SizedBox(height: 14),
               Center(
                 child: TextButton(
-                  onPressed: () => context.go('/onboarding/restore'),
+                  onPressed: () => context.push('/onboarding/restore'),
                   style: TextButton.styleFrom(
                     foregroundColor: starling.colors.sageDeep,
                     padding: const EdgeInsets.symmetric(
@@ -91,8 +95,8 @@ class WelcomeScreen extends StatelessWidget {
                       vertical: 6,
                     ),
                   ),
-                  child: RichText(
-                    text: TextSpan(
+                  child: Text.rich(
+                    TextSpan(
                       style: starling.typography.caption.copyWith(
                         color: starling.colors.stone,
                       ),

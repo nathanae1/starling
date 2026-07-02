@@ -5965,6 +5965,19 @@ class $VoiceRoomEntriesTable extends VoiceRoomEntries
     requiredDuringInsert: false,
     defaultValue: const Constant(1),
   );
+  static const VerificationMeta _missedMeta = const VerificationMeta('missed');
+  @override
+  late final GeneratedColumn<bool> missed = GeneratedColumn<bool>(
+    'missed',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("missed" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -5973,6 +5986,7 @@ class $VoiceRoomEntriesTable extends VoiceRoomEntries
     createdAt,
     endedAt,
     participantCount,
+    missed,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -6033,6 +6047,12 @@ class $VoiceRoomEntriesTable extends VoiceRoomEntries
         ),
       );
     }
+    if (data.containsKey('missed')) {
+      context.handle(
+        _missedMeta,
+        missed.isAcceptableOrUnknown(data['missed']!, _missedMeta),
+      );
+    }
     return context;
   }
 
@@ -6066,6 +6086,10 @@ class $VoiceRoomEntriesTable extends VoiceRoomEntries
         DriftSqlType.int,
         data['${effectivePrefix}participant_count'],
       )!,
+      missed: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}missed'],
+      )!,
     );
   }
 
@@ -6082,6 +6106,11 @@ class VoiceRoomEntry extends DataClass implements Insertable<VoiceRoomEntry> {
   final int createdAt;
   final int? endedAt;
   final int participantCount;
+
+  /// Invitee-side: the call rang (or auto-declined busy) and was never
+  /// answered — renders "Missed" in the recent list. Answering a later
+  /// retry upserts the row back to false.
+  final bool missed;
   const VoiceRoomEntry({
     required this.id,
     required this.name,
@@ -6089,6 +6118,7 @@ class VoiceRoomEntry extends DataClass implements Insertable<VoiceRoomEntry> {
     required this.createdAt,
     this.endedAt,
     required this.participantCount,
+    required this.missed,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -6101,6 +6131,7 @@ class VoiceRoomEntry extends DataClass implements Insertable<VoiceRoomEntry> {
       map['ended_at'] = Variable<int>(endedAt);
     }
     map['participant_count'] = Variable<int>(participantCount);
+    map['missed'] = Variable<bool>(missed);
     return map;
   }
 
@@ -6114,6 +6145,7 @@ class VoiceRoomEntry extends DataClass implements Insertable<VoiceRoomEntry> {
           ? const Value.absent()
           : Value(endedAt),
       participantCount: Value(participantCount),
+      missed: Value(missed),
     );
   }
 
@@ -6129,6 +6161,7 @@ class VoiceRoomEntry extends DataClass implements Insertable<VoiceRoomEntry> {
       createdAt: serializer.fromJson<int>(json['createdAt']),
       endedAt: serializer.fromJson<int?>(json['endedAt']),
       participantCount: serializer.fromJson<int>(json['participantCount']),
+      missed: serializer.fromJson<bool>(json['missed']),
     );
   }
   @override
@@ -6141,6 +6174,7 @@ class VoiceRoomEntry extends DataClass implements Insertable<VoiceRoomEntry> {
       'createdAt': serializer.toJson<int>(createdAt),
       'endedAt': serializer.toJson<int?>(endedAt),
       'participantCount': serializer.toJson<int>(participantCount),
+      'missed': serializer.toJson<bool>(missed),
     };
   }
 
@@ -6151,6 +6185,7 @@ class VoiceRoomEntry extends DataClass implements Insertable<VoiceRoomEntry> {
     int? createdAt,
     Value<int?> endedAt = const Value.absent(),
     int? participantCount,
+    bool? missed,
   }) => VoiceRoomEntry(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -6158,6 +6193,7 @@ class VoiceRoomEntry extends DataClass implements Insertable<VoiceRoomEntry> {
     createdAt: createdAt ?? this.createdAt,
     endedAt: endedAt.present ? endedAt.value : this.endedAt,
     participantCount: participantCount ?? this.participantCount,
+    missed: missed ?? this.missed,
   );
   VoiceRoomEntry copyWithCompanion(VoiceRoomEntriesCompanion data) {
     return VoiceRoomEntry(
@@ -6171,6 +6207,7 @@ class VoiceRoomEntry extends DataClass implements Insertable<VoiceRoomEntry> {
       participantCount: data.participantCount.present
           ? data.participantCount.value
           : this.participantCount,
+      missed: data.missed.present ? data.missed.value : this.missed,
     );
   }
 
@@ -6182,7 +6219,8 @@ class VoiceRoomEntry extends DataClass implements Insertable<VoiceRoomEntry> {
           ..write('creatorPubkey: $creatorPubkey, ')
           ..write('createdAt: $createdAt, ')
           ..write('endedAt: $endedAt, ')
-          ..write('participantCount: $participantCount')
+          ..write('participantCount: $participantCount, ')
+          ..write('missed: $missed')
           ..write(')'))
         .toString();
   }
@@ -6195,6 +6233,7 @@ class VoiceRoomEntry extends DataClass implements Insertable<VoiceRoomEntry> {
     createdAt,
     endedAt,
     participantCount,
+    missed,
   );
   @override
   bool operator ==(Object other) =>
@@ -6205,7 +6244,8 @@ class VoiceRoomEntry extends DataClass implements Insertable<VoiceRoomEntry> {
           other.creatorPubkey == this.creatorPubkey &&
           other.createdAt == this.createdAt &&
           other.endedAt == this.endedAt &&
-          other.participantCount == this.participantCount);
+          other.participantCount == this.participantCount &&
+          other.missed == this.missed);
 }
 
 class VoiceRoomEntriesCompanion extends UpdateCompanion<VoiceRoomEntry> {
@@ -6215,6 +6255,7 @@ class VoiceRoomEntriesCompanion extends UpdateCompanion<VoiceRoomEntry> {
   final Value<int> createdAt;
   final Value<int?> endedAt;
   final Value<int> participantCount;
+  final Value<bool> missed;
   final Value<int> rowid;
   const VoiceRoomEntriesCompanion({
     this.id = const Value.absent(),
@@ -6223,6 +6264,7 @@ class VoiceRoomEntriesCompanion extends UpdateCompanion<VoiceRoomEntry> {
     this.createdAt = const Value.absent(),
     this.endedAt = const Value.absent(),
     this.participantCount = const Value.absent(),
+    this.missed = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   VoiceRoomEntriesCompanion.insert({
@@ -6232,6 +6274,7 @@ class VoiceRoomEntriesCompanion extends UpdateCompanion<VoiceRoomEntry> {
     required int createdAt,
     this.endedAt = const Value.absent(),
     this.participantCount = const Value.absent(),
+    this.missed = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        name = Value(name),
@@ -6244,6 +6287,7 @@ class VoiceRoomEntriesCompanion extends UpdateCompanion<VoiceRoomEntry> {
     Expression<int>? createdAt,
     Expression<int>? endedAt,
     Expression<int>? participantCount,
+    Expression<bool>? missed,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -6253,6 +6297,7 @@ class VoiceRoomEntriesCompanion extends UpdateCompanion<VoiceRoomEntry> {
       if (createdAt != null) 'created_at': createdAt,
       if (endedAt != null) 'ended_at': endedAt,
       if (participantCount != null) 'participant_count': participantCount,
+      if (missed != null) 'missed': missed,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -6264,6 +6309,7 @@ class VoiceRoomEntriesCompanion extends UpdateCompanion<VoiceRoomEntry> {
     Value<int>? createdAt,
     Value<int?>? endedAt,
     Value<int>? participantCount,
+    Value<bool>? missed,
     Value<int>? rowid,
   }) {
     return VoiceRoomEntriesCompanion(
@@ -6273,6 +6319,7 @@ class VoiceRoomEntriesCompanion extends UpdateCompanion<VoiceRoomEntry> {
       createdAt: createdAt ?? this.createdAt,
       endedAt: endedAt ?? this.endedAt,
       participantCount: participantCount ?? this.participantCount,
+      missed: missed ?? this.missed,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -6298,6 +6345,9 @@ class VoiceRoomEntriesCompanion extends UpdateCompanion<VoiceRoomEntry> {
     if (participantCount.present) {
       map['participant_count'] = Variable<int>(participantCount.value);
     }
+    if (missed.present) {
+      map['missed'] = Variable<bool>(missed.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -6313,6 +6363,7 @@ class VoiceRoomEntriesCompanion extends UpdateCompanion<VoiceRoomEntry> {
           ..write('createdAt: $createdAt, ')
           ..write('endedAt: $endedAt, ')
           ..write('participantCount: $participantCount, ')
+          ..write('missed: $missed, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -11504,6 +11555,7 @@ typedef $$VoiceRoomEntriesTableCreateCompanionBuilder =
       required int createdAt,
       Value<int?> endedAt,
       Value<int> participantCount,
+      Value<bool> missed,
       Value<int> rowid,
     });
 typedef $$VoiceRoomEntriesTableUpdateCompanionBuilder =
@@ -11514,6 +11566,7 @@ typedef $$VoiceRoomEntriesTableUpdateCompanionBuilder =
       Value<int> createdAt,
       Value<int?> endedAt,
       Value<int> participantCount,
+      Value<bool> missed,
       Value<int> rowid,
     });
 
@@ -11553,6 +11606,11 @@ class $$VoiceRoomEntriesTableFilterComposer
 
   ColumnFilters<int> get participantCount => $composableBuilder(
     column: $table.participantCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get missed => $composableBuilder(
+    column: $table.missed,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -11595,6 +11653,11 @@ class $$VoiceRoomEntriesTableOrderingComposer
     column: $table.participantCount,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get missed => $composableBuilder(
+    column: $table.missed,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$VoiceRoomEntriesTableAnnotationComposer
@@ -11627,6 +11690,9 @@ class $$VoiceRoomEntriesTableAnnotationComposer
     column: $table.participantCount,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get missed =>
+      $composableBuilder(column: $table.missed, builder: (column) => column);
 }
 
 class $$VoiceRoomEntriesTableTableManager
@@ -11672,6 +11738,7 @@ class $$VoiceRoomEntriesTableTableManager
                 Value<int> createdAt = const Value.absent(),
                 Value<int?> endedAt = const Value.absent(),
                 Value<int> participantCount = const Value.absent(),
+                Value<bool> missed = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => VoiceRoomEntriesCompanion(
                 id: id,
@@ -11680,6 +11747,7 @@ class $$VoiceRoomEntriesTableTableManager
                 createdAt: createdAt,
                 endedAt: endedAt,
                 participantCount: participantCount,
+                missed: missed,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -11690,6 +11758,7 @@ class $$VoiceRoomEntriesTableTableManager
                 required int createdAt,
                 Value<int?> endedAt = const Value.absent(),
                 Value<int> participantCount = const Value.absent(),
+                Value<bool> missed = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => VoiceRoomEntriesCompanion.insert(
                 id: id,
@@ -11698,6 +11767,7 @@ class $$VoiceRoomEntriesTableTableManager
                 createdAt: createdAt,
                 endedAt: endedAt,
                 participantCount: participantCount,
+                missed: missed,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

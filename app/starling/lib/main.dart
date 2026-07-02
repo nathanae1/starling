@@ -21,6 +21,7 @@ import 'services/crypto/crockford_base32.dart';
 import 'services/crypto/key_cache.dart';
 import 'services/crypto/pairwise_content_key_service.dart';
 import 'services/crypto/sodium_crypto_service.dart';
+import 'services/follow_service.dart';
 import 'services/lifecycle/lifecycle_manager.dart';
 import 'services/mdns_service.dart';
 import 'services/signaling/ws_signaling_service.dart';
@@ -262,18 +263,42 @@ class _StarlingAppState extends ConsumerState<StarlingApp>
       deepLinkInvitesProvider,
       (_, next) {
         final invite = next.value;
-        if (invite is! ValidInvite && invite is! ValidRelayPair) return;
+        if (invite == null) return;
         final ctx = ref
             .read(routerProvider)
             .routerDelegate
             .navigatorKey
             .currentContext;
         if (ctx == null) return;
-        showStarlingSheet(
-          context: ctx,
-          builder: (_) => invite is ValidRelayPair
-              ? ConfirmRelayPairingSheet(payload: invite.payload)
-              : ConfirmRequestSheet(card: (invite as ValidInvite).card),
+        if (invite is InvalidInvite) {
+          // Messaging apps routinely truncate the long base64url links —
+          // dropped-on-the-floor was indistinguishable from "nothing
+          // happened". Parser reasons are developer strings; log only.
+          debugLog('deep_link', 'invite parse failed: ${invite.reason}');
+          ScaffoldMessenger.of(ctx).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'This invite link looks incomplete — ask your friend to '
+                're-send it.',
+              ),
+            ),
+          );
+          return;
+        }
+        if (invite is ValidRelayPair) {
+          showStarlingSheet(
+            context: ctx,
+            builder: (_) => ConfirmRelayPairingSheet(payload: invite.payload),
+          );
+          return;
+        }
+        final messenger = ScaffoldMessenger.of(ctx);
+        unawaited(
+          showStarlingSheet<RequestDelivery>(
+            context: ctx,
+            builder: (_) =>
+                ConfirmRequestSheet(card: (invite as ValidInvite).card),
+          ).then((delivery) => showRequestDeliveryToast(messenger, delivery)),
         );
       },
     );

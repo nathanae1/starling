@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../providers/follow_provider.dart';
 import '../providers/identity_provider.dart';
+import '../providers/voice_provider.dart';
+import '../services/voice/room_manager.dart';
 import '../theme/starling_theme.dart';
 import '../utils/connection_card_parser.dart';
 import 'buttons.dart';
@@ -19,6 +23,26 @@ class QrInviteSheet extends ConsumerStatefulWidget {
 
 class _QrInviteSheetState extends ConsumerState<QrInviteSheet> {
   bool _justCopied = false;
+  // Cached so dispose() can check call state without touching `ref`.
+  late final RoomManager _roomManager;
+
+  @override
+  void initState() {
+    super.initState();
+    _roomManager = ref.read(roomManagerProvider);
+    // A sleeping/dimming screen is the top cause of failed phone-to-phone
+    // scans — keep it awake while the QR is up.
+    WakelockPlus.enable();
+  }
+
+  @override
+  void dispose() {
+    // An active call holds its own wakelock (AppShell) — don't drop it.
+    if (!_roomManager.inCall) {
+      WakelockPlus.disable();
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -88,6 +112,13 @@ class _QrInviteSheetState extends ConsumerState<QrInviteSheet> {
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
+        const SizedBox(height: 12),
+        Text(
+          "After they accept, have them show you their code too — that's "
+          'how they share back.',
+          style: starling.typography.caption,
+          textAlign: TextAlign.center,
+        ),
         const SizedBox(height: 20),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -101,13 +132,19 @@ class _QrInviteSheetState extends ConsumerState<QrInviteSheet> {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: PrimaryButton(
-                label: 'Done',
-                onPressed: () => Navigator.of(context).pop(),
+              child: SecondaryButton(
+                label: 'Share link',
+                onPressed: () => _onShare(url),
                 block: true,
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 12),
+        PrimaryButton(
+          label: 'Done',
+          onPressed: () => Navigator.of(context).pop(),
+          block: true,
         ),
         const SizedBox(height: 8),
         GhostButton(
@@ -118,6 +155,12 @@ class _QrInviteSheetState extends ConsumerState<QrInviteSheet> {
           },
         ),
       ],
+    );
+  }
+
+  Future<void> _onShare(String url) async {
+    await SharePlus.instance.share(
+      ShareParams(text: url, subject: 'Add me on Starling'),
     );
   }
 

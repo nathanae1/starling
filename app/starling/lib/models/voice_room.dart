@@ -19,6 +19,25 @@ enum ParticipantConnectionState {
   disconnected,
 }
 
+/// Why a participant ended up `disconnected` — the signaling-level outcome,
+/// orthogonal to [ParticipantConnectionState] (which the WebRTC engine
+/// produces). Drives the tile labels ("No answer" / "Declined" / …) and
+/// whether a per-tile Retry makes sense (never for declined/busy/full).
+enum ParticipantEndReason {
+  /// Invite delivered (as far as we know) but never answered — 60s deadline.
+  noAnswer,
+
+  /// A signaling send to them failed outright, or they accepted but the
+  /// media path never came up.
+  unreachable,
+  declined,
+  busy,
+  roomFull,
+}
+
+/// Why the local user's call ended, for the end-of-call UI ("Call ended").
+enum RoomEndReason { left, closedByCreator }
+
 /// Coarse per-peer link quality derived from RTP loss / RTT / jitter. Only
 /// `fair`/`poor` surface visually (signal bars); `good` shows nothing, and a
 /// null quality means "no sample yet" (also drawn as nothing).
@@ -32,6 +51,7 @@ class VoiceParticipant {
     this.isSpeaking = false,
     this.connectionState = ParticipantConnectionState.connecting,
     this.quality,
+    this.endReason,
   });
 
   final String pubkey;
@@ -41,12 +61,18 @@ class VoiceParticipant {
   final ParticipantConnectionState connectionState;
   final ConnectionQuality? quality;
 
+  /// Set when [connectionState] is `disconnected` and we know why; null for
+  /// an engine-level drop with no signaling context ("unreachable").
+  final ParticipantEndReason? endReason;
+
   VoiceParticipant copyWith({
     String? displayName,
     bool? isMuted,
     bool? isSpeaking,
     ParticipantConnectionState? connectionState,
     ConnectionQuality? quality,
+    ParticipantEndReason? endReason,
+    bool clearEndReason = false,
   }) => VoiceParticipant(
     pubkey: pubkey,
     displayName: displayName ?? this.displayName,
@@ -54,6 +80,7 @@ class VoiceParticipant {
     isSpeaking: isSpeaking ?? this.isSpeaking,
     connectionState: connectionState ?? this.connectionState,
     quality: quality ?? this.quality,
+    endReason: clearEndReason ? null : (endReason ?? this.endReason),
   );
 }
 
@@ -63,35 +90,50 @@ class VoiceRoom {
     required this.name,
     required this.creatorPubkey,
     required this.createdAt,
+    this.creatorDisplayName,
     this.participants = const [],
     this.invitedPubkeys = const [],
     this.endedAt,
+    this.missed = false,
   });
 
   final String id;
   final String name;
   final String creatorPubkey;
+
+  /// Resolved locally from the creator's synced profile (never from the
+  /// wire — a wire-carried name would be spoofable). Null when no profile
+  /// has synced yet.
+  final String? creatorDisplayName;
   final int createdAt;
   final List<VoiceParticipant> participants;
   final List<String> invitedPubkeys;
   final int? endedAt;
 
+  /// Invitee-side: this call rang (or would have rung) while we never
+  /// answered — invite expiry or busy-auto-decline. History rows only.
+  final bool missed;
+
   bool get isActive => endedAt == null;
 
   VoiceRoom copyWith({
     String? name,
+    String? creatorDisplayName,
     List<VoiceParticipant>? participants,
     List<String>? invitedPubkeys,
     int? endedAt,
     bool clearEndedAt = false,
+    bool? missed,
   }) => VoiceRoom(
     id: id,
     name: name ?? this.name,
     creatorPubkey: creatorPubkey,
+    creatorDisplayName: creatorDisplayName ?? this.creatorDisplayName,
     createdAt: createdAt,
     participants: participants ?? this.participants,
     invitedPubkeys: invitedPubkeys ?? this.invitedPubkeys,
     endedAt: clearEndedAt ? null : (endedAt ?? this.endedAt),
+    missed: missed ?? this.missed,
   );
 }
 
@@ -114,6 +156,21 @@ class VoiceRoomState {
   bool get anyReconnecting => room.participants.any(
     (p) => p.connectionState == ParticipantConnectionState.reconnecting,
   );
+
+  /// True while any invitee is still ringing/negotiating. The local user is
+  /// seeded `connected`, so this reflects remote peers only — drives the
+  /// "Connecting over Tor — this can take a minute" hint.
+  bool get anyConnecting => room.participants.any(
+    (p) => p.connectionState == ParticipantConnectionState.connecting,
+  );
+
+  /// Peers with live media — the honest "N connected" count (the local user
+  /// counts as connected).
+  int get connectedCount => room.participants
+      .where(
+        (p) => p.connectionState == ParticipantConnectionState.connected,
+      )
+      .length;
 
   VoiceRoomState copyWith({
     VoiceRoom? room,

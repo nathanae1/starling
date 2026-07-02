@@ -22,6 +22,11 @@ import 'types.dart';
 /// regardless of entry point.
 const kBioMaxLength = 280;
 
+/// Hard cap on display-name length, in grapheme clusters. Same enforcement
+/// as [kBioMaxLength]: input caps in setup/edit-profile, defensive re-clamp
+/// in [ProfileService.publishProfile].
+const kDisplayNameMaxLength = 50;
+
 abstract class ProfileService {
   /// Publish a kind=2 profile event carrying [displayName], optional [bio],
   /// and an optional avatar image. When [avatarBytes] is supplied it is
@@ -119,12 +124,16 @@ class DefaultProfileService implements ProfileService {
       ];
     }
 
-    // Defensive re-clamp: the editor caps input at [kBioMaxLength] graphemes,
-    // but this service is a public boundary (also reachable via onboarding), so
-    // guarantee the invariant here rather than trusting the caller.
+    // Defensive re-clamp: the editors cap input at the k*MaxLength grapheme
+    // limits, but this service is a public boundary (also reachable via
+    // onboarding), so guarantee the invariants here rather than trusting the
+    // caller.
     final safeBio = bio != null && bio.characters.length > kBioMaxLength
         ? bio.characters.take(kBioMaxLength).toString()
         : bio;
+    final safeName = displayName.characters.length > kDisplayNameMaxLength
+        ? displayName.characters.take(kDisplayNameMaxLength).toString()
+        : displayName;
 
     final unsigned = Event(
       version: kStarlingProtocolVersion,
@@ -134,7 +143,7 @@ class DefaultProfileService implements ProfileService {
       kind: EventKind.profile,
       ref: null,
       content: encodeProfileContent(
-        name: displayName,
+        name: safeName,
         bio: safeBio,
         avatarHash: avatarHash,
       ),

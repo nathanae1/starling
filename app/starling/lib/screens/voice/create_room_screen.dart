@@ -19,7 +19,12 @@ import '../../widgets/inputs.dart';
 import '../../widgets/top_bar.dart';
 
 class CreateRoomScreen extends ConsumerStatefulWidget {
-  const CreateRoomScreen({super.key});
+  const CreateRoomScreen({super.key, this.initialSelection = const []});
+
+  /// Pubkeys preselected on open — the "call back" path from a recent-call
+  /// row. Entries who aren't current mutual follows simply don't render
+  /// (the list only shows mutuals) and are dropped at start time.
+  final List<String> initialSelection;
 
   @override
   ConsumerState<CreateRoomScreen> createState() => _CreateRoomScreenState();
@@ -29,7 +34,11 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
   final _name = TextEditingController(
     text: kChatroomsEnabled ? 'Room' : 'Voice room',
   );
-  final _selected = <String>{};
+  late final Set<String> _selected = {
+    ...widget.initialSelection.take(
+      kChatroomsEnabled ? widget.initialSelection.length : kMaxRoomInvitees,
+    ),
+  };
   bool _starting = false;
 
   @override
@@ -69,8 +78,14 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
     final status = await Permission.microphone.request();
     if (!status.isGranted) {
       messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Microphone permission is needed for voice calls.'),
+        SnackBar(
+          content: const Text('Microphone permission is needed for voice calls.'),
+          action: status.isPermanentlyDenied
+              ? const SnackBarAction(
+                  label: 'Open Settings',
+                  onPressed: openAppSettings,
+                )
+              : null,
         ),
       );
       return;
@@ -108,6 +123,14 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
     final starling = StarlingTheme.of(context);
     final mutuals = ref.watch(mutualFollowsProvider);
     final friendCount = ref.watch(followsProvider).value?.length ?? 0;
+
+    // Prune stale preselections (someone unfollowed since the call being
+    // redialed) — they don't render in the mutuals list, so leaving them
+    // selected would silently skew the count and fail at start.
+    final mutualKeys = mutuals.value?.map((f) => f.pubkey).toSet();
+    if (mutualKeys != null) {
+      _selected.removeWhere((p) => !mutualKeys.contains(p));
+    }
 
     return Scaffold(
       backgroundColor: starling.colors.paper,

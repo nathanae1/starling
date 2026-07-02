@@ -13,6 +13,7 @@ import 'package:starling/screens/feed/feed_screen.dart';
 import 'package:starling/screens/onboarding/done_screen.dart';
 import 'package:starling/screens/onboarding/recovery_phrase_screen.dart';
 import 'package:starling/screens/onboarding/setup_screen.dart';
+import 'package:starling/screens/onboarding/welcome_screen.dart';
 import 'package:starling/services/clock.dart';
 import 'package:starling/services/storage/database.dart';
 import 'package:starling/services/storage/drift_storage_service.dart';
@@ -88,6 +89,35 @@ void main() {
     expect(find.byType(SetupScreen), findsNothing);
     expect(find.byType(FeedScreen), findsOneWidget);
   });
+
+  testWidgets(
+    'setup is PUSHED over welcome — back returns instead of exiting',
+    (tester) async {
+      // No identity seeded: the router lands on the onboarding flow.
+      final db = AppDatabase.memory();
+      final storage = DriftStorageService(db, const SystemClock());
+      final container = ProviderContainer(
+        overrides: [storageServiceProvider.overrideWithValue(storage)],
+      );
+      addTearDown(() {
+        container.dispose();
+        db.close();
+      });
+      final router = await _pumpRouter(tester, container);
+
+      expect(find.byType(WelcomeScreen), findsOneWidget);
+      await tester.tap(find.text('Get started'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SetupScreen), findsOneWidget);
+
+      // Welcome pushes (not go's) into setup, so Android system back pops
+      // to Welcome instead of backgrounding the app mid-onboarding.
+      expect(router.canPop(), isTrue);
+      router.pop();
+      await tester.pumpAndSettle();
+      expect(find.byType(WelcomeScreen), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'recovery screen survives the post-create identity reload (no bounce)',

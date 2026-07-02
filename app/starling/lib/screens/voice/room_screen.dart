@@ -55,8 +55,14 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     final status = await Permission.microphone.request();
     if (!status.isGranted) {
       messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Microphone permission is needed for calls.'),
+        SnackBar(
+          content: const Text('Microphone permission is needed for calls.'),
+          action: status.isPermanentlyDenied
+              ? const SnackBarAction(
+                  label: 'Open Settings',
+                  onPressed: openAppSettings,
+                )
+              : null,
         ),
       );
       return;

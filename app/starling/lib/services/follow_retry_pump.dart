@@ -5,21 +5,23 @@ import '../sync/peer_reachability_monitor.dart';
 import 'clock.dart';
 import 'follow_service.dart';
 
-/// Drives redelivery of queued /follow-accept payloads. Two triggers:
+/// Drives redelivery of both queued handshake legs — /follow-accept payloads
+/// AND queued outbound /follow-request cards. Two triggers:
 ///
 /// 1. A periodic [interval] tick (foreground) that runs a full backoff-aware
-///    pass via [FollowService.retryQueuedAccepts].
-/// 2. A reachability transition: when a requester's pubkey flips to
-///    reachable in [PeerReachabilityMonitor], we immediately drain that
-///    pubkey's queued accepts (bypassing backoff), subject to a per-pubkey
+///    pass via [FollowService.retryQueuedAccepts] +
+///    [FollowService.retryQueuedRequests].
+/// 2. A reachability transition: when a peer's pubkey flips to reachable in
+///    [PeerReachabilityMonitor], we immediately drain that pubkey's queued
+///    payloads (bypassing backoff), subject to a per-pubkey
 ///    [reconnectCooldown]. Modeled on [ReconnectPusher].
 ///
-/// Backoff and the never-strand policy live inside
-/// [FollowService.retryQueuedAccepts]; this pump only decides *when* to ask.
+/// Backoff and the never-strand policy live inside the FollowService drains;
+/// this pump only decides *when* to ask.
 ///
 /// Limitation: the monitor only probes follows, so the reachability trigger
-/// fires only when the responder also follows the requester (the common
-/// mutual-follow case). Non-mutual requesters are covered by the periodic
+/// fires only for peers we already follow (the mutual-follow case). Fresh
+/// outbound requests and non-mutual requesters are covered by the periodic
 /// backoff pass.
 class FollowRetryPump {
   FollowRetryPump({
@@ -81,6 +83,9 @@ class FollowRetryPump {
       await followService.retryQueuedAccepts(
         failedStatusThreshold: failedStatusThreshold,
       );
+      await followService.retryQueuedRequests(
+        failedStatusThreshold: failedStatusThreshold,
+      );
     } catch (_) {
       // Errors are logged inside FollowService; the pump itself never fails.
     } finally {
@@ -123,9 +128,14 @@ class FollowRetryPump {
         ignoreBackoff: true,
         failedStatusThreshold: failedStatusThreshold,
       );
+      await followService.retryQueuedRequests(
+        onlyPubkey: pubkey,
+        ignoreBackoff: true,
+        failedStatusThreshold: failedStatusThreshold,
+      );
     } catch (e) {
       developer.log(
-        'reachability-triggered accept drain failed for $pubkey: $e',
+        'reachability-triggered drain failed for $pubkey: $e',
         name: 'follow_retry_pump',
       );
     }

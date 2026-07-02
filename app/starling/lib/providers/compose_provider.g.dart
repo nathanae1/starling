@@ -65,7 +65,7 @@ final class ComposeControllerProvider
   }
 }
 
-String _$composeControllerHash() => r'0121d0c04bce104939271e86e27a4eb79d358c1c';
+String _$composeControllerHash() => r'b594e47439616fa902d304716adee424f2fda37d';
 
 /// Compose-screen scratch state. Lives across Compose → Preview → back-to-edit
 /// so the photo and caption survive the sub-route push. Invalidate on modal

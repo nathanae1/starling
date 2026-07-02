@@ -76,7 +76,18 @@ class _ConfirmRequestSheetState extends ConsumerState<ConfirmRequestSheet> {
         if (!ourOnionReady) ...[
           const SizedBox(height: 12),
           Text(
-            'Waiting for Tor to come up — try again in a moment.',
+            "Tor is still starting — you can send now and we'll deliver "
+            "once it's up.",
+            style: starling.typography.small.copyWith(
+              color: starling.colors.stone,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+        if (_sending) ...[
+          const SizedBox(height: 12),
+          Text(
+            'This can take a minute over Tor.',
             style: starling.typography.small.copyWith(
               color: starling.colors.stone,
             ),
@@ -98,11 +109,11 @@ class _ConfirmRequestSheetState extends ConsumerState<ConfirmRequestSheet> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Expanded(
+              // Cancel stays enabled while sending — a stalled Tor circuit
+              // must never trap the user in the sheet.
               child: SecondaryButton(
                 label: 'Cancel',
-                onPressed: _sending
-                    ? null
-                    : () => Navigator.of(context).pop(false),
+                onPressed: () => Navigator.of(context).pop(),
                 block: true,
               ),
             ),
@@ -110,7 +121,7 @@ class _ConfirmRequestSheetState extends ConsumerState<ConfirmRequestSheet> {
             Expanded(
               child: PrimaryButton(
                 label: _sending ? 'Sending…' : 'Send follow request',
-                onPressed: (_sending || !ourOnionReady) ? null : _send,
+                onPressed: _sending ? null : _send,
                 block: true,
               ),
             ),
@@ -127,16 +138,20 @@ class _ConfirmRequestSheetState extends ConsumerState<ConfirmRequestSheet> {
     });
     try {
       final service = ref.read(followServiceProvider);
-      await service.sendFollowRequest(widget.card);
+      final delivery = await service.sendFollowRequest(widget.card);
       if (!mounted) return;
-      Navigator.of(context).pop(true);
+      // Unreachable friends queue instead of failing — the sheet closes
+      // successfully either way and the caller toasts the outcome.
+      Navigator.of(context).pop(delivery);
     } on FollowFailure catch (e) {
       if (!mounted) return;
       setState(() {
         _sending = false;
         _error = switch (e.kind) {
+          // No longer thrown by sendFollowRequest (unreachability queues);
+          // kept for switch exhaustiveness.
           FollowFailureKind.noEndpoints =>
-            "We couldn't reach this person — they have no endpoints yet.",
+            "They look offline right now — we'll keep trying.",
           FollowFailureKind.network => 'Network error: ${e.message}',
           FollowFailureKind.unknownRequester =>
             "Couldn't load your identity. Try again.",
@@ -152,6 +167,27 @@ class _ConfirmRequestSheetState extends ConsumerState<ConfirmRequestSheet> {
       });
     }
   }
+}
+
+/// Toasts the outcome of a [ConfirmRequestSheet]. No-op when the sheet was
+/// cancelled or dismissed ([delivery] == null). Takes the messenger rather
+/// than a context because callers typically pop their own route before the
+/// sheet resolves.
+void showRequestDeliveryToast(
+  ScaffoldMessengerState messenger,
+  RequestDelivery? delivery,
+) {
+  if (delivery == null) return;
+  messenger.showSnackBar(
+    SnackBar(
+      content: Text(
+        delivery == RequestDelivery.delivered
+            ? 'Request sent'
+            : "They look offline right now — we'll keep trying and let "
+                  'you know.',
+      ),
+    ),
+  );
 }
 
 /// Terminal state for the confirm sheet: nothing to send, just explain why
@@ -181,7 +217,7 @@ class _InfoSheet extends StatelessWidget {
         const SizedBox(height: 20),
         SecondaryButton(
           label: 'Close',
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(context).pop(),
           block: true,
         ),
       ],

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../theme/starling_theme.dart';
@@ -27,6 +29,63 @@ Future<bool> showStarlingConfirm(
     ),
   );
   return result ?? false;
+}
+
+/// Runs [op] behind a non-dismissible themed progress dialog — the single
+/// pattern for long confirmed actions (unfollow with key rotation, clear
+/// cache, export) that previously ran with no visible progress. The dialog
+/// closes when [op] settles; errors rethrow so callers keep their own
+/// handling.
+Future<T> runWithStarlingProgress<T>(
+  BuildContext context, {
+  required String message,
+  required Future<T> Function() op,
+}) async {
+  final navigator = Navigator.of(context, rootNavigator: true);
+  unawaited(
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      useRootNavigator: true,
+      builder: (ctx) {
+        final starling = StarlingTheme.of(ctx);
+        return PopScope(
+          canPop: false,
+          child: Dialog(
+            backgroundColor: starling.colors.paper,
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 40,
+              vertical: 24,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Text(message, style: starling.typography.small),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    ),
+  );
+  try {
+    return await op();
+  } finally {
+    navigator.pop();
+  }
 }
 
 class _StarlingAlertDialog extends StatelessWidget {

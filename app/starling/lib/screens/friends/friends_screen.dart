@@ -18,9 +18,11 @@ import '../../utils/time_ago.dart';
 import '../../widgets/avatar.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/encrypted_avatar.dart';
+import '../../widgets/starling_alert_dialog.dart';
 import '../../widgets/qr_invite_sheet.dart';
 import '../../widgets/sheet.dart';
 import '../../widgets/top_bar.dart';
+import 'confirm_request_sheet.dart';
 import 'friend_actions_sheet.dart';
 
 class FriendsScreen extends ConsumerWidget {
@@ -81,7 +83,15 @@ class FriendsScreen extends ConsumerWidget {
                       style: starling.typography.micro,
                     ),
                   ),
-                  if (follows.isEmpty &&
+                  // Loading must not read as "No friends yet": while the
+                  // streams have no data, show a spinner instead of the
+                  // empty hint.
+                  if (followsAsync.isLoading && !followsAsync.hasValue)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 32),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (follows.isEmpty &&
                       outbound.isEmpty &&
                       followersOnly.isEmpty)
                     _EmptyHint()
@@ -122,14 +132,24 @@ class FriendsScreen extends ConsumerWidget {
   }
 }
 
-class _InboundBanner extends ConsumerWidget {
+class _InboundBanner extends ConsumerStatefulWidget {
   const _InboundBanner({required this.request});
   final FollowRequest request;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_InboundBanner> createState() => _InboundBannerState();
+}
+
+class _InboundBannerState extends ConsumerState<_InboundBanner> {
+  // The accept leg probes the requester over Tor — 15s+ is normal. Without
+  // an in-flight state the button looks inert and double-taps fire a
+  // second full accept.
+  bool _accepting = false;
+
+  @override
+  Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
-    final shortKey = shortPubkey(request.pubkey);
+    final shortKey = shortPubkey(widget.request.pubkey);
     return Container(
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -159,21 +179,31 @@ class _InboundBanner extends ConsumerWidget {
               ),
             ],
           ),
+          const SizedBox(height: 6),
+          // The code is the only identity we have for the requester —
+          // nudge an out-of-band check before granting feed access.
+          Text(
+            'Ask them to confirm their code starts with $shortKey before '
+            'you accept.',
+            style: starling.typography.micro.copyWith(
+              color: starling.colors.stone,
+            ),
+          ),
           const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
                 child: SecondaryButton(
                   label: 'Reject',
-                  onPressed: () => _reject(context, ref),
+                  onPressed: _accepting ? null : _reject,
                   block: true,
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: PrimaryButton(
-                  label: 'Accept',
-                  onPressed: () => _accept(context, ref),
+                  label: _accepting ? 'Accepting…' : 'Accept',
+                  onPressed: _accepting ? null : _accept,
                   block: true,
                 ),
               ),
@@ -184,14 +214,14 @@ class _InboundBanner extends ConsumerWidget {
     );
   }
 
-  Future<void> _accept(BuildContext context, WidgetRef ref) async {
+  Future<void> _accept() async {
+    setState(() => _accepting = true);
     try {
       final delivery = await ref
           .read(followServiceProvider)
-          .acceptFollowRequest(request.pubkey);
-      if (!context.mounted) return;
-      final messenger = ScaffoldMessenger.of(context);
-      messenger.showSnackBar(
+          .acceptFollowRequest(widget.request.pubkey);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(switch (delivery) {
             AcceptDelivery.delivered => 'Accepted',
@@ -202,15 +232,31 @@ class _InboundBanner extends ConsumerWidget {
         ),
       );
     } on FollowFailure catch (e) {
-      if (!context.mounted) return;
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Accept failed: ${e.message}')));
+    } finally {
+      if (mounted) setState(() => _accepting = false);
     }
   }
 
-  Future<void> _reject(BuildContext context, WidgetRef ref) async {
-    await ref.read(followServiceProvider).rejectFollowRequest(request.pubkey);
+  Future<void> _reject() async {
+    // Irreversible (the request row is deleted) and the button sits right
+    // beside Accept — confirm first.
+    final confirmed = await showStarlingConfirm(
+      context,
+      title: 'Reject request?',
+      message:
+          "They won't be able to follow you unless they send a new "
+          'request.',
+      confirmLabel: 'Reject',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    await ref
+        .read(followServiceProvider)
+        .rejectFollowRequest(widget.request.pubkey);
   }
 }
 
@@ -471,7 +517,8 @@ class _FollowerOnlyRowState extends ConsumerState<_FollowerOnlyRow> {
           ),
           PrimaryButton(
             label: _sending ? 'Sending…' : 'Follow back',
-            onPressed: (_sending || !ourOnionReady) ? null : _followBack,
+            // Sending while Tor is starting is fine now — it queues.
+            onPressed: _sending ? null : _followBack,
           ),
         ],
       ),
@@ -483,14 +530,11 @@ class _FollowerOnlyRowState extends ConsumerState<_FollowerOnlyRow> {
     try {
       // PeerReachabilityMonitor.probeCard handles live mDNS resolution
       // inside FollowService now — no caller-side endpoint juggling.
-      await ref.read(followServiceProvider).followBack(widget.request.pubkey);
+      final delivery = await ref
+          .read(followServiceProvider)
+          .followBack(widget.request.pubkey);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Follow request sent'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      showRequestDeliveryToast(ScaffoldMessenger.of(context), delivery);
     } on FollowFailure catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -507,21 +551,26 @@ class _FollowerOnlyRowState extends ConsumerState<_FollowerOnlyRow> {
   }
 }
 
-class _OutboundPendingRow extends StatelessWidget {
+class _OutboundPendingRow extends ConsumerWidget {
   const _OutboundPendingRow({required this.request});
   final FollowRequest request;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final starling = StarlingTheme.of(context);
     final shortKey = shortPubkey(request.pubkey);
+    final now = ref.watch(clockProvider).nowUnixSeconds();
+    // Re-render each minute so the request age stays honest.
+    ref.watch(minuteTickerProvider);
+    // Copy never blames the friend's setup — over Tor "offline" is the
+    // normal case and the queue keeps trying.
     final statusLabel = switch (request.status) {
-      'pending' => 'Pending',
-      'pending-send' => 'Pending — retrying',
-      'send-failed' => 'Send failed',
-      'accepted' => 'Sent',
-      _ => request.status,
+      'pending' => 'Sent — waiting for them',
+      'pending-send' => 'Queued — they look offline, still trying',
+      'send-failed' => "Still trying — hasn't gone through yet",
+      _ => 'Request pending',
     };
+    final age = timeAgo(request.createdAt, nowUnixSeconds: now);
     return Opacity(
       opacity: 0.65,
       child: Container(
@@ -540,7 +589,7 @@ class _OutboundPendingRow extends StatelessWidget {
                   Text(shortKey, style: starling.typography.body),
                   const SizedBox(height: 2),
                   Text(
-                    statusLabel,
+                    '$statusLabel · $age',
                     style: starling.typography.micro.copyWith(
                       color: starling.colors.stone,
                     ),
@@ -548,10 +597,36 @@ class _OutboundPendingRow extends StatelessWidget {
                 ],
               ),
             ),
+            StarlingIconButton(
+              tooltip: 'Cancel request',
+              onPressed: () => _cancel(context, ref),
+              child: Icon(
+                LucideIcons.x,
+                size: 18,
+                color: starling.colors.stone,
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _cancel(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showStarlingConfirm(
+      context,
+      title: 'Cancel request?',
+      message:
+          "We'll stop trying to reach them. You can always scan their "
+          'code again later.',
+      confirmLabel: 'Cancel request',
+      cancelLabel: 'Keep trying',
+      destructive: true,
+    );
+    if (!confirmed || !context.mounted) return;
+    await ref
+        .read(storageServiceProvider)
+        .deleteOutboundRequest(request.pubkey);
   }
 }
 

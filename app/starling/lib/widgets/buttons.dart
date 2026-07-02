@@ -49,35 +49,59 @@ class _StarlingButton extends StatelessWidget {
         (block ? starling.typography.buttonBlock : starling.typography.button)
             .copyWith(color: fg, fontWeight: FontWeight.w500);
 
-    return Opacity(
-      opacity: disabled ? 0.4 : 1,
-      child: Material(
-        color: bg,
-        borderRadius: BorderRadius.circular(10),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: disabled ? null : onPressed,
-          splashColor: colors.sageSoft.withValues(alpha: 0.3),
-          highlightColor: colors.linen,
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: border != null ? Border.all(color: border) : null,
-            ),
-            constraints: block
-                ? const BoxConstraints(minWidth: double.infinity)
-                : null,
-            padding: effectivePadding,
-            alignment: Alignment.center,
-            child: DefaultTextStyle(
-              style: textStyle,
-              child: IconTheme(
-                data: IconThemeData(color: fg, size: 18),
-                child: child,
+    return Semantics(
+      // Opacity alone doesn't tell a screen reader the button is inert.
+      enabled: !disabled,
+      child: Opacity(
+        opacity: disabled ? 0.4 : 1,
+        child: Material(
+          color: bg,
+          borderRadius: BorderRadius.circular(10),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: disabled ? null : onPressed,
+            splashColor: colors.sageSoft.withValues(alpha: 0.3),
+            highlightColor: colors.linen,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: border != null ? Border.all(color: border) : null,
+              ),
+              constraints: block
+                  ? const BoxConstraints(minWidth: double.infinity)
+                  : null,
+              padding: effectivePadding,
+              alignment: Alignment.center,
+              child: DefaultTextStyle(
+                style: textStyle,
+                child: IconTheme(
+                  data: IconThemeData(color: fg, size: 18),
+                  child: child,
+                ),
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Small inline spinner sized for the button `leading` slot — pairs with
+/// in-flight labels ("Creating…", "Restoring…") so progress is visible, not
+/// just implied by a label change. Inherits the button's foreground color
+/// from the IconTheme every _StarlingButton wraps its child in.
+class ButtonSpinner extends StatelessWidget {
+  const ButtonSpinner({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 16,
+      height: 16,
+      child: CircularProgressIndicator(
+        strokeWidth: 2,
+        color: IconTheme.of(context).color,
       ),
     );
   }

@@ -15,7 +15,7 @@ import '../../theme/starling_theme.dart';
 import '../../utils/friendly_error.dart';
 import '../../utils/starling_address.dart';
 import '../../widgets/buttons.dart';
-import '../../widgets/sheet.dart';
+import '../../widgets/starling_alert_dialog.dart';
 import '../../widgets/starling_badge.dart';
 import '../friends/scan_screen.dart';
 
@@ -233,33 +233,19 @@ class _RelaySectionState extends ConsumerState<_RelaySection> {
   }
 
   Future<void> _unpair() async {
-    final confirmed = await showStarlingSheet<bool>(
-      context: context,
-      builder: (ctx) {
-        final starling = StarlingTheme.of(ctx);
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Unpair this relay?', style: starling.typography.h3),
-            const SizedBox(height: 8),
-            Text(
-              'Friends will stop reaching your feed through the relay. Its '
-              'stored copy stays until you remove it from the relay’s admin '
-              'page.',
-              style: starling.typography.body,
-            ),
-            const SizedBox(height: 20),
-            PrimaryButton(
-              label: 'Unpair',
-              onPressed: () => Navigator.of(ctx).pop(true),
-              block: true,
-            ),
-          ],
-        );
-      },
+    // The single destructive-confirm pattern (Cancel + clay confirm) — the
+    // old sheet offered only "Unpair" with no way to back out.
+    final confirmed = await showStarlingConfirm(
+      context,
+      title: 'Unpair this relay?',
+      message:
+          'Friends will stop reaching your feed through the relay. Its '
+          'stored copy stays until you remove it from the relay’s admin '
+          'page.',
+      confirmLabel: 'Unpair',
+      destructive: true,
     );
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
     setState(() => _busy = true);
     try {
       final service = ref.read(relayPairingServiceProvider).value;

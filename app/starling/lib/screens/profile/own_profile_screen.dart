@@ -282,7 +282,29 @@ class _PostGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (events.isEmpty) {
-      return const SliverToBoxAdapter(child: SizedBox.shrink());
+      // An empty grid rendered literally nothing — invite the first post.
+      final starling = StarlingTheme.of(context);
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+          child: Column(
+            children: [
+              Text(
+                'Nothing here yet. Share your first photo with your friends.',
+                textAlign: TextAlign.center,
+                style: starling.typography.small.copyWith(
+                  color: starling.colors.stone,
+                ),
+              ),
+              const SizedBox(height: 16),
+              SecondaryButton(
+                label: 'New post',
+                onPressed: () => context.push('/compose'),
+              ),
+            ],
+          ),
+        ),
+      );
     }
     final routePrefix = ownTab ? '/you' : '/feed';
     return SliverPadding(
@@ -297,15 +319,19 @@ class _PostGrid extends StatelessWidget {
         delegate: SliverChildBuilderDelegate((context, index) {
           final event = events[index];
           final hash = event.media.isNotEmpty ? event.media.first.hash : null;
-          return GestureDetector(
-            onTap: () => context.push('$routePrefix/post/${event.id}'),
-            child: hash == null
-                ? const ColoredBox(color: Colors.transparent)
-                : EncryptedImage(
-                    hash: hash,
-                    pubkey: event.pubkey,
-                    msgSeq: event.msgSeq,
-                  ),
+          return Semantics(
+            button: true,
+            label: 'Your post ${index + 1} of ${events.length}',
+            child: GestureDetector(
+              onTap: () => context.push('$routePrefix/post/${event.id}'),
+              child: hash == null
+                  ? const ColoredBox(color: Colors.transparent)
+                  : EncryptedImage(
+                      hash: hash,
+                      pubkey: event.pubkey,
+                      msgSeq: event.msgSeq,
+                    ),
+            ),
           );
         }, childCount: events.length),
       ),

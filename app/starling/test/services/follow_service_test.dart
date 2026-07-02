@@ -442,6 +442,224 @@ void main() {
     });
   });
 
+  group('FollowService outbound request queue', () {
+    late _Peer alice;
+    late _Peer bob;
+    late _PairTransport transport;
+
+    setUp(() async {
+      alice = await _Peer.build(crypto, label: 'alice');
+      bob = await _Peer.build(crypto, label: 'bob');
+      transport = _PairTransport({alice.baseUrl: alice, bob.baseUrl: bob});
+      alice.attachTransport(transport, peer: bob);
+      bob.attachTransport(transport, peer: alice);
+    });
+
+    tearDown(() async {
+      await alice.storage.dispose();
+      await bob.storage.dispose();
+    });
+
+    test('a delivered request writes a pending row (awaiting their accept)',
+        () async {
+      final delivery = await alice.service.sendFollowRequest(
+        bob.connectionCard(),
+      );
+      expect(delivery, RequestDelivery.delivered);
+      final row = (await alice.storage.getOutboundRequests()).single;
+      expect(row.status, 'pending');
+    });
+
+    test(
+      'unreachable target queues; the retry re-sends the STORED wire '
+      'timestamp and the accept round-trip completes',
+      () async {
+        alice.monitor.failProbeCard = true;
+        final delivery = await alice.service.sendFollowRequest(
+          bob.connectionCard(),
+        );
+        expect(delivery, RequestDelivery.queued);
+
+        final row = (await alice.storage.getOutboundRequests()).single;
+        expect(row.status, 'pending-send');
+        final queuedTimestamp = row.requestTimestamp;
+        expect(await bob.storage.getInboundRequests(), isEmpty);
+
+        // Hours pass before the friend's phone comes online. The retry must
+        // NOT take a fresh clock read: the responder echoes this timestamp
+        // back in /follow-accept and ingestFollowAccept both derives the
+        // shared key from it and rejects a mismatch.
+        alice.clock.advance(3600);
+        alice.monitor.failProbeCard = false;
+        await alice.service.retryQueuedRequests();
+
+        final inbound = await bob.storage.getInboundRequests();
+        expect(inbound, hasLength(1));
+        expect(inbound.single.requestTimestamp, queuedTimestamp);
+        final updated = (await alice.storage.getOutboundRequests()).single;
+        expect(updated.status, 'pending');
+        expect(updated.requestTimestamp, queuedTimestamp);
+
+        // The whole handshake keys off that timestamp — it must land.
+        final accept = await bob.service.acceptFollowRequest(
+          alice.identity.pubkey,
+        );
+        expect(accept, AcceptDelivery.delivered);
+        expect(await alice.storage.getFollow(bob.identity.pubkey), isNotNull);
+        expect(await alice.storage.getOutboundRequests(), isEmpty);
+      },
+    );
+
+    test(
+      'own onion missing queues without dialing; the drain skips the whole '
+      'pass while down and delivers once published',
+      () async {
+        alice.ownOnionUp = false;
+        final delivery = await alice.service.sendFollowRequest(
+          bob.connectionCard(),
+        );
+        expect(delivery, RequestDelivery.queued);
+        expect(transport.requestPostCount, 0);
+
+        // Skipped pass spends no attempts: even threshold=1 must not flip
+        // the row to 'send-failed'.
+        await alice.service.retryQueuedRequests(failedStatusThreshold: 1);
+        expect(transport.requestPostCount, 0);
+        expect(
+          (await alice.storage.getOutboundRequests()).single.status,
+          'pending-send',
+        );
+
+        alice.ownOnionUp = true;
+        await alice.service.retryQueuedRequests();
+        expect(transport.requestPostCount, 1);
+        expect(
+          (await alice.storage.getOutboundRequests()).single.status,
+          'pending',
+        );
+        expect(await bob.storage.getInboundRequests(), hasLength(1));
+      },
+    );
+
+    test(
+      "transport failure queues; flips to 'send-failed' at the threshold "
+      '(from pending-send only) and recovers to pending on success',
+      () async {
+        transport.failNextRequestTo = bob.baseUrl;
+        transport.failPersistently = true;
+        final delivery = await alice.service.sendFollowRequest(
+          bob.connectionCard(),
+        );
+        expect(delivery, RequestDelivery.queued);
+
+        // Below the threshold → stays 'pending-send'.
+        await alice.service.retryQueuedRequests(
+          failedStatusThreshold: 2,
+          ignoreBackoff: true,
+        );
+        expect(
+          (await alice.storage.getOutboundRequests()).single.status,
+          'pending-send',
+        );
+
+        // Threshold reached → 'send-failed'; the row is still retried.
+        await alice.service.retryQueuedRequests(
+          failedStatusThreshold: 2,
+          ignoreBackoff: true,
+        );
+        expect(
+          (await alice.storage.getOutboundRequests()).single.status,
+          'send-failed',
+        );
+
+        transport.failNextRequestTo = null;
+        transport.failPersistently = false;
+        await alice.service.retryQueuedRequests(ignoreBackoff: true);
+        expect(
+          (await alice.storage.getOutboundRequests()).single.status,
+          'pending',
+        );
+        expect(await bob.storage.getInboundRequests(), hasLength(1));
+      },
+    );
+
+    test('backoff: a pass inside the window skips, after it retries',
+        () async {
+      transport.failNextRequestTo = bob.baseUrl;
+      transport.failPersistently = true;
+      await alice.service.sendFollowRequest(bob.connectionCard());
+      expect(transport.requestPostCount, 1); // the initial send attempt
+
+      await alice.service.retryQueuedRequests();
+      expect(transport.requestPostCount, 2);
+
+      // Same instant → still inside the backoff window → no attempt.
+      await alice.service.retryQueuedRequests();
+      expect(transport.requestPostCount, 2);
+
+      alice.clock.advance(61);
+      await alice.service.retryQueuedRequests();
+      expect(transport.requestPostCount, 3);
+    });
+
+    test('transport-not-ready skips without spending a retry', () async {
+      alice.monitor.failProbeCard = true;
+      await alice.service.sendFollowRequest(bob.connectionCard());
+      alice.monitor.failProbeCard = false;
+
+      transport.throwNotReadyOnRequest = true;
+      await alice.service.retryQueuedRequests(failedStatusThreshold: 1);
+      expect(
+        (await alice.storage.getOutboundRequests()).single.status,
+        'pending-send',
+        reason: 'a local Tor-not-ready failure must not count as an attempt',
+      );
+
+      // Stamp was cleared → the next pass fires immediately, no backoff.
+      transport.throwNotReadyOnRequest = false;
+      await alice.service.retryQueuedRequests();
+      expect(
+        (await alice.storage.getOutboundRequests()).single.status,
+        'pending',
+      );
+    });
+
+    test('re-scanning while queued overwrites the row (fresh timestamp)',
+        () async {
+      alice.monitor.failProbeCard = true;
+      await alice.service.sendFollowRequest(bob.connectionCard());
+      final first = (await alice.storage.getOutboundRequests()).single;
+
+      alice.clock.advance(500);
+      await alice.service.sendFollowRequest(bob.connectionCard());
+      final rows = await alice.storage.getOutboundRequests();
+      expect(rows, hasLength(1));
+      expect(rows.single.requestTimestamp, first.requestTimestamp + 500);
+      expect(rows.single.status, 'pending-send');
+    });
+
+    test(
+      'delivered-but-looked-failed: their accept still ingests against the '
+      'queued row (timestamp match), which clears the queue',
+      () async {
+        transport.deliverButFailRequestTo = bob.baseUrl;
+        final delivery = await alice.service.sendFollowRequest(
+          bob.connectionCard(),
+        );
+        expect(delivery, RequestDelivery.queued);
+        expect(await bob.storage.getInboundRequests(), hasLength(1));
+
+        final accept = await bob.service.acceptFollowRequest(
+          alice.identity.pubkey,
+        );
+        expect(accept, AcceptDelivery.delivered);
+        expect(await alice.storage.getFollow(bob.identity.pubkey), isNotNull);
+        // The accept consumed the queued row — nothing left to drain.
+        expect(await alice.storage.getOutboundRequests(), isEmpty);
+      },
+    );
+  });
+
   group('FollowService.removeFollower', () {
     test(
       'clears queued card distributions for the removed follower (S4)',
@@ -514,6 +732,11 @@ class _Peer {
   late FollowService service;
   late FakePeerReachabilityMonitor monitor;
 
+  /// When false, `ownEndpointsLookup` omits the onion entry — models the
+  /// window before our onion is published (sendFollowRequest must queue,
+  /// the request drain must skip the whole pass).
+  bool ownOnionUp = true;
+
   static Future<_Peer> build(
     CryptoService crypto, {
     required String label,
@@ -557,7 +780,12 @@ class _Peer {
       reachabilityMonitor: monitor,
       identityLookup: storage.getIdentity,
       ownSecretKeyLookup: () async => secretKey,
-      ownEndpointsLookup: () async => connectionCard().endpoints,
+      ownEndpointsLookup: () async => ownOnionUp
+          ? connectionCard().endpoints
+          : connectionCard()
+                .endpoints
+                .where((e) => e.type != 'onion')
+                .toList(),
     );
   }
 }
@@ -574,7 +802,14 @@ class _PairTransport implements HandshakeTransport {
 
   final Map<String, _Peer> _byBaseUrl;
   String? failNextAcceptTo;
+  String? failNextRequestTo;
   bool failPersistently = false;
+
+  /// When set, postFollowRequest to this baseUrl DELIVERS the inbound row
+  /// and then throws — models a POST that landed but whose 202 was lost on
+  /// the onion path, so the requester queues a retry for an already-
+  /// delivered request.
+  String? deliverButFailRequestTo;
 
   /// When true, every postFollowAccept throws [HandshakeTransportException]
   /// before any delivery — models our own Tor being down (the real
@@ -582,13 +817,30 @@ class _PairTransport implements HandshakeTransport {
   /// against the retry budget.
   bool throwNotReadyOnAccept = false;
 
+  /// Same, for postFollowRequest.
+  bool throwNotReadyOnRequest = false;
+
   /// Counts postFollowAccept calls that got past the not-ready gate — i.e.
   /// real delivery attempts. Lets backoff tests assert "no attempt before
   /// the window, one after".
   int acceptPostCount = 0;
 
+  /// Same, for postFollowRequest.
+  int requestPostCount = 0;
+
   @override
   Future<int> postFollowRequest(String baseUrl, Uint8List body) async {
+    if (throwNotReadyOnRequest) {
+      throw const HandshakeTransportException('Tor not ready (test)');
+    }
+    requestPostCount++;
+    if (failNextRequestTo == baseUrl) {
+      if (!failPersistently) failNextRequestTo = null;
+      throw http.ClientException(
+        'simulated network failure',
+        Uri.parse(baseUrl),
+      );
+    }
     final peer = _resolve(baseUrl);
     final outer = cbor.decode(body) as Map<dynamic, dynamic>;
     final timestamp = outer['timestamp'] as int;
@@ -600,6 +852,9 @@ class _PairTransport implements HandshakeTransport {
         requestTimestamp: timestamp,
       ),
     );
+    if (deliverButFailRequestTo == baseUrl) {
+      throw http.ClientException('202 lost on reverse path', Uri.parse(baseUrl));
+    }
     return 202;
   }
 

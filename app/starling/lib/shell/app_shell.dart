@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../providers/follow_requests_provider.dart';
 import '../providers/room_provider.dart';
@@ -92,6 +93,11 @@ class AppShell extends ConsumerWidget {
           ForegroundServiceController.instance.setCallActive(
             next.value != null,
           ),
+        );
+        // Wakelock follows CALL state, not the room screen's mount —
+        // navigating to the overlay must not let the phone lock mid-call.
+        unawaited(
+          next.value != null ? WakelockPlus.enable() : WakelockPlus.disable(),
         );
       });
     }

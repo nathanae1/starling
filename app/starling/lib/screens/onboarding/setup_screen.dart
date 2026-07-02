@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../providers/onboarding_provider.dart';
 import '../../providers/profile_provider.dart';
+import '../../services/profile_service.dart';
 import '../../theme/starling_theme.dart';
 import '../../utils/friendly_error.dart';
 import '../../utils/avatar_picker.dart';
@@ -87,76 +88,100 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                 // would bounce past the recovery screen entirely.
                 onPressed: _creating
                     ? null
-                    : () => context.go('/onboarding/welcome'),
+                    : () => context.canPop()
+                          ? context.pop()
+                          : context.go('/onboarding/welcome'),
                 semanticLabel: 'Back',
                 child: const Icon(LucideIcons.arrowLeft, size: 20),
               ),
               const SizedBox(height: 18),
-              Text(
-                'Pick a name and photo',
-                style: starling.typography.h1.copyWith(
-                  fontSize: 28,
-                  height: 1.15,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Just for your friends. You can change it anytime.',
-                style: starling.typography.small,
-              ),
-              const SizedBox(height: 36),
-              Center(
-                child: GestureDetector(
-                  onTap: _pickAvatar,
-                  child: Stack(
-                    clipBehavior: Clip.none,
+              // Scrollable body (the recovery screen's pattern) — the fixed
+              // Column + Spacer overflowed with the keyboard on small phones.
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Avatar(
-                        name: name.isEmpty ? 'You' : name,
-                        color: starling.colors.clay,
-                        size: AvatarSize.lg,
-                        imageProvider: avatarBytes != null
-                            ? MemoryImage(avatarBytes)
-                            : null,
+                      Text(
+                        'Pick a name and photo',
+                        style: starling.typography.h1.copyWith(
+                          fontSize: 28,
+                          height: 1.15,
+                        ),
                       ),
-                      Positioned(
-                        bottom: -4,
-                        right: -4,
-                        child: Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: starling.colors.paper,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: starling.colors.hairline),
-                          ),
-                          alignment: Alignment.center,
-                          child: Icon(
-                            LucideIcons.camera,
-                            size: 16,
-                            color: starling.colors.graphite,
+                      const SizedBox(height: 6),
+                      Text(
+                        'Just for your friends. You can change it anytime.',
+                        style: starling.typography.small,
+                      ),
+                      const SizedBox(height: 36),
+                      Center(
+                        child: Semantics(
+                          button: true,
+                          label: avatarBytes == null
+                              ? 'Choose a profile photo'
+                              : 'Change profile photo',
+                          child: GestureDetector(
+                            onTap: _pickAvatar,
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                Avatar(
+                                  name: name.isEmpty ? 'You' : name,
+                                  color: starling.colors.clay,
+                                  size: AvatarSize.lg,
+                                  imageProvider: avatarBytes != null
+                                      ? MemoryImage(avatarBytes)
+                                      : null,
+                                ),
+                                Positioned(
+                                  bottom: -4,
+                                  right: -4,
+                                  child: Container(
+                                    width: 32,
+                                    height: 32,
+                                    decoration: BoxDecoration(
+                                      color: starling.colors.paper,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: starling.colors.hairline,
+                                      ),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Icon(
+                                      LucideIcons.camera,
+                                      size: 16,
+                                      color: starling.colors.graphite,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
+                      ),
+                      const SizedBox(height: 28),
+                      const StarlingFieldLabel('Display name'),
+                      const SizedBox(height: 6),
+                      StarlingInput(
+                        controller: _controller,
+                        placeholder: 'Sam',
+                        maxLength: kDisplayNameMaxLength,
+                        textCapitalization: TextCapitalization.words,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) {
+                          if (_canContinue) _onContinue();
+                        },
                       ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(height: 28),
-              const StarlingFieldLabel('Display name'),
-              const SizedBox(height: 6),
-              StarlingInput(
-                controller: _controller,
-                placeholder: 'Sam',
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) {
-                  if (_canContinue) _onContinue();
-                },
-              ),
-              const Spacer(),
+              const SizedBox(height: 16),
               PrimaryButton(
                 label: _creating ? 'Creating…' : 'Continue',
                 block: true,
+                leading: _creating ? const ButtonSpinner() : null,
                 onPressed: _canContinue ? _onContinue : null,
               ),
             ],

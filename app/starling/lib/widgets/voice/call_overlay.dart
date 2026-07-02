@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../providers/second_ticker_provider.dart';
+import '../../providers/service_providers.dart';
 import '../../providers/voice_provider.dart';
 import '../../theme/starling_theme.dart';
+import '../../utils/call_duration.dart';
 
 /// A floating mini-banner shown over the tab shell while a call is active but
 /// the user has navigated away from the room screen. Tapping returns to it.
@@ -18,7 +21,15 @@ class CallOverlay extends ConsumerWidget {
 
     final starling = StarlingTheme.of(context);
     final colors = starling.colors;
-    final count = state.room.participants.length;
+    // Honest count (connecting invitees aren't "in call") + ticking mm:ss.
+    final total = state.room.participants.length;
+    final connected = state.connectedCount;
+    final countLabel = connected == total
+        ? '$connected in call'
+        : '$connected of $total connected';
+    ref.watch(secondTickerProvider);
+    final elapsed =
+        ref.read(clockProvider).nowUnixSeconds() - state.room.createdAt;
 
     return SafeArea(
       child: Padding(
@@ -29,34 +40,43 @@ class CallOverlay extends ConsumerWidget {
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: () => context.push('/voice/room'),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  const Icon(
-                    LucideIcons.phoneCall,
-                    size: 18,
-                    color: Color(0xFFFDFBF5),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      '${state.room.name} · $count in call',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: starling.typography.body.copyWith(
-                        color: const Color(0xFFFDFBF5),
-                        fontWeight: FontWeight.w500,
+            child: Semantics(
+              button: true,
+              label: 'Return to call: ${state.room.name}, $countLabel',
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      LucideIcons.phoneCall,
+                      size: 18,
+                      color: Color(0xFFFDFBF5),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        '${state.room.name} · $countLabel',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: starling.typography.body.copyWith(
+                          color: const Color(0xFFFDFBF5),
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
-                  ),
-                  Text(
-                    state.anyReconnecting ? 'Reconnecting…' : 'Tap to return',
-                    style: starling.typography.small.copyWith(
-                      color: const Color(0xFFFDFBF5),
+                    Text(
+                      state.anyReconnecting
+                          ? 'Reconnecting…'
+                          : formatCallDuration(elapsed),
+                      style: starling.typography.small.copyWith(
+                        color: const Color(0xFFFDFBF5),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

@@ -1,5 +1,11 @@
 import '../models/voice_room.dart';
 
+/// Reserved key in [VoiceService.audioLevels] snapshots for the LOCAL mic
+/// level (from the `media-source` stats report). The engine doesn't know the
+/// local pubkey; [RoomManager] translates this to it before the speaking
+/// threshold pass — "my mic works" feedback on the self tile.
+const String kSelfAudioLevelKey = 'self';
+
 /// A locally-produced ICE candidate that must be relayed to [peerPubkey] over
 /// the signaling plane. [candidate] is the WebRTC candidate as a plain map
 /// (`candidate`/`sdpMid`/`sdpMLineIndex`) so it drops straight into a
@@ -56,6 +62,12 @@ abstract class VoiceService {
 
   /// Per-peer connection-state transitions.
   Stream<VoicePeerState> get peerStates;
+
+  /// Fires with a peer's pubkey when its connection needs a fresh
+  /// offer/answer exchange — emitted only after an engine-initiated ICE
+  /// restart (never during initial negotiation, which the room manager
+  /// drives). The offerer side re-offers; the answerer side ignores it.
+  Stream<String> get renegotiationNeeded;
 
   /// `pubkey -> normalized 0..1 audio level` snapshots (speaking detection),
   /// emitted on a low-frequency poll. Best-effort.

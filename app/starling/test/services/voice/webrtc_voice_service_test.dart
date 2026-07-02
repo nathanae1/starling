@@ -247,6 +247,25 @@ void main() {
       await h.service.endSession();
     });
 
+    test('local media-source level reports as self, never as the peer',
+        () async {
+      final h = _Harness(interval: const Duration(milliseconds: 10));
+      await h.service.startSession('r');
+      await h.service.createOffer('peerB');
+      // Loud local mic + quiet remote: your own voice must not light the
+      // remote ring (the old max-over-all-reports bug).
+      h.created.single.statsReports = [
+        StatsReport('ms', 'media-source', 0, {'audioLevel': 0.9}),
+        StatsReport('ir', 'inbound-rtp', 0, {'audioLevel': 0.2}),
+      ];
+      final levels = await h.service.audioLevels.first.timeout(
+        const Duration(seconds: 2),
+      );
+      expect(levels['peerB'], 0.2);
+      expect(levels[kSelfAudioLevelKey], 0.9);
+      await h.service.endSession();
+    });
+
     test('audio levels stay silent with no peers', () async {
       final h = _Harness(interval: const Duration(milliseconds: 10));
       await h.service.startSession('r');

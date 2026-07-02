@@ -24,34 +24,38 @@ class StarlingAddressRow extends StatelessWidget {
     final starling = StarlingTheme.of(context);
     final full = starlingAddressOf(pubkey);
     final short = shortStarlingAddress(pubkey);
-    return InkWell(
-      onTap: () async {
-        await Clipboard.setData(ClipboardData(text: full));
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Address copied'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      },
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Row(
-          mainAxisAlignment: alignment,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              short,
-              style: starling.typography.small.copyWith(
-                color: starling.colors.graphite,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
+    return Semantics(
+      button: true,
+      label: 'Copy your Starling address',
+      child: InkWell(
+        onTap: () async {
+          await Clipboard.setData(ClipboardData(text: full));
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Address copied'),
+              duration: Duration(seconds: 2),
             ),
-            const SizedBox(width: 6),
-            Icon(LucideIcons.copy, size: 14, color: starling.colors.stone),
-          ],
+          );
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            mainAxisAlignment: alignment,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                short,
+                style: starling.typography.small.copyWith(
+                  color: starling.colors.graphite,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              const SizedBox(width: 6),
+              Icon(LucideIcons.copy, size: 14, color: starling.colors.stone),
+            ],
+          ),
         ),
       ),
     );

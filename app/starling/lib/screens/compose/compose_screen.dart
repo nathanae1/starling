@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../providers/compose_provider.dart';
+import '../../services/post_service.dart';
 import '../../theme/starling_theme.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/dashed_border.dart';
@@ -135,7 +136,19 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                         placeholder: 'Say something…',
                         minLines: 3,
                         maxLines: 8,
+                        maxLength: kCaptionMaxLength,
                         onChanged: controller.setCaption,
+                      ),
+                      const SizedBox(height: 4),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          '${state.caption.characters.length} / '
+                          '$kCaptionMaxLength',
+                          style: starling.typography.caption.copyWith(
+                            color: starling.colors.stone,
+                          ),
+                        ),
                       ),
                       if (state.photoBytes == null) ...[
                         const SizedBox(height: 12),

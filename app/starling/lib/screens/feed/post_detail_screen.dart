@@ -19,6 +19,7 @@ import '../../widgets/bookmark_button.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/comment_input.dart';
 import '../../widgets/comment_list.dart';
+import '../../widgets/encrypted_avatar.dart';
 import '../../widgets/encrypted_image.dart';
 import '../../widgets/starling_icon.dart';
 import '../../widgets/reaction_button.dart';
@@ -87,13 +88,42 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
   }
 }
 
-class _PostDetailBody extends ConsumerWidget {
+class _PostDetailBody extends ConsumerStatefulWidget {
   const _PostDetailBody({required this.event});
 
   final Event event;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_PostDetailBody> createState() => _PostDetailBodyState();
+}
+
+class _PostDetailBodyState extends ConsumerState<_PostDetailBody> {
+  final _scroll = ScrollController();
+  final _commentFocus = FocusNode();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    _commentFocus.dispose();
+    super.dispose();
+  }
+
+  /// A just-posted comment lands at the bottom of the list — bring it into
+  /// view once the list has rebuilt with it.
+  void _revealNewComment() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      _scroll.animateTo(
+        _scroll.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final event = widget.event;
     final starling = StarlingTheme.of(context);
     final clock = ref.watch(clockProvider);
     final caption = event.content.isEmpty
@@ -105,6 +135,14 @@ class _PostDetailBody extends ConsumerWidget {
       data: (p) => firstNameOf(p.displayName),
       orElse: () => 'Friend',
     );
+    final avatarHash = profile.maybeWhen(
+      data: (p) => p.avatarHash,
+      orElse: () => null,
+    );
+    final avatarMsgSeq = profile.maybeWhen(
+      data: (p) => p.avatarMsgSeq,
+      orElse: () => null,
+    );
 
     return SafeArea(
       bottom: false,
@@ -114,11 +152,14 @@ class _PostDetailBody extends ConsumerWidget {
             eventId: event.id,
             displayName: displayName,
             pubkey: event.pubkey,
+            avatarHash: avatarHash,
+            avatarMsgSeq: avatarMsgSeq,
             createdAt: event.createdAt,
             now: clock.nowUnixSeconds(),
           ),
           Expanded(
             child: SingleChildScrollView(
+              controller: _scroll,
               padding: const EdgeInsets.only(bottom: 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -150,7 +191,10 @@ class _PostDetailBody extends ConsumerWidget {
                   const SizedBox(height: 12),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: _ActionRow(eventId: event.id),
+                    child: _ActionRow(
+                      eventId: event.id,
+                      onComment: _commentFocus.requestFocus,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   CommentList(postId: event.id),
@@ -159,7 +203,11 @@ class _PostDetailBody extends ConsumerWidget {
               ),
             ),
           ),
-          CommentInput(postId: event.id),
+          CommentInput(
+            postId: event.id,
+            focusNode: _commentFocus,
+            onPosted: _revealNewComment,
+          ),
         ],
       ),
     );
@@ -171,6 +219,8 @@ class _DetailHeader extends ConsumerWidget {
     required this.eventId,
     required this.displayName,
     required this.pubkey,
+    required this.avatarHash,
+    required this.avatarMsgSeq,
     required this.createdAt,
     required this.now,
   });
@@ -178,6 +228,8 @@ class _DetailHeader extends ConsumerWidget {
   final String eventId;
   final String displayName;
   final String pubkey;
+  final String? avatarHash;
+  final int? avatarMsgSeq;
   final int createdAt;
   final int now;
 
@@ -200,7 +252,15 @@ class _DetailHeader extends ConsumerWidget {
             child: const Icon(LucideIcons.arrowLeft, size: 20),
           ),
           const SizedBox(width: 4),
-          Avatar(name: displayName, size: AvatarSize.sm),
+          // The real (decrypted) avatar, matching the feed card — not the
+          // initials placeholder.
+          EncryptedAvatar(
+            name: displayName,
+            pubkey: pubkey,
+            avatarHash: avatarHash,
+            avatarMsgSeq: avatarMsgSeq,
+            size: AvatarSize.sm,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -247,9 +307,12 @@ class _DetailHeader extends ConsumerWidget {
 }
 
 class _ActionRow extends ConsumerWidget {
-  const _ActionRow({required this.eventId});
+  const _ActionRow({required this.eventId, this.onComment});
 
   final String eventId;
+
+  /// Focuses the comment composer — the icon used to be inert.
+  final VoidCallback? onComment;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -270,13 +333,18 @@ class _ActionRow extends ConsumerWidget {
               ref.read(reactionControllerProvider(eventId).notifier).toggle(),
         ),
         const SizedBox(width: 18),
-        // Chat icon is just a visual marker on detail (the comments list
-        // is right below); tapping it focuses the composer would be a
-        // future polish, not load-bearing now.
-        Icon(
-          LucideIcons.messageCircle,
-          size: 24,
-          color: starling.colors.graphite,
+        Semantics(
+          button: true,
+          label: 'Write a comment',
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onComment,
+            child: Icon(
+              LucideIcons.messageCircle,
+              size: 24,
+              color: starling.colors.graphite,
+            ),
+          ),
         ),
         const Spacer(),
         BookmarkButton(eventId: eventId),

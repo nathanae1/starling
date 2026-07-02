@@ -1,9 +1,13 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:starling/models/models.dart';
+import 'package:starling/models/profile_content.dart';
+import 'package:starling/models/signaling_message.dart';
 import 'package:starling/models/voice_room.dart';
 import 'package:starling/services/clock.dart';
 import 'package:starling/services/crypto/crockford_base32.dart';
+import 'package:starling/services/mocks/mock_clock.dart';
 import 'package:starling/services/mocks/mock_crypto_service.dart';
 import 'package:starling/services/mocks/mock_signaling_service.dart';
 import 'package:starling/services/mocks/mock_storage_service.dart';
@@ -12,9 +16,43 @@ import 'package:starling/services/signaling/signaling_dispatcher.dart';
 import 'package:starling/services/voice/room_manager.dart';
 import 'package:starling/services/voice/room_signaling.dart';
 import 'package:starling/services/types.dart';
+import 'package:starling/services/voice_service.dart';
+
+/// [RoomSignaling] with per-recipient send failures, for the "we KNOW the
+/// peer is unreachable" paths.
+class _FlakyRoomSignaling extends RoomSignaling {
+  _FlakyRoomSignaling({
+    required super.signaling,
+    required super.dispatcher,
+    required super.crypto,
+    required super.clock,
+    required super.localPubkeyLookup,
+    required super.localSecretKeyLookup,
+  });
+
+  final Set<String> failTo = {};
+
+  @override
+  Future<void> sendTo(
+    String recipientPubkey, {
+    required SignalingMessageType type,
+    required String roomId,
+    required Map<String, dynamic> payload,
+  }) {
+    if (failTo.contains(recipientPubkey)) {
+      throw StateError('simulated unreachable: $recipientPubkey');
+    }
+    return super.sendTo(
+      recipientPubkey,
+      type: type,
+      roomId: roomId,
+      payload: payload,
+    );
+  }
+}
 
 class _Peer {
-  _Peer(this.pubkey, this.crypto) {
+  _Peer(this.pubkey, this.crypto, {Clock? managerClock}) {
     signaling = MockSignalingService(localPubkey: pubkey);
     dispatcher = SignalingDispatcher(
       signaling: signaling,
@@ -22,7 +60,10 @@ class _Peer {
       localPubkeyLookup: () async => pubkey,
       localSecretKeyLookup: () async => _secret,
     );
-    roomSignaling = RoomSignaling(
+    // RoomSignaling stays on SystemClock even when the manager runs on a
+    // MockClock — sealed envelopes carry a ±30s replay window that a mock
+    // "advance an hour" would trip.
+    roomSignaling = _FlakyRoomSignaling(
       signaling: signaling,
       dispatcher: dispatcher,
       crypto: crypto,
@@ -35,7 +76,7 @@ class _Peer {
       voice: voice,
       storage: storage,
       crypto: crypto,
-      clock: const SystemClock(),
+      clock: managerClock ?? const SystemClock(),
       localPubkeyLookup: () async => pubkey,
     );
     dispatcher.start();
@@ -49,8 +90,11 @@ class _Peer {
   final voice = MockVoiceService();
   late final MockSignalingService signaling;
   late final SignalingDispatcher dispatcher;
-  late final RoomSignaling roomSignaling;
+  late final _FlakyRoomSignaling roomSignaling;
   late final RoomManager manager;
+
+  VoiceParticipant participant(String p) =>
+      manager.currentState!.room.participants.firstWhere((x) => x.pubkey == p);
 
   /// Make [other] a mutual follow: we follow them (active) and they follow us
   /// (accepted inbound request).
@@ -65,6 +109,25 @@ class _Peer {
         createdAt: 0,
         requestTimestamp: 0,
         status: 'accepted',
+      ),
+    );
+  }
+
+  /// Seed a synced kind=2 profile for [other], so display-name resolution
+  /// has something to find.
+  Future<void> seedProfile(String other, String name) async {
+    await storage.saveEvent(
+      Event(
+        version: '2026-04-28',
+        id: 'profile-$name',
+        pubkey: other,
+        createdAt: 500,
+        kind: EventKind.profile,
+        ref: null,
+        content: encodeProfileContent(name: name),
+        media: const [],
+        sig: Uint8List(64),
+        msgSeq: null,
       ),
     );
   }
@@ -305,5 +368,301 @@ void main() {
       isFalse,
       reason: 'the 5th joiner is declined full — no mesh connection with it',
     );
+  });
+
+  group('timeouts and terminal states', () {
+    late MockClock aClock;
+    late MockClock bClock;
+
+    setUp(() async {
+      aClock = MockClock(1000);
+      bClock = MockClock(1000);
+      a = _Peer(pkA, crypto, managerClock: aClock);
+      b = _Peer(pkB, crypto, managerClock: bClock);
+      a.signaling.link(b.signaling);
+      await a.makeMutual(pkB);
+      await b.makeMutual(pkA);
+    });
+
+    test('unanswered invite resolves to No answer at 61s', () async {
+      await a.manager.createRoom(name: 'Chat', inviteePubkeys: [pkB]);
+      await _pump();
+
+      // Just under the deadline: still ringing.
+      aClock.advance(59);
+      a.manager.sweepDeadlines();
+      expect(
+        a.participant(pkB).connectionState,
+        ParticipantConnectionState.connecting,
+      );
+
+      aClock.advance(2);
+      a.manager.sweepDeadlines();
+      final p = a.participant(pkB);
+      expect(p.connectionState, ParticipantConnectionState.disconnected);
+      expect(p.endReason, ParticipantEndReason.noAnswer);
+    });
+
+    test('a failed invite send flags unreachable immediately', () async {
+      a.roomSignaling.failTo.add(pkB);
+      await a.manager.createRoom(name: 'Chat', inviteePubkeys: [pkB]);
+      await _pump();
+
+      final p = a.participant(pkB);
+      expect(p.connectionState, ParticipantConnectionState.disconnected);
+      expect(p.endReason, ParticipantEndReason.unreachable);
+    });
+
+    test('retryParticipant re-invites, restamps the deadline, and clears '
+        'the end reason; the peer can then join', () async {
+      final bInvites = <VoiceRoom>[];
+      b.manager.incomingInvites.listen(bInvites.add);
+      final room = await a.manager.createRoom(
+        name: 'Chat',
+        inviteePubkeys: [pkB],
+      );
+      await _pump();
+
+      aClock.advance(61);
+      a.manager.sweepDeadlines();
+      expect(a.participant(pkB).endReason, ParticipantEndReason.noAnswer);
+
+      await a.manager.retryParticipant(pkB);
+      await _pump();
+      final retried = a.participant(pkB);
+      expect(retried.connectionState, ParticipantConnectionState.connecting);
+      expect(retried.endReason, isNull);
+
+      // The re-invite refreshed B's existing pending invite — no second
+      // sheet emission.
+      expect(bInvites, hasLength(1));
+
+      // The restamped deadline holds for another full window.
+      aClock.advance(59);
+      a.manager.sweepDeadlines();
+      expect(
+        a.participant(pkB).connectionState,
+        ParticipantConnectionState.connecting,
+      );
+
+      await b.manager.acceptInvite(room.id);
+      await _pump();
+      final aOfferedB = a.voice.offeredPeers.contains(pkB);
+      final bOfferedA = b.voice.offeredPeers.contains(pkA);
+      expect(aOfferedB ^ bOfferedA, isTrue);
+    });
+
+    test('decline reasons map to labeled states', () async {
+      final room = await a.manager.createRoom(
+        name: 'Chat',
+        inviteePubkeys: [pkB],
+      );
+      await _pump();
+
+      // Plain decline (user tapped Decline).
+      await b.manager.declineInvite(room.id);
+      await _pump();
+      expect(a.participant(pkB).endReason, ParticipantEndReason.declined);
+    });
+
+    test("invite expiry sends 'timeout' → creator sees No answer, "
+        'not Declined', () async {
+      final room = await a.manager.createRoom(
+        name: 'Chat',
+        inviteePubkeys: [pkB],
+      );
+      await _pump();
+
+      await b.manager.expireInvite(room.id);
+      await _pump();
+      expect(a.participant(pkB).endReason, ParticipantEndReason.noAnswer);
+    });
+
+    test('a second concurrent invite is auto-declined busy', () async {
+      final pkC = _pk(3);
+      final c = _Peer(pkC, crypto);
+      c.signaling.link(b.signaling);
+      await c.makeMutual(pkB);
+      await b.makeMutual(pkC);
+
+      // A's call is ringing on B…
+      await a.manager.createRoom(name: 'First', inviteePubkeys: [pkB]);
+      await _pump();
+
+      // …when C calls B too.
+      await c.manager.createRoom(name: 'Second', inviteePubkeys: [pkB]);
+      await _pump();
+
+      expect(c.participant(pkB).endReason, ParticipantEndReason.busy);
+      // B never saw a second sheet: only A's invite is pending.
+      expect(b.manager.inCall, isFalse);
+    });
+
+    test('pending invite expires via the TTL sweep (missed on our side, '
+        'No answer on theirs)', () async {
+      final room = await a.manager.createRoom(
+        name: 'Chat',
+        inviteePubkeys: [pkB],
+      );
+      await _pump();
+
+      final retired = <String>[];
+      b.manager.retiredInvites.listen(retired.add);
+
+      bClock.advance(61);
+      b.manager.sweepDeadlines();
+      await _pump();
+
+      expect(retired, [room.id]);
+      expect(a.participant(pkB).endReason, ParticipantEndReason.noAnswer);
+      await expectLater(
+        () => b.manager.acceptInvite(room.id),
+        throwsStateError,
+      );
+    });
+
+    test('closeRoom reaches unanswered invitees — their pending invite is '
+        'retired', () async {
+      final room = await a.manager.createRoom(
+        name: 'Chat',
+        inviteePubkeys: [pkB],
+      );
+      await _pump();
+
+      final retired = <String>[];
+      b.manager.retiredInvites.listen(retired.add);
+
+      await a.manager.closeRoom();
+      await _pump();
+
+      expect(retired, [room.id]);
+      await expectLater(
+        () => b.manager.acceptInvite(room.id),
+        throwsStateError,
+      );
+    });
+
+    test('a late accept into a dead room gets a roomClose back', () async {
+      final room = await a.manager.createRoom(
+        name: 'Chat',
+        inviteePubkeys: [pkB],
+      );
+      await _pump();
+
+      // A abandons the call in a way that never notifies B (roomLeave goes
+      // to present peers only — nobody).
+      await a.manager.leaveRoom();
+      expect(a.manager.inCall, isFalse);
+
+      final bEnds = <RoomEndReason>[];
+      b.manager.roomEnded.listen(bEnds.add);
+
+      // B answers the stale ring: the accept bounces off A's dead room and
+      // the roomClose reply tears B down ("This call has ended").
+      await b.manager.acceptInvite(room.id);
+      await _pump();
+
+      expect(b.manager.inCall, isFalse);
+      expect(bEnds, [RoomEndReason.closedByCreator]);
+    });
+
+    test('caller + roster names resolve from LOCAL profiles, never the wire',
+        () async {
+      // B knows A as "Alex" (synced profile); A knows B as "Bob".
+      await b.seedProfile(pkA, 'Alex');
+      await a.seedProfile(pkB, 'Bob');
+
+      final bInvites = <VoiceRoom>[];
+      b.manager.incomingInvites.listen(bInvites.add);
+
+      final room = await a.manager.createRoom(
+        name: 'Chat',
+        inviteePubkeys: [pkB],
+      );
+      await _pump();
+
+      // The ringing sheet gets a name, not 8 hex chars of pubkey.
+      expect(bInvites.single.creatorDisplayName, 'Alex');
+
+      // A's roster carries B's local name for the tiles.
+      expect(a.participant(pkB).displayName, 'Bob');
+
+      await b.manager.acceptInvite(room.id);
+      await _pump();
+      expect(b.participant(pkA).displayName, 'Alex');
+    });
+
+    test('expired invite records a Missed history row on the invitee',
+        () async {
+      final room = await a.manager.createRoom(
+        name: 'Chat',
+        inviteePubkeys: [pkB],
+      );
+      await _pump();
+
+      await b.manager.expireInvite(room.id);
+      final rows = await b.storage.getRecentVoiceRooms();
+      expect(rows.single.missed, isTrue);
+      expect(rows.single.creatorPubkey, pkA);
+    });
+
+    test('creator hanging up an unanswered ring records a Missed row',
+        () async {
+      await a.manager.createRoom(name: 'Chat', inviteePubkeys: [pkB]);
+      await _pump();
+
+      await a.manager.closeRoom();
+      await _pump();
+
+      final rows = await b.storage.getRecentVoiceRooms();
+      expect(rows.single.missed, isTrue);
+    });
+
+    test('mute state rides roomAccept — a joiner sees pre-existing mutes',
+        () async {
+      final room = await a.manager.createRoom(
+        name: 'Chat',
+        inviteePubkeys: [pkB],
+      );
+      await _pump();
+      // A mutes BEFORE B joins: the muteStatus broadcast reaches nobody, so
+      // only the accept-reply payload can carry it.
+      await a.manager.setMuted(true);
+
+      await b.manager.acceptInvite(room.id);
+      await _pump();
+
+      expect(b.participant(pkA).isMuted, isTrue);
+    });
+
+    test("the engine's reserved self level lights the local tile only",
+        () async {
+      await a.manager.createRoom(name: 'Chat', inviteePubkeys: [pkB]);
+      await _pump();
+
+      a.voice.emitAudioLevels(const {kSelfAudioLevelKey: 0.5});
+      await _pump();
+
+      expect(a.participant(pkA).isSpeaking, isTrue);
+      expect(a.participant(pkB).isSpeaking, isFalse);
+    });
+
+    test('creator close emits closedByCreator to the joined peer', () async {
+      final room = await a.manager.createRoom(
+        name: 'Chat',
+        inviteePubkeys: [pkB],
+      );
+      await _pump();
+      await b.manager.acceptInvite(room.id);
+      await _pump();
+
+      final bEnds = <RoomEndReason>[];
+      b.manager.roomEnded.listen(bEnds.add);
+
+      await a.manager.closeRoom();
+      await _pump();
+
+      expect(bEnds, [RoomEndReason.closedByCreator]);
+    });
   });
 }

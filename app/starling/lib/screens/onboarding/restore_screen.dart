@@ -192,6 +192,7 @@ class _RestoreScreenState extends ConsumerState<RestoreScreen> {
               PrimaryButton(
                 label: _restoring ? 'Restoring…' : 'Restore',
                 block: true,
+                leading: _restoring ? const ButtonSpinner() : null,
                 onPressed: _canRestore ? _onRestore : null,
               ),
             ],

@@ -44,8 +44,13 @@ class WebRtcVoiceService implements VoiceService {
   final _audioLevelCtrl = StreamController<Map<String, double>>.broadcast();
   final _qualityCtrl =
       StreamController<Map<String, ConnectionQuality>>.broadcast();
+  final _renegotiationCtrl = StreamController<String>.broadcast();
 
   final Map<String, RTCPeerConnection> _peers = {};
+  // Peers granted their one-shot ICE restart after a Failed state. Cleared
+  // when the peer reconnects (or is torn down); a second Failed while still
+  // in this set is terminal.
+  final Set<String> _iceRestarted = {};
   // Per-peer previous cumulative RTP counters, for per-interval loss deltas.
   final Map<String, _QualitySample> _qualitySamples = {};
   MediaStream? _localStream;
@@ -65,6 +70,8 @@ class WebRtcVoiceService implements VoiceService {
   @override
   Stream<Map<String, ConnectionQuality>> get connectionQuality =>
       _qualityCtrl.stream;
+  @override
+  Stream<String> get renegotiationNeeded => _renegotiationCtrl.stream;
   @override
   bool get micMuted => _micMuted;
   @override
@@ -157,6 +164,7 @@ class WebRtcVoiceService implements VoiceService {
   Future<void> removePeer(String peerPubkey) async {
     final pc = _peers.remove(peerPubkey);
     _qualitySamples.remove(peerPubkey);
+    _iceRestarted.remove(peerPubkey);
     if (pc == null) return;
     try {
       await pc.close();
@@ -174,6 +182,7 @@ class WebRtcVoiceService implements VoiceService {
     }
     _peers.clear();
     _qualitySamples.clear();
+    _iceRestarted.clear();
     final stream = _localStream;
     _localStream = null;
     if (stream != null) {
@@ -223,9 +232,29 @@ class WebRtcVoiceService implements VoiceService {
     };
     pc.onConnectionState = (state) {
       if (_peerStateCtrl.isClosed) return;
-      _peerStateCtrl.add(
-        VoicePeerState(peerPubkey: peerPubkey, state: _mapState(state)),
-      );
+      var mapped = _mapState(state);
+      if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed &&
+          !_iceRestarted.contains(peerPubkey)) {
+        // One-shot ICE restart before declaring the peer gone — a mid-call
+        // network blip (Wi-Fi → cellular, Tor circuit rebuild) commonly
+        // lands here. restartIce() flags renegotiation; the room manager
+        // re-runs the offer exchange via [renegotiationNeeded]. A second
+        // Failed is terminal.
+        _iceRestarted.add(peerPubkey);
+        try {
+          pc.restartIce();
+          mapped = ParticipantConnectionState.reconnecting;
+          if (!_renegotiationCtrl.isClosed) {
+            _renegotiationCtrl.add(peerPubkey);
+          }
+        } catch (e) {
+          developer.log('voice: restartIce failed: $e', name: 'voice');
+        }
+      } else if (state ==
+          RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+        _iceRestarted.remove(peerPubkey);
+      }
+      _peerStateCtrl.add(VoicePeerState(peerPubkey: peerPubkey, state: mapped));
     };
     return pc;
   }
@@ -280,17 +309,32 @@ class WebRtcVoiceService implements VoiceService {
         double? rtt;
         for (final r in reports) {
           final v = r.values;
-          final level = v['audioLevel'];
-          if (level is num && level.toDouble() > best) best = level.toDouble();
 
           if (r.type == 'inbound-rtp') {
-            // Voice-only mesh → the sole inbound-rtp stream is the peer's audio.
+            // Voice-only mesh → the sole inbound-rtp stream is the peer's
+            // audio. The peer's level must come from HERE only: the same
+            // stats dump carries the local `media-source` level, and taking
+            // the max over all reports lit remote rings with your own voice.
+            final level = v['audioLevel'];
+            if (level is num && level.toDouble() > best) {
+              best = level.toDouble();
+            }
             final pl = v['packetsLost'];
             final pr = v['packetsReceived'];
             final j = v['jitter'];
             if (pl is num) packetsLost = pl.toInt();
             if (pr is num) packetsReceived = pr.toInt();
             if (j is num) jitter = j.toDouble();
+          } else if (r.type == 'media-source') {
+            // Local mic level — reported once under the reserved self key
+            // ("my mic works" feedback), never against a peer.
+            final level = v['audioLevel'];
+            if (level is num) {
+              final self = level.toDouble();
+              if (self > (levels[kSelfAudioLevelKey] ?? 0)) {
+                levels[kSelfAudioLevelKey] = self;
+              }
+            }
           } else if (r.type == 'candidate-pair') {
             final crtt = v['currentRoundTripTime'];
             if (crtt is num && (v['nominated'] == true || rtt == null)) {

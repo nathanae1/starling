@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../theme/starling_theme.dart';
 import '../../widgets/buttons.dart';
 
 /// Top-level settings menu. Storage management lives here as of Plan 12;
-/// other rows arrive in Plan 15.
+/// other rows arrive in Plan 15; the Account section (recovery phrase,
+/// version) in Plan 19.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
@@ -50,10 +52,19 @@ class SettingsScreen extends StatelessWidget {
             Expanded(
               child: ListView(
                 children: [
+                  const _SectionHeader('Account'),
+                  _SettingsRow(
+                    icon: LucideIcons.keyRound,
+                    label: 'Recovery phrase',
+                    detail: 'View your 24 words (requires unlock)',
+                    onTap: () => context.push('/settings/recovery-phrase'),
+                  ),
                   const _SectionHeader('Network'),
                   _SettingsRow(
                     icon: LucideIcons.globe,
-                    label: 'Network',
+                    // "Sync & connectivity" (not "Network") so the row isn't
+                    // a duplicate of its own section header.
+                    label: 'Sync & connectivity',
                     detail: 'Sync, Tor, Wi-Fi, background mode',
                     onTap: () => context.push('/settings/network'),
                   ),
@@ -77,6 +88,8 @@ class SettingsScreen extends StatelessWidget {
                     detail: 'Custom ICE servers for voice calls',
                     onTap: () => context.push('/voice/settings'),
                   ),
+                  const _SectionHeader('About'),
+                  const _VersionRow(),
                 ],
               ),
             ),
@@ -106,6 +119,57 @@ class _SectionHeader extends StatelessWidget {
           letterSpacing: 0.8,
         ),
       ),
+    );
+  }
+}
+
+/// App name + version/build from the platform package info — no tap action.
+class _VersionRow extends StatelessWidget {
+  const _VersionRow();
+
+  @override
+  Widget build(BuildContext context) {
+    final starling = StarlingTheme.of(context);
+    return FutureBuilder<PackageInfo>(
+      future: PackageInfo.fromPlatform(),
+      builder: (context, snapshot) {
+        final info = snapshot.data;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: starling.colors.hairline),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(LucideIcons.info, size: 20, color: starling.colors.graphite),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Starling',
+                      style: starling.typography.body.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: starling.colors.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      info == null
+                          ? 'Version …'
+                          : 'Version ${info.version} (${info.buildNumber})',
+                      style: starling.typography.micro,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

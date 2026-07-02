@@ -311,7 +311,7 @@ class LifecycleManager {
     // Cancel any pending publish-retry and clear the publisher's address
     // state; keep the provider write here (out of the publisher) so a late
     // timer never touches `ref` after teardown. The null gates the UI's
-    // "Tor starting…" state and sendFollowRequest's noEndpoints check.
+    // "Tor starting…" state and sendFollowRequest's own-onion queue gate.
     _onionPublisher.reset();
     ref.read(onionAddressProvider.notifier).set(null);
     _torInitFuture = null;

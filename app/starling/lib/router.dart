@@ -21,6 +21,7 @@ import 'screens/settings/connection_settings_screen.dart';
 import 'screens/settings/network_settings_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/settings/storage_settings_screen.dart';
+import 'screens/settings/view_recovery_phrase_screen.dart';
 import 'screens/settings/voice_settings_screen.dart';
 import 'screens/voice/active_room_screen.dart';
 import 'screens/voice/create_room_screen.dart';
@@ -132,6 +133,11 @@ GoRouter buildRouter(Ref ref) {
             parentNavigatorKey: _rootNavigatorKey,
             builder: (_, _) => const ConnectionSettingsScreen(),
           ),
+          GoRoute(
+            path: 'recovery-phrase',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (_, _) => const ViewRecoveryPhraseScreen(),
+          ),
         ],
       ),
 
@@ -153,8 +159,21 @@ GoRouter buildRouter(Ref ref) {
       GoRoute(
         path: '/friends/profile/:pubkey',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (_, state) =>
-            OtherProfileScreen(pubkey: state.pathParameters['pubkey']!),
+        builder: (_, state) => OtherProfileScreen(
+          pubkey: state.pathParameters['pubkey']!,
+          // Posts opened from the Friends tab stay on this root-pinned
+          // stack instead of pushing onto the Feed branch.
+          postRoutePrefix:
+              '/friends/profile/${state.pathParameters['pubkey']!}',
+        ),
+        routes: [
+          GoRoute(
+            path: 'post/:id',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (_, state) =>
+                PostDetailScreen(eventId: state.pathParameters['id']!),
+          ),
+        ],
       ),
 
       // Tab shell
@@ -205,7 +224,14 @@ GoRouter buildRouter(Ref ref) {
                 routes: [
                   GoRoute(
                     path: 'create',
-                    builder: (_, _) => const CreateRoomScreen(),
+                    // extra: List<String> pubkeys to preselect (the "call
+                    // back" path from a recent-call row).
+                    builder: (_, state) => CreateRoomScreen(
+                      initialSelection: switch (state.extra) {
+                        final List<String> pubkeys => pubkeys,
+                        _ => const <String>[],
+                      },
+                    ),
                   ),
                   GoRoute(
                     path: 'room',

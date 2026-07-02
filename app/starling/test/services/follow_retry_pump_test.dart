@@ -11,9 +11,9 @@ import 'package:starling/services/types.dart';
 
 import '../helpers/fake_peer_reachability_monitor.dart';
 
-/// Records calls to [retryQueuedAccepts] so we can assert what the pump asked
-/// for. All the super-constructor deps are inert — the override never reaches
-/// the real implementation.
+/// Records calls to [retryQueuedAccepts] and [retryQueuedRequests] so we can
+/// assert what the pump asked for. All the super-constructor deps are inert —
+/// the overrides never reach the real implementation.
 class _RecordingFollowService extends FollowService {
   _RecordingFollowService()
     : super(
@@ -28,6 +28,7 @@ class _RecordingFollowService extends FollowService {
       );
 
   final List<({String? onlyPubkey, bool ignoreBackoff})> calls = [];
+  final List<({String? onlyPubkey, bool ignoreBackoff})> requestCalls = [];
 
   @override
   Future<void> retryQueuedAccepts({
@@ -36,6 +37,15 @@ class _RecordingFollowService extends FollowService {
     bool ignoreBackoff = false,
   }) async {
     calls.add((onlyPubkey: onlyPubkey, ignoreBackoff: ignoreBackoff));
+  }
+
+  @override
+  Future<void> retryQueuedRequests({
+    int failedStatusThreshold = 10,
+    String? onlyPubkey,
+    bool ignoreBackoff = false,
+  }) async {
+    requestCalls.add((onlyPubkey: onlyPubkey, ignoreBackoff: ignoreBackoff));
   }
 }
 
@@ -85,6 +95,10 @@ void main() {
     expect(service.calls, hasLength(1));
     expect(service.calls.single.onlyPubkey, alice);
     expect(service.calls.single.ignoreBackoff, isTrue);
+    // The trigger drains BOTH handshake legs — outbound requests too.
+    expect(service.requestCalls, hasLength(1));
+    expect(service.requestCalls.single.onlyPubkey, alice);
+    expect(service.requestCalls.single.ignoreBackoff, isTrue);
   });
 
   test(

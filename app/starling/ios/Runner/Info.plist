@@ -20,6 +20,8 @@
 	<string>Starling uses the camera to capture photos for your posts and to scan friend invite QR codes.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Starling uses the microphone for voice calls with your friends.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Starling uses Face ID to unlock your recovery phrase.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Starling finds nearby friends on your WiFi to sync your feed without a server.</string>
 	<key>NSBonjourServices</key>

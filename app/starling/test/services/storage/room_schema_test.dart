@@ -10,10 +10,10 @@ void main() {
   setUp(() => db = AppDatabase.memory());
   tearDown(() async => db.close());
 
-  test('schemaVersion is 10', () {
+  test('schemaVersion is 11', () {
     // v9 added the Plan 17 chatroom tables; v10 dropped the vestigial follow
-    // name/avatar columns.
-    expect(db.schemaVersion, 10);
+    // name/avatar columns; v11 added the voice-room missed-call flag.
+    expect(db.schemaVersion, 11);
   });
 
   test('the three chatroom tables exist', () async {

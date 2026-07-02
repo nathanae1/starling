@@ -21,13 +21,23 @@ import '../../widgets/buttons.dart';
 import '../../widgets/encrypted_avatar.dart';
 import '../../widgets/encrypted_image.dart';
 import '../../widgets/starling_address_row.dart';
+import '../../widgets/starling_alert_dialog.dart';
 
 /// Other-profile screen: header + last-synced + reachability pill, post grid,
 /// unfollow CTA wired to [FollowService].
 class OtherProfileScreen extends ConsumerWidget {
-  const OtherProfileScreen({super.key, required this.pubkey});
+  const OtherProfileScreen({
+    super.key,
+    required this.pubkey,
+    this.postRoutePrefix = '/feed',
+  });
 
   final String pubkey;
+
+  /// Where the post grid pushes post details — '/feed' when opened from the
+  /// feed branch, the root-pinned `/friends/profile/&lt;pubkey&gt;` otherwise,
+  /// so a tap doesn't jump tabs.
+  final String postRoutePrefix;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -73,7 +83,8 @@ class OtherProfileScreen extends ConsumerWidget {
               ),
             ),
             postsAsync.when(
-              data: (events) => _PostGrid(events: events),
+              data: (events) =>
+                  _PostGrid(events: events, routePrefix: postRoutePrefix),
               loading: () => const SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.all(24),
@@ -213,38 +224,46 @@ class _IdentityBlock extends ConsumerWidget {
         ? 'You will stop receiving posts from $displayName, and they '
               'will no longer receive your future posts.'
         : 'You will stop receiving posts from $displayName.';
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Unfollow?'),
-        content: Text(body),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Unfollow'),
-          ),
-        ],
-      ),
+    final confirm = await showStarlingConfirm(
+      context,
+      title: 'Unfollow?',
+      message: body,
+      confirmLabel: 'Unfollow',
+      destructive: true,
     );
-    if (confirm != true) return;
-    if (!context.mounted) return;
-    await ref.read(followServiceProvider).unfollow(pubkey);
+    if (!confirm || !context.mounted) return;
+    // Mutual unfollow rotates the feed key — visibly slow, show progress.
+    await runWithStarlingProgress(
+      context,
+      message: 'Unfollowing…',
+      op: () => ref.read(followServiceProvider).unfollow(pubkey),
+    );
     if (context.mounted) unawaited(Navigator.of(context).maybePop());
   }
 }
 
 class _PostGrid extends StatelessWidget {
-  const _PostGrid({required this.events});
+  const _PostGrid({required this.events, required this.routePrefix});
   final List<Event> events;
+  final String routePrefix;
 
   @override
   Widget build(BuildContext context) {
+    final starling = StarlingTheme.of(context);
     if (events.isEmpty) {
-      return const SliverToBoxAdapter(child: SizedBox.shrink());
+      // An empty grid rendered literally nothing — say why it's empty.
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+          child: Text(
+            "No posts yet — or they haven't synced to this phone yet.",
+            textAlign: TextAlign.center,
+            style: starling.typography.small.copyWith(
+              color: starling.colors.stone,
+            ),
+          ),
+        ),
+      );
     }
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 16),
@@ -257,15 +276,19 @@ class _PostGrid extends StatelessWidget {
         delegate: SliverChildBuilderDelegate((context, index) {
           final event = events[index];
           final hash = event.media.isNotEmpty ? event.media.first.hash : null;
-          return GestureDetector(
-            onTap: () => context.push('/feed/post/${event.id}'),
-            child: hash == null
-                ? const ColoredBox(color: Colors.transparent)
-                : EncryptedImage(
-                    hash: hash,
-                    pubkey: event.pubkey,
-                    msgSeq: event.msgSeq,
-                  ),
+          return Semantics(
+            button: true,
+            label: 'Post ${index + 1} of ${events.length}',
+            child: GestureDetector(
+              onTap: () => context.push('$routePrefix/post/${event.id}'),
+              child: hash == null
+                  ? const ColoredBox(color: Colors.transparent)
+                  : EncryptedImage(
+                      hash: hash,
+                      pubkey: event.pubkey,
+                      msgSeq: event.msgSeq,
+                    ),
+            ),
           );
         }, childCount: events.length),
       ),

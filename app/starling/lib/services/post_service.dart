@@ -15,6 +15,11 @@ import 'post_fanout_service.dart';
 import 'storage_service.dart';
 import 'types.dart';
 
+/// Hard cap on post caption length, in grapheme clusters. Enforced at input
+/// by the compose editor (with a counter); feed cards clamp display to a few
+/// lines regardless.
+const kCaptionMaxLength = 1000;
+
 abstract class PostService {
   /// Create a kind=1 post with optional caption + one compressed photo.
   /// Returns the new event id.

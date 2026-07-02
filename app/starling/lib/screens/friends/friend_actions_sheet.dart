@@ -7,6 +7,7 @@ import '../../providers/follow_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../services/types.dart';
 import '../../theme/starling_theme.dart';
+import '../../widgets/starling_alert_dialog.dart';
 
 class FriendActionsSheet extends ConsumerWidget {
   const FriendActionsSheet({super.key, required this.follow});
@@ -59,28 +60,20 @@ class FriendActionsSheet extends ConsumerWidget {
         ? 'You will stop receiving posts from $name, and they will no '
               'longer receive your future posts.'
         : 'You will stop receiving posts from $name.';
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Unfollow?'),
-          content: Text(body),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Unfollow'),
-            ),
-          ],
-        );
-      },
+    final confirm = await showStarlingConfirm(
+      context,
+      title: 'Unfollow?',
+      message: body,
+      confirmLabel: 'Unfollow',
+      destructive: true,
     );
-    if (confirm != true) return;
-    if (!context.mounted) return;
-    await ref.read(followServiceProvider).unfollow(follow.pubkey);
+    if (!confirm || !context.mounted) return;
+    // Mutual unfollow rotates the feed key — visibly slow, show progress.
+    await runWithStarlingProgress(
+      context,
+      message: 'Unfollowing…',
+      op: () => ref.read(followServiceProvider).unfollow(follow.pubkey),
+    );
     if (context.mounted) Navigator.of(context).pop();
   }
 }

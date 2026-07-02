@@ -267,6 +267,11 @@ abstract class StorageService {
   /// Most recent rooms for the "recent rooms" list, newest first.
   Future<List<VoiceRoom>> getRecentVoiceRooms({int limit});
 
+  /// Live view of [getRecentVoiceRooms] — re-emits on any voice-room write
+  /// (call ended, missed-call recorded) so the list updates without a
+  /// restart.
+  Stream<List<VoiceRoom>> watchRecentVoiceRooms({int limit});
+
   /// Delete rooms older than [maxAgeSeconds]. Returns rooms removed.
   Future<int> evictOldVoiceRooms(int maxAgeSeconds);
 

@@ -17,6 +17,60 @@ void main() {
 
   tearDown(() async => db.close());
 
+  test('missed flag round-trips; answering the same call clears it', () async {
+    final now = nowSecs();
+    await storage.saveVoiceRoom(
+      VoiceRoom(
+        id: 'call-1',
+        name: 'Voice room',
+        creatorPubkey: 'pk-a',
+        createdAt: now,
+        endedAt: now,
+        missed: true,
+      ),
+    );
+    var rows = await storage.getRecentVoiceRooms();
+    expect(rows.single.missed, isTrue);
+
+    // Answering a later retry of the same call upserts the row back to a
+    // normal entry.
+    await storage.saveVoiceRoom(
+      VoiceRoom(
+        id: 'call-1',
+        name: 'Voice room',
+        creatorPubkey: 'pk-a',
+        createdAt: now + 30,
+      ),
+    );
+    rows = await storage.getRecentVoiceRooms();
+    expect(rows.single.missed, isFalse);
+  });
+
+  test('watchRecentVoiceRooms re-emits on writes (no restart needed)',
+      () async {
+    final emissions = <List<VoiceRoom>>[];
+    final sub = storage.watchRecentVoiceRooms().listen(emissions.add);
+    addTearDown(sub.cancel);
+
+    // Let the initial (empty) emission land.
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    await storage.saveVoiceRoom(
+      VoiceRoom(
+        id: 'call-w',
+        name: 'Voice room',
+        creatorPubkey: 'pk-a',
+        createdAt: nowSecs(),
+        missed: true,
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    expect(emissions.first, isEmpty);
+    expect(emissions.last.single.id, 'call-w');
+    expect(emissions.last.single.missed, isTrue);
+  });
+
   test('round-trips a room with participants, newest first', () async {
     final now = nowSecs();
     await storage.saveVoiceRoom(

@@ -65,34 +65,46 @@ class _StorageSettingsScreenState extends ConsumerState<StorageSettingsScreen> {
   }
 
   Future<void> _clearCache() async {
+    // Show what the clear actually frees — the summary already computed it.
+    final freeable = (await _summary)?.cachedFromOthersBytes ?? 0;
+    if (!mounted) return;
     final confirmed = await showStarlingConfirm(
       context,
       title: 'Clear cache?',
       message:
-          'Removes downloaded photos from friends. Your own posts and '
-          'saved posts are kept. Photos will reload from peers when '
-          'you next view them.',
+          'Frees ${_fmt(freeable)} of downloaded photos from friends. Your '
+          'own posts and saved posts are kept. Photos will reload from '
+          'peers when you next view them.',
       confirmLabel: 'Clear',
       destructive: true,
     );
-    if (!confirmed) return;
+    if (!confirmed || !mounted) return;
 
     setState(() => _busy = true);
     try {
-      final storage = ref.read(storageServiceProvider);
-      final supportDir = await ref.read(appSupportDirectoryProvider.future);
-      final pinned = await storage.getPinnedMediaHashes();
-      final removed = await storage.clearCachedMediaExcluding(pinned);
-      for (final entry in removed) {
-        try {
-          final file = File(
-            p.join(supportDir.path, mediaRelativePath(entry.hash)),
+      final removed = await runWithStarlingProgress(
+        context,
+        message: 'Clearing cache…',
+        op: () async {
+          final storage = ref.read(storageServiceProvider);
+          final supportDir = await ref.read(
+            appSupportDirectoryProvider.future,
           );
-          if (file.existsSync()) await file.delete();
-        } catch (_) {
-          // best effort
-        }
-      }
+          final pinned = await storage.getPinnedMediaHashes();
+          final removed = await storage.clearCachedMediaExcluding(pinned);
+          for (final entry in removed) {
+            try {
+              final file = File(
+                p.join(supportDir.path, mediaRelativePath(entry.hash)),
+              );
+              if (file.existsSync()) await file.delete();
+            } catch (_) {
+              // best effort
+            }
+          }
+          return removed;
+        },
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Cleared ${removed.length} cached files')),
@@ -109,7 +121,11 @@ class _StorageSettingsScreenState extends ConsumerState<StorageSettingsScreen> {
     setState(() => _busy = true);
     try {
       final exporter = ref.read(exportServiceProvider);
-      final result = await exporter.exportOwnContent();
+      final result = await runWithStarlingProgress(
+        context,
+        message: 'Preparing export…',
+        op: exporter.exportOwnContent,
+      );
       if (!mounted) return;
       await SharePlus.instance.share(
         ShareParams(

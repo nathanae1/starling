@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
-
 import '../../models/voice_room.dart';
 import '../../providers/identity_provider.dart';
+import '../../providers/second_ticker_provider.dart';
+import '../../providers/service_providers.dart';
 import '../../providers/voice_provider.dart';
 import '../../theme/starling_theme.dart';
+import '../../utils/call_duration.dart';
 import '../../widgets/starling_alert_dialog.dart';
 import '../../widgets/voice/participant_avatar.dart';
 
@@ -23,21 +24,40 @@ class ActiveRoomScreen extends ConsumerStatefulWidget {
   ConsumerState<ActiveRoomScreen> createState() => _ActiveRoomScreenState();
 }
 
-class _ActiveRoomScreenState extends ConsumerState<ActiveRoomScreen> {
+class _ActiveRoomScreenState extends ConsumerState<ActiveRoomScreen>
+    with WidgetsBindingObserver {
   bool _leaving = false;
+  // Mic permission verdict: null while the request is in flight. Blocked →
+  // persistent banner + no "Live" label (we'd be transmitting nothing).
+  bool? _micGranted;
 
   @override
   void initState() {
     super.initState();
-    WakelockPlus.enable();
+    WidgetsBinding.instance.addObserver(this);
+    // Wakelock is tied to call state in AppShell (not this screen's mount),
+    // so navigating to the overlay can't let the phone lock mid-call.
+    _checkMic();
+  }
+
+  Future<void> _checkMic() async {
     // The mic prompt also fires inside getUserMedia, but request up front so
     // a denial is visible before we appear to "join".
-    Permission.microphone.request();
+    final status = await Permission.microphone.request();
+    if (mounted) setState(() => _micGranted = status.isGranted);
+  }
+
+  /// Re-check on resume so returning from Settings clears the banner.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _micGranted == false) {
+      _checkMic();
+    }
   }
 
   @override
   void dispose() {
-    WakelockPlus.disable();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -79,6 +99,18 @@ class _ActiveRoomScreenState extends ConsumerState<ActiveRoomScreen> {
         if (mounted && !_leaving) Navigator.of(context).maybePop();
       }
     });
+    // A silent pop is indistinguishable from a bug — tell non-initiators
+    // why the screen just closed.
+    ref.listen(roomEndReasonProvider, (_, next) {
+      if (next.value == RoomEndReason.closedByCreator && !_leaving) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Call ended'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    });
 
     final state = ref.watch(voiceRoomStateProvider).value;
     if (state == null) {
@@ -90,6 +122,17 @@ class _ActiveRoomScreenState extends ConsumerState<ActiveRoomScreen> {
 
     final room = state.room;
     final participants = room.participants;
+
+    // Ticking mm:ss — the second ticker only runs while a call screen
+    // watches it.
+    ref.watch(secondTickerProvider);
+    final elapsed =
+        ref.read(clockProvider).nowUnixSeconds() - room.createdAt;
+    // Honest count: connecting invitees aren't "in call".
+    final connected = state.connectedCount;
+    final countLabel = connected == participants.length
+        ? '$connected in call'
+        : '$connected of ${participants.length} connected';
 
     return Scaffold(
       backgroundColor: colors.ink,
@@ -109,7 +152,7 @@ class _ActiveRoomScreenState extends ConsumerState<ActiveRoomScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${participants.length} in call',
+                    '$countLabel · ${formatCallDuration(elapsed)}',
                     style: starling.typography.small.copyWith(
                       color: colors.stone,
                     ),
@@ -117,7 +160,21 @@ class _ActiveRoomScreenState extends ConsumerState<ActiveRoomScreen> {
                 ],
               ),
             ),
+            if (_micGranted == false) const _MicBlockedBanner(),
             if (state.anyReconnecting) const _ReconnectingBanner(),
+            // Ringing over Tor is legitimately slow — set expectations
+            // instead of showing a bare spinner.
+            if (!state.anyReconnecting && state.anyConnecting)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  'Connecting over Tor — this can take a minute',
+                  textAlign: TextAlign.center,
+                  style: starling.typography.small.copyWith(
+                    color: colors.stone,
+                  ),
+                ),
+              ),
             Expanded(
               // Center the avatars when there's room, but scroll once enough
               // participants (6+) overflow a single screen so none get clipped
@@ -145,6 +202,11 @@ class _ActiveRoomScreenState extends ConsumerState<ActiveRoomScreen> {
                             ParticipantAvatar(
                               participant: p,
                               isYou: p.pubkey == myPubkey,
+                              onRetry: p.pubkey == myPubkey
+                                  ? null
+                                  : () => ref
+                                        .read(roomManagerProvider)
+                                        .retryParticipant(p.pubkey),
                             ),
                         ],
                       ),
@@ -155,6 +217,7 @@ class _ActiveRoomScreenState extends ConsumerState<ActiveRoomScreen> {
             ),
             _Controls(
               muted: state.localMuted,
+              micBlocked: _micGranted == false,
               speaker: state.speakerMode,
               onMute: () =>
                   ref.read(roomManagerProvider).setMuted(!state.localMuted),
@@ -163,6 +226,57 @@ class _ActiveRoomScreenState extends ConsumerState<ActiveRoomScreen> {
               onLeave: () => _leave(room, myPubkey),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Persistent banner while the OS mic permission is denied — the user is in
+/// the call but transmitting nothing, which is otherwise invisible.
+class _MicBlockedBanner extends StatelessWidget {
+  const _MicBlockedBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final starling = StarlingTheme.of(context);
+    final colors = starling.colors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      child: Semantics(
+        liveRegion: true,
+        label: 'Microphone blocked',
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: colors.danger.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: colors.danger.withValues(alpha: 0.5)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(LucideIcons.micOff, size: 14, color: colors.danger),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  "Microphone blocked — others can't hear you",
+                  style: starling.typography.small.copyWith(
+                    color: _onInk,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: openAppSettings,
+                style: TextButton.styleFrom(
+                  foregroundColor: colors.sage,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text('Open Settings'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -221,6 +335,7 @@ class _ReconnectingBanner extends StatelessWidget {
 class _Controls extends StatelessWidget {
   const _Controls({
     required this.muted,
+    required this.micBlocked,
     required this.speaker,
     required this.onMute,
     required this.onSpeaker,
@@ -228,6 +343,9 @@ class _Controls extends StatelessWidget {
   });
 
   final bool muted;
+
+  /// OS-level mic denial: never show "Live" while transmitting nothing.
+  final bool micBlocked;
   final bool speaker;
   final VoidCallback onMute;
   final VoidCallback onSpeaker;
@@ -245,14 +363,16 @@ class _Controls extends StatelessWidget {
           // (transmitting) is the active/positive state (sage); "Muted" is
           // inactive (graphite circle, stone label).
           _CircleControl(
-            icon: muted ? LucideIcons.micOff : LucideIcons.mic,
-            label: muted ? 'Muted' : 'Live',
-            background: muted ? colors.graphite : colors.sage,
-            labelColor: muted ? colors.stone : colors.sage,
-            semanticLabel: muted
+            icon: (muted || micBlocked) ? LucideIcons.micOff : LucideIcons.mic,
+            label: micBlocked ? 'Mic blocked' : (muted ? 'Muted' : 'Live'),
+            background: (muted || micBlocked) ? colors.graphite : colors.sage,
+            labelColor: (muted || micBlocked) ? colors.stone : colors.sage,
+            semanticLabel: micBlocked
+                ? 'Microphone blocked by system settings'
+                : muted
                 ? 'Microphone muted. Tap to unmute'
                 : 'Microphone live. Tap to mute',
-            tooltip: muted ? 'Unmute' : 'Mute',
+            tooltip: micBlocked ? 'Microphone blocked' : (muted ? 'Unmute' : 'Mute'),
             onTap: onMute,
           ),
           _CircleControl(

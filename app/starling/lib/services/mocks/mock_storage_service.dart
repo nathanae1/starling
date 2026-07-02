@@ -64,6 +64,7 @@ class MockStorageService implements StorageService {
     unawaited(_inboundFollowersController.close());
     unawaited(_outboundController.close());
     unawaited(_eventsChangedController.close());
+    unawaited(_voiceRoomsCtrl.close());
   }
 
   // --- Identity ---
@@ -660,16 +661,23 @@ class MockStorageService implements StorageService {
 
   final Map<String, VoiceRoom> _voiceRooms = {};
   final Map<String, Map<String, VoiceParticipant>> _voiceParticipants = {};
+  final StreamController<void> _voiceRoomsCtrl = StreamController.broadcast();
+
+  void _emitVoiceRooms() {
+    if (!_voiceRoomsCtrl.isClosed) _voiceRoomsCtrl.add(null);
+  }
 
   @override
   Future<void> saveVoiceRoom(VoiceRoom room) async {
     _voiceRooms[room.id] = room;
+    _emitVoiceRooms();
   }
 
   @override
   Future<void> updateVoiceRoomEnded(String roomId, int endedAt) async {
     final r = _voiceRooms[roomId];
     if (r != null) _voiceRooms[roomId] = r.copyWith(endedAt: endedAt);
+    _emitVoiceRooms();
   }
 
   @override
@@ -684,6 +692,7 @@ class MockStorageService implements StorageService {
       displayName: displayName,
       connectionState: ParticipantConnectionState.disconnected,
     );
+    _emitVoiceRooms();
   }
 
   @override
@@ -699,6 +708,14 @@ class MockStorageService implements StorageService {
           ),
         )
         .toList();
+  }
+
+  @override
+  Stream<List<VoiceRoom>> watchRecentVoiceRooms({int limit = 10}) async* {
+    yield await getRecentVoiceRooms(limit: limit);
+    await for (final _ in _voiceRoomsCtrl.stream) {
+      yield await getRecentVoiceRooms(limit: limit);
+    }
   }
 
   @override

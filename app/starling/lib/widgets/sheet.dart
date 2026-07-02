@@ -9,18 +9,40 @@ Future<T?> showStarlingSheet<T>({
   bool isDismissible = true,
 }) {
   final starling = StarlingTheme.of(context);
-  return showModalBottomSheet<T>(
+  // A caller-supplied transition controller is NOT owned by the route — we
+  // must dispose it ourselves, and only after the exit animation (which it
+  // drives) fully settles. Every sheet in the app routes through here, so
+  // this used to leak one ticker per sheet shown.
+  final controller = AnimationController(
+    vsync: Navigator.of(context),
+    duration: const Duration(milliseconds: 280),
+  );
+  final result = showModalBottomSheet<T>(
     context: context,
     isScrollControlled: isScrollControlled,
     isDismissible: isDismissible,
     backgroundColor: Colors.transparent,
     barrierColor: starling.colors.shadowInk.withValues(alpha: 0.35),
-    transitionAnimationController: AnimationController(
-      vsync: Navigator.of(context),
-      duration: const Duration(milliseconds: 280),
-    ),
+    transitionAnimationController: controller,
     builder: (ctx) => StarlingSheet(child: Builder(builder: builder)),
   );
+  result.whenComplete(() {
+    // The future resolves at pop; the reverse animation may still be
+    // running on this controller.
+    if (controller.status == AnimationStatus.dismissed) {
+      controller.dispose();
+    } else {
+      late final void Function(AnimationStatus) onStatus;
+      onStatus = (status) {
+        if (status == AnimationStatus.dismissed) {
+          controller.removeStatusListener(onStatus);
+          controller.dispose();
+        }
+      };
+      controller.addStatusListener(onStatus);
+    }
+  });
+  return result;
 }
 
 class StarlingSheet extends StatelessWidget {

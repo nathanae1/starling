@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../providers/voice_provider.dart';
+import '../../services/voice/ice_config.dart';
 import '../../theme/starling_theme.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/inputs.dart';
@@ -48,8 +49,27 @@ class _VoiceSettingsScreenState extends ConsumerState<VoiceSettingsScreen> {
       await _storage.write(key: kCustomIceServersKey, value: text);
     }
     ref.invalidate(voiceServiceProvider);
+    // Report what actually parsed — an unconditional "Saved" hid every
+    // typo'd line (parsing is best-effort and skips malformed entries).
+    final lines = text
+        .split('\n')
+        .where((l) => l.trim().isNotEmpty && !l.trim().startsWith('#'))
+        .length;
+    final parsed = IceConfig.parseServers(text).length;
+    final skipped = lines - parsed;
     messenger.showSnackBar(
-      const SnackBar(content: Text('Saved. Applies to your next call.')),
+      SnackBar(
+        content: Text(
+          text.isEmpty
+              ? 'Cleared. Next call uses direct connections only.'
+              : skipped == 0
+              ? '$parsed server${parsed == 1 ? '' : 's'} saved. Applies to '
+                    'your next call.'
+              : '$parsed server${parsed == 1 ? '' : 's'} saved, $skipped '
+                    'line${skipped == 1 ? '' : 's'} skipped (unrecognized). '
+                    'Applies to your next call.',
+        ),
+      ),
     );
   }
 

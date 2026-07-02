@@ -3,10 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../providers/comments_provider.dart';
+import '../providers/identity_provider.dart';
+import '../providers/own_profile_provider.dart';
 import '../theme/starling_theme.dart';
 import '../utils/debug_log.dart';
 import 'avatar.dart';
 import 'buttons.dart';
+import 'encrypted_avatar.dart';
 import 'inputs.dart';
 
 /// Sticky composer for the post detail screen. Avatar.sm on the left,
@@ -15,9 +18,21 @@ import 'inputs.dart';
 /// keyboard via `MediaQuery.viewInsetsOf(context).bottom`. Reserves the
 /// home-indicator safe-area inset when the keyboard is closed.
 class CommentInput extends ConsumerStatefulWidget {
-  const CommentInput({super.key, required this.postId});
+  const CommentInput({
+    super.key,
+    required this.postId,
+    this.focusNode,
+    this.onPosted,
+  });
 
   final String postId;
+
+  /// Optional external focus node so the post detail's comment icon can
+  /// focus the composer.
+  final FocusNode? focusNode;
+
+  /// Fired after a comment lands — the detail screen scrolls it into view.
+  final VoidCallback? onPosted;
 
   @override
   ConsumerState<CommentInput> createState() => _CommentInputState();
@@ -25,13 +40,14 @@ class CommentInput extends ConsumerStatefulWidget {
 
 class _CommentInputState extends ConsumerState<CommentInput> {
   final TextEditingController _controller = TextEditingController();
-  final FocusNode _focusNode = FocusNode();
+  late final FocusNode _focusNode = widget.focusNode ?? FocusNode();
   bool _sending = false;
 
   @override
   void dispose() {
     _controller.dispose();
-    _focusNode.dispose();
+    // Only dispose what we own.
+    if (widget.focusNode == null) _focusNode.dispose();
     super.dispose();
   }
 
@@ -45,6 +61,7 @@ class _CommentInputState extends ConsumerState<CommentInput> {
           .read(commentControllerProvider(widget.postId).notifier)
           .submit(text);
       _controller.clear();
+      widget.onPosted?.call();
     } catch (e) {
       // The typed text stays in the field; just say the send didn't land
       // instead of the button silently doing nothing.
@@ -67,6 +84,10 @@ class _CommentInputState extends ConsumerState<CommentInput> {
   Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
     final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    // The real profile avatar, not an anonymous "You" placeholder — this is
+    // who the comment posts as.
+    final profile = ref.watch(ownProfileProvider).value;
+    final ownPubkey = ref.watch(identityControllerProvider).value?.pubkey;
 
     return AnimatedPadding(
       duration: const Duration(milliseconds: 100),
@@ -83,17 +104,29 @@ class _CommentInputState extends ConsumerState<CommentInput> {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                const Avatar(name: 'You', size: AvatarSize.sm),
+                if (profile != null && ownPubkey != null)
+                  EncryptedAvatar(
+                    name: profile.displayName,
+                    pubkey: ownPubkey,
+                    avatarHash: profile.avatarHash,
+                    avatarMsgSeq: profile.avatarMsgSeq,
+                    size: AvatarSize.sm,
+                  )
+                else
+                  const Avatar(name: 'You', size: AvatarSize.sm),
                 const SizedBox(width: 10),
                 Expanded(
                   child: StarlingInput(
                     controller: _controller,
                     focusNode: _focusNode,
                     placeholder: 'Say something kind…',
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) => _submit(),
+                    // Grows to a few lines for longer comments; send stays
+                    // on the action button.
+                    minLines: 1,
+                    maxLines: 4,
+                    textInputAction: TextInputAction.newline,
                     style: starling.typography.body.copyWith(fontSize: 14),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 14,

@@ -12,6 +12,7 @@ class MockVoiceService implements VoiceService {
   final _audioLevelCtrl = StreamController<Map<String, double>>.broadcast();
   final _qualityCtrl =
       StreamController<Map<String, ConnectionQuality>>.broadcast();
+  final _renegotiationCtrl = StreamController<String>.broadcast();
 
   bool _micMuted = false;
   bool _speakerMode = false;
@@ -40,6 +41,8 @@ class MockVoiceService implements VoiceService {
   @override
   Stream<Map<String, ConnectionQuality>> get connectionQuality =>
       _qualityCtrl.stream;
+  @override
+  Stream<String> get renegotiationNeeded => _renegotiationCtrl.stream;
   @override
   bool get micMuted => _micMuted;
   @override
@@ -114,4 +117,7 @@ class MockVoiceService implements VoiceService {
 
   void emitConnectionQuality(Map<String, ConnectionQuality> quality) =>
       _qualityCtrl.add(quality);
+
+  void emitRenegotiationNeeded(String peerPubkey) =>
+      _renegotiationCtrl.add(peerPubkey);
 }

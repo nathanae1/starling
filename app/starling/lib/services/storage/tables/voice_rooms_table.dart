@@ -11,6 +11,11 @@ class VoiceRoomEntries extends Table {
   IntColumn get endedAt => integer().nullable()();
   IntColumn get participantCount => integer().withDefault(const Constant(1))();
 
+  /// Invitee-side: the call rang (or auto-declined busy) and was never
+  /// answered — renders "Missed" in the recent list. Answering a later
+  /// retry upserts the row back to false.
+  BoolColumn get missed => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
 }

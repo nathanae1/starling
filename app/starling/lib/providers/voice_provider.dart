@@ -86,10 +86,26 @@ Stream<VoiceRoom> incomingVoiceInvites(Ref ref) {
   return ref.watch(roomManagerProvider).incomingInvites;
 }
 
-/// Recent local call history for the room list.
+/// Room ids whose pending invite was retired unanswered (TTL expiry or the
+/// creator closed the call) — the ringing sheet closes on this.
 @riverpod
-Future<List<VoiceRoom>> recentVoiceRooms(Ref ref) {
-  return ref.watch(storageServiceProvider).getRecentVoiceRooms(limit: 10);
+Stream<String> retiredVoiceInvites(Ref ref) {
+  return ref.watch(roomManagerProvider).retiredInvites;
+}
+
+/// Why the last call ended — drives the non-creator "Call ended" snackbar.
+@riverpod
+Stream<RoomEndReason> roomEndReason(Ref ref) {
+  return ref.watch(roomManagerProvider).roomEnded;
+}
+
+/// Recent local call history for the room list. A drift watch stream (not a
+/// one-shot read): missed-call rows land invitee-side with NO live-state
+/// transition to invalidate on, and a just-finished call must appear
+/// without an app restart.
+@riverpod
+Stream<List<VoiceRoom>> recentVoiceRooms(Ref ref) {
+  return ref.watch(storageServiceProvider).watchRecentVoiceRooms(limit: 10);
 }
 
 /// Active follows who also follow us — the only contacts invitable to a room
