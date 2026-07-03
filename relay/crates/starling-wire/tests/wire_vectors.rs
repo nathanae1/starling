@@ -12,6 +12,7 @@
 
 use base64::Engine;
 use serde_json::Value;
+use starling_wire::delete::{DeleteEventsRequest, DeleteMediaRequest, DeleteReceipt};
 use starling_wire::event_header::EncryptedEventHeader;
 use starling_wire::manifest::{ManifestEntry, ManifestPage, MediaManifestPage};
 use starling_wire::pairing::{
@@ -19,7 +20,8 @@ use starling_wire::pairing::{
 };
 use starling_wire::push::{PushBatch, PushReceipt};
 use starling_wire::{
-    crockford_base32_decode, crockford_base32_encode, verify_ed25519, verify_owner_sig,
+    crockford_base32_decode, crockford_base32_encode, owner_request_digest, verify_ed25519,
+    verify_owner_request_sig, verify_owner_sig, PROTOCOL_VERSION,
 };
 
 fn vectors() -> Value {
@@ -43,6 +45,17 @@ fn owner_pk(vectors: &Value) -> [u8; 32] {
     unhex(&vectors["keypair"]["ed25519_public_key_hex"])
         .try_into()
         .unwrap()
+}
+
+/// F3: the Rust and Dart version constants both pin to the SAME vector
+/// entry, so a one-sided bump fails the other side's tests.
+#[test]
+fn protocol_version_pins_to_shared_vector_entry() {
+    let v = vectors();
+    assert_eq!(
+        PROTOCOL_VERSION,
+        v["protocol_version"].as_str().expect("protocol_version entry")
+    );
 }
 
 #[test]
@@ -148,6 +161,89 @@ fn push_batch_decodes_and_owner_sig_verifies() {
         &body,
         &unhex(&c["owner_sig_hex"])
     ));
+}
+
+/// F4: a Dart-produced batch carrying a non-"event" item type decodes with
+/// the type preserved (and the untyped batch still defaults to "event").
+#[test]
+fn typed_push_batch_decodes_with_type_preserved() {
+    let v = vectors();
+    let c = &rw(&v)["push_batch_typed"];
+    let batch = PushBatch::parse(&unhex(&c["cbor_hex"])).expect("parse typed batch");
+    assert_eq!(batch.items.len(), 1);
+    assert_eq!(batch.items[0].id, c["item_id"].as_str().unwrap());
+    assert_eq!(batch.items[0].item_type, c["item_type"].as_str().unwrap());
+    assert_eq!(batch.items[0].payload, unhex(&c["payload_hex"]));
+
+    // The untyped vector defaults to "event".
+    let untyped = PushBatch::parse(&unhex(&rw(&v)["push_batch"]["cbor_hex"])).unwrap();
+    assert_eq!(untyped.items[0].item_type, "event");
+}
+
+/// Phase 3: the Dart-produced `POST /events/delete` body decodes, and its
+/// request-bound signature (M2 domain) verifies at the pinned timestamp.
+#[test]
+fn delete_events_request_decodes_and_bound_sig_verifies() {
+    let v = vectors();
+    let c = &rw(&v)["delete_events_request"];
+    let body = unhex(&c["cbor_hex"]);
+    let req = DeleteEventsRequest::parse(&body).expect("parse delete events request");
+    let expected_ids: Vec<&str> = c["ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i.as_str().unwrap())
+        .collect();
+    assert_eq!(req.ids, expected_ids);
+
+    let ts = c["signed_ts"].as_i64().unwrap();
+    let path = c["signed_path"].as_str().unwrap();
+    let digest = owner_request_digest("POST", path, ts, &body);
+    assert_eq!(hex::encode(digest), c["owner_req_digest_hex"].as_str().unwrap());
+    assert!(verify_owner_request_sig(
+        &owner_pk(&v),
+        "POST",
+        path,
+        ts,
+        &body,
+        &unhex(&c["owner_sig_hex"]),
+    ));
+    // …and the same signature fails on any other path (domain binding).
+    assert!(!verify_owner_request_sig(
+        &owner_pk(&v),
+        "POST",
+        "/media/delete",
+        ts,
+        &body,
+        &unhex(&c["owner_sig_hex"]),
+    ));
+}
+
+#[test]
+fn delete_media_request_decodes() {
+    let v = vectors();
+    let c = &rw(&v)["delete_media_request"];
+    let req = DeleteMediaRequest::parse(&unhex(&c["cbor_hex"])).expect("parse delete media");
+    let expected: Vec<&str> = c["hashes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|h| h.as_str().unwrap())
+        .collect();
+    assert_eq!(req.hashes, expected);
+}
+
+/// The Rust-produced DeleteReceipt must emit the pinned bytes the Dart
+/// decoder reads.
+#[test]
+fn delete_receipt_encode() {
+    let v = vectors();
+    let c = &rw(&v)["delete_receipt"];
+    let receipt = DeleteReceipt {
+        deleted: c["deleted"].as_i64().unwrap(),
+        missing: c["missing"].as_i64().unwrap(),
+    };
+    assert_eq!(receipt.to_cbor(), unhex(&c["cbor_hex"]));
 }
 
 #[test]

@@ -11,7 +11,7 @@ import '../server/handlers/events_push_handler.dart';
 import '../server/handlers/follow_accept_handler.dart';
 import '../server/handlers/follow_request_handler.dart';
 import '../server/handlers/manifest_handler.dart';
-import '../server/handlers/media_handler.dart';
+import 'media/media_files.dart';
 import '../server/handlers/ping_handler.dart';
 import 'clock.dart';
 import 'content_key_service.dart';

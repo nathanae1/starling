@@ -29,6 +29,7 @@ import 'tables/outbound_queue_table.dart';
 import 'tables/paired_relay_table.dart';
 import 'tables/pending_card_distributions_table.dart';
 import 'tables/pending_key_distributions_table.dart';
+import 'tables/relay_fanout_state_table.dart';
 import 'tables/room_key_history_table.dart';
 import 'tables/room_members_table.dart';
 import 'tables/rooms_table.dart';
@@ -53,6 +54,7 @@ part 'database.g.dart';
     PendingKeyDistributionEntries,
     PairedRelayEntries,
     PendingCardDistributionEntries,
+    RelayFanoutStateEntries,
     VoiceRoomEntries,
     VoiceRoomParticipantEntries,
     RoomEntries,
@@ -87,7 +89,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -205,6 +207,22 @@ class AppDatabase extends _$AppDatabase {
       if (from < 11) {
         // Plan 19: invitee-side missed-call flag on voice-room history.
         await m.addColumn(voiceRoomEntries, voiceRoomEntries.missed);
+      }
+      if (from < 12) {
+        // Phase 3 deletion/retention: persisted per-relay prune horizon.
+        // Own posts older than this were deliberately aged off the relay
+        // and must not be re-pushed by the reconciler.
+        await m.addColumn(
+          pairedRelayEntries,
+          pairedRelayEntries.relayPruneBefore,
+        );
+      }
+      if (from < 13) {
+        // Relay review Phase 2: per-relay health (A7) + crash-safe
+        // pair/unpair side-effect markers (A2/A3 heal pass).
+        await m.addColumn(pairedRelayEntries, pairedRelayEntries.lastPushAt);
+        await m.addColumn(pairedRelayEntries, pairedRelayEntries.lastError);
+        await m.createTable(relayFanoutStateEntries);
       }
     },
   );

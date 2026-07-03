@@ -178,7 +178,6 @@ class _RelaySectionState extends ConsumerState<_RelaySection> {
   Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
     final relay = ref.watch(pairedRelayControllerProvider).value;
-    final serviceReady = ref.watch(relayPairingServiceProvider).value != null;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
@@ -202,9 +201,11 @@ class _RelaySectionState extends ConsumerState<_RelaySection> {
               if (relay == null)
                 SecondaryButton(label: 'Pair a relay', onPressed: _openScanner)
               else
+                // A9: local unpair needs no Tor — never gate it on the
+                // network coming up.
                 SecondaryButton(
                   label: _busy ? 'Unpairing…' : 'Unpair',
-                  onPressed: (_busy || !serviceReady) ? null : _unpair,
+                  onPressed: _busy ? null : _unpair,
                 ),
             ],
           ),
@@ -213,17 +214,42 @@ class _RelaySectionState extends ConsumerState<_RelaySection> {
             relay == null
                 ? 'No relay paired — friends only reach you while your phone '
                       'is online.'
-                : '${_shortOnion(relay.relayOnion)} · '
-                      '${relay.backfillComplete ? 'synced' : 'syncing…'}',
+                : '${_shortOnion(relay.relayOnion)} · ${_statusLine(relay)}',
             style: starling.typography.micro.copyWith(
               color: starling.colors.stone,
             ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
+          // A7: a persisted relay error means pushes are failing for a
+          // reason a "syncing…" label would hide (cap full, auth broken).
+          if (relay?.lastError != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              relay!.lastError!,
+              style: starling.typography.micro.copyWith(
+                color: starling.colors.danger,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  /// Status + last-sync line: sync trouble beats "synced", and the last
+  /// verified push tells slow-backfill apart from failing-forever (A7).
+  static String _statusLine(PairedRelay relay) {
+    final status = relay.lastError != null
+        ? 'sync trouble'
+        : relay.backfillComplete
+        ? 'synced'
+        : 'syncing…';
+    if (relay.lastPushAt <= 0) return status;
+    final t = DateTime.fromMillisecondsSinceEpoch(relay.lastPushAt * 1000);
+    return '$status · last sync ${_relativeTime(t)}';
   }
 
   Future<void> _openScanner() async {
@@ -248,8 +274,7 @@ class _RelaySectionState extends ConsumerState<_RelaySection> {
     if (!confirmed || !mounted) return;
     setState(() => _busy = true);
     try {
-      final service = ref.read(relayPairingServiceProvider).value;
-      await service?.unpair();
+      await ref.read(relayPairingServiceProvider).unpair();
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

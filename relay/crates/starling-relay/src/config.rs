@@ -3,11 +3,11 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub data_dir: PathBuf,
     pub bind_admin: String,
@@ -45,11 +45,12 @@ impl Config {
             }
             None => Config::default(),
         };
-        cfg.apply_env();
+        cfg.apply_env()?;
+        cfg.validate()?;
         Ok(cfg)
     }
 
-    fn apply_env(&mut self) {
+    fn apply_env(&mut self) -> Result<()> {
         if let Ok(v) = std::env::var("STARLING_RELAY_DATA_DIR") {
             self.data_dir = PathBuf::from(v);
         }
@@ -59,26 +60,50 @@ impl Config {
         if let Ok(v) = std::env::var("STARLING_RELAY_LOG_LEVEL") {
             self.log_level = v;
         }
-        if let Ok(v) = std::env::var("STARLING_RELAY_DISK_CAP_BYTES") {
-            if let Ok(n) = v.parse() {
-                self.disk_cap_bytes = n;
-            }
-        }
-        if let Ok(v) = std::env::var("STARLING_RELAY_PER_OWNER_DEFAULT_CAP_BYTES") {
-            if let Ok(n) = v.parse() {
-                self.per_owner_default_cap_bytes = n;
-            }
-        }
-        if let Ok(v) = std::env::var("STARLING_RELAY_PAIRING_TOKEN_TTL_SECONDS") {
-            if let Ok(n) = v.parse() {
-                self.pairing_token_ttl_seconds = n;
-            }
-        }
+        // Numeric overrides fail LOUDLY: a typo'd cap silently keeping the
+        // default is how an operator ends up with an unenforced quota (L1).
+        self.disk_cap_bytes = env_parse("STARLING_RELAY_DISK_CAP_BYTES", self.disk_cap_bytes)?;
+        self.per_owner_default_cap_bytes = env_parse(
+            "STARLING_RELAY_PER_OWNER_DEFAULT_CAP_BYTES",
+            self.per_owner_default_cap_bytes,
+        )?;
+        self.pairing_token_ttl_seconds = env_parse(
+            "STARLING_RELAY_PAIRING_TOKEN_TTL_SECONDS",
+            self.pairing_token_ttl_seconds,
+        )?;
         if let Ok(v) = std::env::var("STARLING_RELAY_LOCAL_PORT_RANGE") {
-            if let Some(range) = parse_port_range(&v) {
-                self.local_port_range = range;
-            }
+            self.local_port_range = parse_port_range(&v).ok_or_else(|| {
+                anyhow::anyhow!("STARLING_RELAY_LOCAL_PORT_RANGE must be \"start-end\": got {v:?}")
+            })?;
         }
+        Ok(())
+    }
+
+    /// Reject nonsensical values up front rather than silently treating a
+    /// negative cap as "unlimited" (`accounting.rs` gates on `cap > 0`).
+    fn validate(&self) -> Result<()> {
+        if self.disk_cap_bytes < 0 {
+            bail!("disk_cap_bytes must be >= 0 (0 = unlimited), got {}", self.disk_cap_bytes);
+        }
+        if self.per_owner_default_cap_bytes < 0 {
+            bail!(
+                "per_owner_default_cap_bytes must be >= 0 (0 = unlimited), got {}",
+                self.per_owner_default_cap_bytes
+            );
+        }
+        if self.pairing_token_ttl_seconds <= 0 {
+            bail!(
+                "pairing_token_ttl_seconds must be > 0, got {}",
+                self.pairing_token_ttl_seconds
+            );
+        }
+        if self.local_port_range[0] > self.local_port_range[1] {
+            bail!(
+                "local_port_range start must be <= end, got {:?}",
+                self.local_port_range
+            );
+        }
+        Ok(())
     }
 
     pub fn db_path(&self) -> PathBuf {
@@ -95,6 +120,21 @@ impl Config {
     }
 }
 
+/// Parse an integer env var, or return `default` when it is unset. An
+/// UNPARSEABLE value is an error, not a silent fallback (L1).
+fn env_parse<T>(key: &str, default: T) -> Result<T>
+where
+    T: std::str::FromStr,
+    T::Err: std::fmt::Display,
+{
+    match std::env::var(key) {
+        Ok(v) => v
+            .parse()
+            .map_err(|e| anyhow::anyhow!("{key}={v:?} is not a valid value: {e}")),
+        Err(_) => Ok(default),
+    }
+}
+
 /// Parse `"17000-17999"` into `[start, end]`. `None` on anything malformed
 /// or inverted (the env override is then ignored, like the other fields).
 fn parse_port_range(s: &str) -> Option<[u16; 2]> {
@@ -106,7 +146,7 @@ fn parse_port_range(s: &str) -> Option<[u16; 2]> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_port_range;
+    use super::{env_parse, parse_port_range, Config};
 
     #[test]
     fn parses_valid_range() {
@@ -122,5 +162,36 @@ mod tests {
         assert_eq!(parse_port_range("a-b"), None);
         assert_eq!(parse_port_range("17000-99999"), None);
         assert_eq!(parse_port_range(""), None);
+    }
+
+    #[test]
+    fn env_parse_errors_on_garbage_but_defaults_when_unset() {
+        // Unique key so this can't collide with a parallel test's env.
+        let key = "STARLING_RELAY_TEST_ENV_PARSE_XYZ";
+        std::env::remove_var(key);
+        assert_eq!(env_parse::<i64>(key, 42).unwrap(), 42);
+        std::env::set_var(key, "5GB"); // human-readable, NOT an i64
+        assert!(env_parse::<i64>(key, 42).is_err());
+        std::env::set_var(key, "1000");
+        assert_eq!(env_parse::<i64>(key, 42).unwrap(), 1000);
+        std::env::remove_var(key);
+    }
+
+    #[test]
+    fn validate_rejects_bad_values() {
+        let mut cfg = Config::default();
+        cfg.disk_cap_bytes = -1;
+        assert!(cfg.validate().is_err());
+        cfg = Config::default();
+        cfg.per_owner_default_cap_bytes = -5;
+        assert!(cfg.validate().is_err());
+        cfg = Config::default();
+        cfg.pairing_token_ttl_seconds = 0;
+        assert!(cfg.validate().is_err());
+        cfg = Config::default();
+        cfg.local_port_range = [18000, 17000];
+        assert!(cfg.validate().is_err());
+        // A clean default validates.
+        assert!(Config::default().validate().is_ok());
     }
 }

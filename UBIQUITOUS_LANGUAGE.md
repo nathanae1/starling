@@ -53,7 +53,7 @@
 | **Backfill**           | Explicit user-triggered fetch of Events older than the 30-day sync window.                                     | Load more, history fetch                        |
 | **Sync window**        | The 30-day lookback that bounds automatic syncing; older content is only pulled via Backfill.                  | Retention window (reserved — see Retention)     |
 | **Outbound queue**     | Local queue of signed Events destined for a specific target Pubkey on next Sync.                               | Pending events, outbox                          |
-| **Connection card**    | `{ pubkey, endpoints, capabilities }` encoded as JSON→base64url and carried in QR codes and Invite links.      | Card, contact, business card                    |
+| **Connection card**    | `{ pubkey, endpoints, capabilities }` encoded as CBOR→base64url and carried in QR codes and Invite links.      | Card, contact, business card                    |
 | **Invite link**        | A `starling://connect?card={base64url}` URL that embeds a Connection card.                                        | Share link, follow link                         |
 | **Follow request**    | A `POST /follow-request` containing an encrypted Connection card from a would-be Follower.                     | Add request, friend request                     |
 | **Follow accept**     | The Owner's reply that sends an encrypted Feed key back to the requesting Pubkey.                              | Approval, acceptance                            |
@@ -64,9 +64,8 @@
 | ------------------------ | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
 | **On-device server**     | The shelf HTTP server running inside the Starling app that serves its Owner's Events and Media.              | Local server, embedded server, node server     |
 | **Onion service**        | An Arti-managed Tor hidden service whose `.onion` address appears in the Connection card.                 | Hidden service, Tor service                    |
-| **Relay**                | An optional zero-knowledge service that stores and serves its single Owner's encrypted content 24/7.      | Server, backend, host                          |
-| **Spare-device relay**   | A Relay hosted by a second Starling install on an old phone or tablet; paired via QR.                        | Phone relay, paired device                     |
-| **Standalone relay**     | The headless Rust binary Relay intended for Raspberry Pi, VPS, NAS, etc.                                  | Server relay, self-hosted relay                |
+| **Relay**                | An optional zero-knowledge store-and-forward service that caches and serves paired Owners' encrypted content 24/7. Multi-owner: one relay hosts many Owners, partitioned per Pubkey, each on its own `.onion`. | Server, backend, host                          |
+| **Standalone relay**     | The headless Rust binary Relay for a Linux box (Proxmox LXC, Raspberry Pi, VPS, NAS). The only shipped Relay deployment; the earlier spare-device phone Relay was abandoned. | Server relay, self-hosted relay                |
 | **LAN tier**             | mDNS-discovered peers on the same Wi-Fi — the fastest, zero-config Sync path.                             | Local network                                  |
 | **Tor tier**             | WAN-reachability path via Arti and Onion services; used when LAN and Relay are unavailable.               | Onion path                                     |
 | **Hole-punch**           | A STUN-assisted attempt to upgrade a Tor-signaled link to a direct WAN socket for lower latency.          | NAT traversal, direct connect                  |
@@ -83,7 +82,7 @@
 - Every transport carries **Envelopes**, which contain one or more **EnvelopeItems** — not bare **EncryptedEvents**.
 - A **Follow** stores the target's **Connection card** and the **Feed key** they shared during **Follow accept**.
 - **Unfollowing** a **Follower** triggers **Key rotation** — not **Ratchet** advancement.
-- A **Relay** serves exactly one **Identity**; a **Spare-device relay** and a **Standalone relay** are two deployment modes of the same role.
+- A **Relay** hosts one or more **Identities**, each partitioned by **Pubkey** and reachable on its own relay-issued **Onion service**; the **Standalone relay** is the only shipped deployment.
 - **Save** affects local **Retention** only — it produces no **Event** and is never synced.
 
 ## Example dialogue

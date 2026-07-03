@@ -126,10 +126,17 @@ EncryptedEvent {
   pubkey:     string       // plaintext — needed for routing
   created_at: uint64       // plaintext — needed for sync queries
   epoch:      uint32       // feed key epoch number
+  msg_seq:    uint64       // per-message key sequence within the epoch (MegOLM-shaped)
   nonce:      bytes[24]    // random, unique per event
-  payload:    bytes        // XChaCha20-Poly1305(epoch_key, nonce, serialize(Event))
+  payload:    bytes        // XChaCha20-Poly1305(msg_key, nonce, serialize(Event))
 }
 ```
+
+`msg_seq` is carried in cleartext so a receiver (and the relay) can index by
+it without decrypting. The per-message AEAD key is derived as
+`BLAKE2b-256(chainRoot ‖ "starling-msg-key-v1" ‖ u64_be(msg_seq))`, so
+`(epoch, msg_seq)` together select the key; the relay stores `msg_seq`
+alongside `created_at` but never derives a key.
 
 ### Nonce Generation
 
@@ -218,10 +225,13 @@ ConnectionCardUpdate {
 
 Trust model: this is an Envelope-style transport hint, but signed. Followers MUST verify the signature before applying the update. An unsigned or invalid-sig card update MUST be discarded — the server is treated as an untrusted relay even when it is the Owner's own phone. Replay is bounded by `created_at`: a Follower ignores updates with `created_at <=` the one they last applied.
 
-**GET /events?since={timestamp}**
-- Returns EncryptedEvents created after `timestamp`
-- Response: CBOR array of EncryptedEvent
-- Only returns events from the server's owner (single-user model)
+**GET /events?since={timestamp}&since_id={id}**
+- Returns the owner's events at/after the `(since, since_id)` keyset cursor
+- Response: CBOR **Envelope** of `type:"event"` items (each item's `payload`
+  is a serialized EncryptedEvent) — NOT a bare array. Pages are bounded by
+  count and cumulative bytes; a truncated page carries the next cursor in the
+  Envelope's `extensions["next"]` (`{created_at, id}`)
+- Only returns events from that server/onion's owner
 
 **GET /media/{blake2b_hash}**
 - Returns the encrypted media blob (nonce prepended)
@@ -230,8 +240,10 @@ Trust model: this is an Envelope-style transport hint, but signed. Followers MUS
 
 **GET /status**
 - Returns server info
-- Response: JSON `{ pubkey, version, media_storage_used, event_count }`
-  - `media_storage_used`: bytes of cached encrypted media on disk. The DB blob is excluded — this is an approximate, peer-visible figure used only for sync planning.
+- Response: JSON `{ pubkey, version, event_count, storage_used, storage_limit, media_storage_used }`
+  - `storage_used`: total bytes stored for this owner (event payloads + media) — the figure the cap and `507` threshold actually count
+  - `storage_limit`: the owner's cap in bytes, or `0` for unlimited
+  - `media_storage_used`: media-only bytes; retained for older clients, superseded by `storage_used`
 - No authentication required
 
 **POST /follow-request**
@@ -248,15 +260,43 @@ Trust model: this is an Envelope-style transport hint, but signed. Followers MUS
 
 ### Relay-Only Endpoints
 
-**POST /events** (relay only)
-- Phone pushes its own new EncryptedEvents to its relay
-- Body: CBOR array of EncryptedEvent
-- Authenticated via signature header
+The relay is multi-owner and Tor-only; each owner is served on its own onion.
+See `relay/plans/relay-spec.md` for the full surface (`/pair`,
+`/media-manifest`, storage caps). `follow-request` / `follow-accept` are NOT
+relay endpoints — they are phone-to-phone.
 
-**POST /media** (relay only)
-- Phone pushes encrypted media blobs to its relay
-- Body: multipart upload of encrypted blobs
-- Authenticated via signature header
+**POST /events** (relay only)
+- Owner pushes its own new events to its relay
+- Body: CBOR `{ items: [{ id, payload, type? }] }` (a PushBatch, NOT a bare
+  array); `payload` is a serialized EncryptedEvent, `type` defaults to
+  `"event"` and is preserved so unknown item types transit the relay
+- Response: `202` CBOR `{ accepted, rejected }`
+- Owner-signed (see below)
+
+**POST /media/{blake2b_hash}** (relay only)
+- Owner pushes one encrypted media blob (raw `nonce‖ciphertext` body, keyed by
+  the path hash), NOT a multipart upload
+- Response: `202`
+- Owner-signed
+
+**POST /events/delete** and **POST /media/delete** (relay only)
+- Owner withdraws stored events/media by plaintext id / hash. All deletion
+  decisions live on the phone (tombstones, prune horizon); the relay never
+  learns why an id dies
+- Body: CBOR `{ ids: [...] }` / `{ hashes: [...] }`, chunked ≤500 per request
+- Response: `200` CBOR `{ deleted, missing }` — idempotent, absent items count
+  as `missing`; `/media/delete` is `400` if ANY hash is malformed
+- Owner-signed
+
+**POST /unpair** (relay only)
+- Owner ends the pairing over the wire: the relay wipes the owner's stored
+  data and drops its onion, so relay-primary Followers fall back to the
+  phone instead of probing a stale endpoint forever
+- Body: empty
+- Response: `200`; the wipe itself runs after a short grace so the response
+  flushes before the serving task is torn down
+- Owner-signed; best-effort on the phone side (local unpair never depends
+  on it — a heal pass retries transport failures)
 
 ### Sync Handshake
 
@@ -271,14 +311,27 @@ If the client supports the server's version, sync proceeds. If not, the client s
 
 ### Authentication (Relay Push)
 
-Requests to relay push endpoints (`POST /events`, `POST /media`) require a signature header:
+Owner-signed relay endpoints (`POST /events`, `POST /media/{hash}`,
+`POST /events/delete`, `POST /media/delete`, `GET /media-manifest`,
+`POST /unpair`) require
+signature headers. The current
+**request-bound** scheme binds the method, path, and a timestamp so a
+captured signature can't be replayed against another route or reused
+indefinitely:
 
 ```
-X-Starling-Sig: base64(Ed25519.sign(identity_key, blake2b_256(request_body)))
-X-Starling-Pubkey: base64(pubkey)
+X-Starling-Pubkey: base64(pubkey)              // raw 32-byte Ed25519 key
+X-Starling-Ts:     <unix seconds>
+X-Starling-Sig:    base64(Ed25519.sign(sk, digest))
+  digest = blake2b_256("starling-owner-req-v1" || method || path
+                       || u64_be(ts) || blake2b_256(request_body))
 ```
 
-The relay verifies that the pubkey matches its configured owner and the signature is valid.
+For one release the relay also accepts the **legacy** scheme (no
+`X-Starling-Ts`, signature over `blake2b_256(request_body)` only). It rejects
+a timestamp more than 10 minutes off its clock, verifies the pubkey matches
+that onion's owner (`403` on mismatch), and `401`s a bad/missing/stale
+signature.
 
 ## Connection Card
 
@@ -289,15 +342,19 @@ Encodes everything needed to reach an account:
   pubkey: "base32_ed25519_public_key",
   endpoints: [
     { type: "onion", address: "abc123...xyz.onion" },
-    { type: "relay", url: "https://my-relay.example.com" }
+    { type: "relay", address: "relay456...xyz.onion" }
   ],
   capabilities: ["pairwise-v1"]
 }
 ```
 
+Every endpoint is `{ type, address }`. The relay endpoint is a Tor
+`.onion` (the relay is Tor-only in v1), NOT a clearnet URL; Followers rank it
+below every phone↔phone tier and use it only when the phone is unreachable.
+
 The `capabilities` field advertises what the peer supports. v1 clients advertise `["pairwise-v1"]`. Future capabilities (e.g., `"mls-v1"`, `"media-streaming-v1"`) are added as they ship. During handshake, peers compute the intersection of capabilities to determine which protocols to use. Peers with no `capabilities` field are assumed to be pre-v1 and treated as `["pairwise-v1"]`.
 
-- Serialized as JSON, then base64url-encoded for QR codes and links
+- Serialized as CBOR, then base64url-encoded for QR codes and links
 - QR code contains: `starling://connect?card={base64url_encoded_card}`
 - Share link: `https://starling.link/connect?card={base64url_encoded_card}` (deeplinks to app)
 
@@ -330,17 +387,31 @@ The protocol is enforced across implementations (Dart app, Rust relay, future cl
 
 ### Vector format
 
-```
-test/vectors/
-  index.json                   // lists all vectors with descriptions
-  event_post_v1.cbor           // known-good serialized Event
-  encrypted_event_v1.cbor      // known-good EncryptedEvent
-  envelope_v1.cbor             // known-good Envelope
-  keypair_v1.json              // known-good keypair derivation
-  ...
-```
+Vectors live in a single self-describing file,
+`app/starling/test/vectors/index.json`, built by
+`test/vectors/vectors_builder.dart`. Each entry inlines its bytes as hex
+(there are no separate per-type `.cbor` files). Byte-pinned surfaces store
+the expected `cbor_hex` (and, for signed ones, the digest + signature hex);
+decode-only surfaces store the expected decoded fields.
 
-Each entry in `index.json` specifies: the type being tested, the CBOR file path, and the expected decoded field values as JSON. Both the Dart and Rust test harnesses read the same index, decode the same CBOR, and assert the same field values.
+Regeneration is diff-asserting, not copy-paste: `vectors_gen.dart` rebuilds
+every vector from the production encoders on every test run and FAILS when
+`index.json` no longer matches. After an intentional wire change, run
+`STARLING_WRITE_VECTORS=1 flutter test test/vectors/vectors_gen.dart` and
+commit the diff.
+
+The Dart harness (`test/vectors/vectors_test.dart`) and the Rust harness
+(`relay/crates/starling-wire/tests/wire_vectors.rs`) both read this file:
+Dart-produced surfaces are decoded and checked in Rust, Rust-produced surfaces
+are byte-pinned. Both version constants (`kStarlingProtocolVersion`,
+`PROTOCOL_VERSION`) pin to the single `protocol_version` entry, so a
+one-sided bump fails the other side's tests. The `http` section additionally
+pins the HTTP layer — method, path, query-param names, auth headers, and
+success status per relay endpoint — asserted client-side by
+`test/vectors/http_vectors_test.dart` and server-side (including query-param
+*effect*) by `relay/crates/starling-relay-http/tests/http_vectors.rs`. This
+is the source of truth for wire agreement — the specs are prose that can
+lag; the vectors cannot.
 
 ### What vectors cover
 

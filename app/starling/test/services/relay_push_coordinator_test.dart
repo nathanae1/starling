@@ -5,7 +5,9 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:starling/models/models.dart';
 import 'package:starling/models/protocol_version.dart';
+import 'package:starling/services/clock.dart';
 import 'package:starling/services/crypto/crockford_base32.dart';
+import 'package:starling/services/mocks/mock_clock.dart';
 import 'package:starling/services/mocks/mock_storage_service.dart';
 import 'package:starling/services/relay_push_coordinator.dart';
 import 'package:starling/services/relay_push_service.dart';
@@ -19,6 +21,19 @@ class _FakePushService implements RelayPushService {
   final List<String> pushedMedia = [];
   final Set<String> failMediaHashes = {};
   Object? pushEventsError;
+
+  /// When > 0, the next N [pushEvents] calls 507 (cap exhausted).
+  int pushEvents507s = 0;
+
+  /// Receipt-level rejections per batch (A5: malformed items the relay
+  /// refuses while still answering 202).
+  int rejectedPerBatch = 0;
+
+  /// Recorded delete batches, in call order.
+  final List<List<String>> deletedEventBatches = [];
+  final List<List<String>> deletedMediaBatches = [];
+  Object? deleteEventsError;
+  Object? deleteMediaError;
 
   /// Scripted `/media-manifest` pages, consumed in order (last one
   /// repeats). Recorded `after` cursors land in [mediaManifestAfters].
@@ -35,13 +50,61 @@ class _FakePushService implements RelayPushService {
     required Uint8List ownerSecretKey,
     required List<RelayPushItem> items,
   }) async {
+    if (pushEvents507s > 0) {
+      pushEvents507s--;
+      throw RelayPushException('simulated cap 507', statusCode: 507);
+    }
     final err = pushEventsError;
     if (err != null) {
       pushEventsError = null;
       throw err;
     }
     pushedBatches.add(items);
-    return RelayPushReceipt(accepted: items.length, rejected: 0);
+    return RelayPushReceipt(
+      accepted: items.length - rejectedPerBatch,
+      rejected: rejectedPerBatch,
+    );
+  }
+
+  @override
+  Future<void> unpairRelay({
+    required String relayBaseUrl,
+    required Uint8List ownerPubkeyBytes,
+    required Uint8List ownerSecretKey,
+  }) async {}
+
+  @override
+  Future<RelayDeleteReceipt> deleteEvents({
+    required String relayBaseUrl,
+    required Uint8List ownerPubkeyBytes,
+    required Uint8List ownerSecretKey,
+    required List<String> ids,
+  }) async {
+    if (ids.isEmpty) return const RelayDeleteReceipt(deleted: 0, missing: 0);
+    final err = deleteEventsError;
+    if (err != null) {
+      deleteEventsError = null;
+      throw err;
+    }
+    deletedEventBatches.add(List.of(ids));
+    return RelayDeleteReceipt(deleted: ids.length, missing: 0);
+  }
+
+  @override
+  Future<RelayDeleteReceipt> deleteMedia({
+    required String relayBaseUrl,
+    required Uint8List ownerPubkeyBytes,
+    required Uint8List ownerSecretKey,
+    required List<String> hashes,
+  }) async {
+    if (hashes.isEmpty) return const RelayDeleteReceipt(deleted: 0, missing: 0);
+    final err = deleteMediaError;
+    if (err != null) {
+      deleteMediaError = null;
+      throw err;
+    }
+    deletedMediaBatches.add(List.of(hashes));
+    return RelayDeleteReceipt(deleted: hashes.length, missing: 0);
   }
 
   @override
@@ -102,17 +165,23 @@ void main() {
   late List<Map<String, String>> manifestRequests;
   int manifestStatus = 200;
 
-  Event event(String id, int createdAt, {List<MediaRef> media = const []}) =>
-      Event(
-        version: kStarlingProtocolVersion,
-        id: id,
-        pubkey: ownPubkey,
-        createdAt: createdAt,
-        kind: EventKind.post,
-        content: Uint8List.fromList('post $id'.codeUnits),
-        sig: Uint8List(64),
-        media: media,
-      );
+  Event event(
+    String id,
+    int createdAt, {
+    List<MediaRef> media = const [],
+    EventKind kind = EventKind.post,
+    String? ref,
+  }) => Event(
+    version: kStarlingProtocolVersion,
+    id: id,
+    pubkey: ownPubkey,
+    createdAt: createdAt,
+    kind: kind,
+    ref: ref,
+    content: Uint8List.fromList('post $id'.codeUnits),
+    sig: Uint8List(64),
+    media: media,
+  );
 
   Uint8List wireBytes(String id, int createdAt, {int payloadLen = 16}) =>
       EncryptedEvent(
@@ -128,15 +197,18 @@ void main() {
     String id,
     int createdAt, {
     List<MediaRef> media = const [],
+    EventKind kind = EventKind.post,
+    String? ref,
   }) async {
     await storage.saveOwnEventWithEncrypted(
-      event(id, createdAt, media: media),
+      event(id, createdAt, media: media, kind: kind, ref: ref),
       wireBytes(id, createdAt),
     );
   }
 
   RelayPushCoordinator coordinator({
     Future<Uint8List?> Function(String hash)? mediaBytesLookup,
+    Clock? clock,
   }) {
     final client = MockClient((request) async {
       if (request.url.path != '/manifest') {
@@ -168,6 +240,7 @@ void main() {
       ownSecretKeyLookup: () async => Uint8List(64),
       mediaBytesLookup:
           mediaBytesLookup ?? (hash) async => Uint8List.fromList([1, 2, 3]),
+      clock: clock ?? MockClock(),
     );
   }
 
@@ -402,5 +475,338 @@ void main() {
     expect(push.pushedBatches, hasLength(1));
     expect(push.pushedBatches.single.single.id, 'fresh');
     expect(push.pushedMedia, ['mmm']);
+  });
+
+  // --- Phase 3: deletion & retention ---
+
+  test('pushPublished of a tombstone withdraws its target and the target\'s '
+      'exclusive media; shared media survives', () async {
+    // Target references two hashes; a LIVE sibling still references
+    // "shared", so only "only" is exclusively dead.
+    await saveOwnEvent(
+      'target',
+      100,
+      media: const [
+        MediaRef(hash: 'shared', mimeType: 'image/jpeg', size: 3),
+        MediaRef(hash: 'only', mimeType: 'image/jpeg', size: 3),
+      ],
+    );
+    await saveOwnEvent(
+      'sibling',
+      150,
+      media: const [MediaRef(hash: 'shared', mimeType: 'image/jpeg', size: 3)],
+    );
+    await saveOwnEvent('tomb', 200, kind: EventKind.delete, ref: 'target');
+
+    await coordinator().pushPublished(
+      event('tomb', 200, kind: EventKind.delete, ref: 'target'),
+      wireBytes('tomb', 200),
+    );
+
+    // Tombstone itself was pushed…
+    expect(push.pushedBatches.single.single.id, 'tomb');
+    // …the target withdrawn, and only the exclusive hash deleted.
+    expect(push.deletedEventBatches, [
+      ['target'],
+    ]);
+    expect(push.deletedMediaBatches, [
+      ['only'],
+    ]);
+  });
+
+  test('reconcile withdraws tombstoned events still present on the relay '
+      'and never re-pushes them', () async {
+    await saveOwnEvent('e1', 100);
+    await saveOwnEvent('t1', 200, kind: EventKind.delete, ref: 'e1');
+    manifestPages = [
+      manifestPage([event('e1', 100), event('t1', 200)], hasOlder: false),
+    ];
+
+    await coordinator().reconcile();
+
+    // The dead target is deleted, nothing is pushed (the tombstone is
+    // already present), convergence is reached.
+    expect(push.deletedEventBatches, [
+      ['e1'],
+    ]);
+    expect(push.pushedBatches, isEmpty);
+    expect((await storage.getPairedRelay())!.backfillComplete, isTrue);
+  });
+
+  test('reconcile never deletes un-tombstoned relay-extras (restored-phone '
+      'protection)', () async {
+    // The relay holds an id the phone has no row and no tombstone for —
+    // e.g. after a recovery-phrase restore. It must survive.
+    await saveOwnEvent('e1', 100);
+    manifestPages = [
+      manifestPage([event('e1', 100), event('ghost', 50)], hasOlder: false),
+    ];
+
+    await coordinator().reconcile();
+
+    expect(push.deletedEventBatches, isEmpty);
+    expect(push.deletedMediaBatches, isEmpty);
+    expect((await storage.getPairedRelay())!.backfillComplete, isTrue);
+  });
+
+  test('reconcile deletes dead-only media but keeps hashes any live event '
+      'references', () async {
+    await saveOwnEvent(
+      'dead',
+      100,
+      media: const [
+        MediaRef(hash: 'shared', mimeType: 'image/jpeg', size: 3),
+        MediaRef(hash: 'only', mimeType: 'image/jpeg', size: 3),
+      ],
+    );
+    await saveOwnEvent(
+      'live',
+      150,
+      media: const [MediaRef(hash: 'shared', mimeType: 'image/jpeg', size: 3)],
+    );
+    await saveOwnEvent('t1', 200, kind: EventKind.delete, ref: 'dead');
+    manifestPages = [
+      manifestPage([
+        event('dead', 100),
+        event('live', 150),
+        event('t1', 200),
+      ], hasOlder: false),
+    ];
+    push.mediaManifestPages = const [
+      RelayMediaManifestPage(hashes: ['only', 'shared'], hasOlder: false),
+    ];
+
+    await coordinator().reconcile();
+
+    expect(push.deletedEventBatches, [
+      ['dead'],
+    ]);
+    expect(push.deletedMediaBatches, [
+      ['only'],
+    ]);
+    expect(push.pushedMedia, isEmpty);
+  });
+
+  test('a failing delete blocks backfillComplete until it heals', () async {
+    await saveOwnEvent('e1', 100);
+    await saveOwnEvent('t1', 200, kind: EventKind.delete, ref: 'e1');
+    manifestPages = [
+      manifestPage([event('e1', 100), event('t1', 200)], hasOlder: false),
+    ];
+
+    push.deleteEventsError = RelayPushException('tor flap', statusCode: 500);
+    final coord = coordinator();
+    await coord.reconcile();
+    // The relay still serves a deleted post — NOT converged.
+    expect((await storage.getPairedRelay())!.backfillComplete, isFalse);
+
+    // Error cleared → next pass withdraws it and converges.
+    await coord.reconcile();
+    expect(push.deletedEventBatches, [
+      ['e1'],
+    ]);
+    expect((await storage.getPairedRelay())!.backfillComplete, isTrue);
+  });
+
+  test('prune-on-507 persists the horizon BEFORE deleting, prunes oldest '
+      'posts only, and retries the push once', () async {
+    // p1/p2 already on the relay; pNew doesn't fit (507). All payloads are
+    // equal-sized, so 2× the needed bytes ≈ two old posts.
+    await saveOwnEvent('p1', 100);
+    await saveOwnEvent('p2', 200);
+    await saveOwnEvent('profile', 50, kind: EventKind.profile);
+    await saveOwnEvent('pNew', 300);
+    manifestPages = [
+      manifestPage([
+        event('p1', 100),
+        event('p2', 200),
+        event('profile', 50),
+      ], hasOlder: false),
+    ];
+    push.pushEvents507s = 1;
+
+    await coordinator().reconcile();
+
+    // Horizon = newestPruned.createdAt + 1, persisted.
+    final relay = (await storage.getPairedRelay())!;
+    expect(relay.relayPruneBefore, 201);
+    // The two oldest POSTS were withdrawn — never the (older) profile.
+    expect(push.deletedEventBatches, [
+      ['p1', 'p2'],
+    ]);
+    // The retry landed the new post.
+    expect(push.pushedBatches, hasLength(1));
+    expect(push.pushedBatches.single.map((i) => i.id), ['pNew']);
+    expect(relay.backfillComplete, isTrue);
+  });
+
+  test('crash-safe ordering: the horizon is persisted even when the prune '
+      'deletes fail', () async {
+    await saveOwnEvent('p1', 100);
+    await saveOwnEvent('pNew', 300);
+    manifestPages = [
+      manifestPage([event('p1', 100)], hasOlder: false),
+    ];
+    push.pushEvents507s = 1;
+    push.deleteEventsError = RelayPushException('died mid-prune');
+
+    await coordinator().reconcile();
+
+    // The delete never landed, but the horizon is already durable — the
+    // next pass re-derives the same pruned set instead of re-pushing p1.
+    expect((await storage.getPairedRelay())!.relayPruneBefore, 101);
+    expect(push.pushedBatches, isEmpty);
+    expect((await storage.getPairedRelay())!.backfillComplete, isFalse);
+  });
+
+  test('a second 507 (host cap) gives up the pass without looping', () async {
+    await saveOwnEvent('p1', 100);
+    await saveOwnEvent('pNew', 300);
+    manifestPages = [
+      manifestPage([event('p1', 100)], hasOlder: false),
+    ];
+    push.pushEvents507s = 2;
+
+    await coordinator().reconcile();
+
+    // One prune attempt, no push landed, flag stays down.
+    expect(push.deletedEventBatches, hasLength(1));
+    expect(push.pushedBatches, isEmpty);
+    expect((await storage.getPairedRelay())!.backfillComplete, isFalse);
+  });
+
+  test('a persisted prune horizon keeps sub-horizon posts off the relay on '
+      'later passes', () async {
+    await saveOwnEvent('old', 100);
+    await saveOwnEvent('new', 300);
+    await storage.setRelayPruneBefore('relay-1', 250);
+
+    await coordinator().reconcile();
+
+    // Only the post above the horizon is pushed; the pruned one stays
+    // local-only and is never deleted (it's already absent).
+    expect(push.pushedBatches.single.map((i) => i.id), ['new']);
+    expect(push.deletedEventBatches, isEmpty);
+    expect((await storage.getPairedRelay())!.backfillComplete, isTrue);
+  });
+
+  test('overlapping reconciles are skipped by the in-flight guard (A4)',
+      () async {
+    await saveOwnEvent('e1', 100);
+    final coord = coordinator();
+
+    await Future.wait([coord.reconcile(), coord.reconcile()]);
+
+    // Only one pass ran: one manifest walk, one push of the missing event.
+    expect(manifestRequests, hasLength(1));
+    expect(push.pushedBatches, hasLength(1));
+  });
+
+  test('a converged pass short-circuits the next reconcile until local '
+      'state changes (A4)', () async {
+    await saveOwnEvent('e1', 100);
+    manifestPages = [
+      manifestPage([event('e1', 100)], hasOlder: false),
+    ];
+    final coord = coordinator();
+
+    await coord.reconcile();
+    expect(manifestRequests, hasLength(1));
+
+    // Converged + no local change + inside the cooldown → no Tor traffic.
+    await coord.reconcile();
+    expect(manifestRequests, hasLength(1), reason: 'second pass skipped');
+
+    // A new local event breaks the signature → the next pass runs in full.
+    await saveOwnEvent('e2', 200);
+    await coord.reconcile();
+    expect(manifestRequests, hasLength(2));
+    expect(push.pushedBatches.single.map((i) => i.id), ['e2']);
+  });
+
+  test('the cooldown lapsing re-runs a full pass even when nothing local '
+      'changed (A4)', () async {
+    await saveOwnEvent('e1', 100);
+    manifestPages = [
+      manifestPage([event('e1', 100)], hasOlder: false),
+    ];
+    final clock = MockClock();
+    final coord = coordinator(clock: clock);
+
+    await coord.reconcile();
+    await coord.reconcile();
+    expect(manifestRequests, hasLength(1));
+
+    clock.advance(kReconcileCooldown.inSeconds);
+    await coord.reconcile();
+    expect(manifestRequests, hasLength(2), reason: 'cooldown lapsed');
+  });
+
+  test('backfill() always runs in full — pair-time backfill must not be '
+      'short-circuited (A4)', () async {
+    await saveOwnEvent('e1', 100);
+    manifestPages = [
+      manifestPage([event('e1', 100)], hasOlder: false),
+    ];
+    final coord = coordinator();
+    await coord.reconcile();
+    await coord.backfill();
+    expect(manifestRequests, hasLength(2));
+  });
+
+  test('receipt rejections block convergence and un-flip a stale '
+      'backfillComplete (A5)', () async {
+    await saveOwnEvent('e1', 100);
+    manifestPages = [
+      manifestPage([event('e1', 100)], hasOlder: false),
+    ];
+    final coord = coordinator();
+    await coord.reconcile();
+    expect((await storage.getPairedRelay())!.backfillComplete, isTrue);
+
+    // A later pass pushes a new event the relay rejects: the flag clears
+    // and stays down until the divergence is resolved.
+    await saveOwnEvent('e2', 200);
+    push.rejectedPerBatch = 1;
+    await coord.reconcile();
+    final relay = (await storage.getPairedRelay())!;
+    expect(relay.backfillComplete, isFalse);
+    expect(relay.lastError, contains('1 rejected'));
+  });
+
+  test('a converged pass records lastPushAt and clears lastError; an '
+      'unreachable relay records the error WITHOUT un-flipping the flag '
+      '(A7 + A5)', () async {
+    await saveOwnEvent('e1', 100);
+    manifestPages = [
+      manifestPage([event('e1', 100)], hasOlder: false),
+    ];
+    final clock = MockClock(5000);
+    final coord = coordinator(clock: clock);
+    await coord.reconcile();
+    var relay = (await storage.getPairedRelay())!;
+    expect(relay.backfillComplete, isTrue);
+    expect(relay.lastPushAt, 5000);
+    expect(relay.lastError, isNull);
+
+    // Relay unreachable: error surfaced, convergence state untouched.
+    await saveOwnEvent('e2', 200); // break the short-circuit signature
+    manifestStatus = 503;
+    await coord.reconcile();
+    relay = (await storage.getPairedRelay())!;
+    expect(relay.backfillComplete, isTrue, reason: 'not divergence');
+    expect(relay.lastError, contains('unreachable'));
+    expect(relay.lastPushAt, 5000);
+
+    // Reachable again → error clears, lastPushAt freshens.
+    manifestStatus = 200;
+    manifestPages = [
+      manifestPage([event('e1', 100), event('e2', 200)], hasOlder: false),
+    ];
+    clock.advance(60);
+    await coord.reconcile();
+    relay = (await storage.getPairedRelay())!;
+    expect(relay.lastError, isNull);
+    expect(relay.lastPushAt, 5060);
   });
 }

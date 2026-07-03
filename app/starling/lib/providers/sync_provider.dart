@@ -272,8 +272,14 @@ class SyncController extends _$SyncController {
 
   Future<void> _reconcileRelay() async {
     try {
+      // A2/A3: retry any pending card fan-out / wire unpair notify a
+      // crash or Tor outage left behind, before the content pass.
+      await ref.read(relayPairingServiceProvider).heal();
       final coord = await ref.read(relayPushCoordinatorProvider.future);
       await coord?.reconcile();
+      // A7: freshen the paired-relay row (lastPushAt/lastError) the
+      // connection-settings screen renders.
+      await ref.read(pairedRelayControllerProvider.notifier).reload();
     } catch (_) {
       // Best-effort; the next sync pass retries.
     }

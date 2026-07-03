@@ -22,7 +22,9 @@ use base64::Engine;
 use bytes::Bytes;
 use rand::RngCore;
 use starling_relay_http::{internal, rate_limit_mw, RateLimiter};
-use starling_relay_storage::{events, media, owners, pairings, Connection, Db, PendingPairing};
+use starling_relay_storage::{
+    events, immediate_tx, media, owners, pairings, Connection, Db, PendingPairing,
+};
 use starling_wire::{crockford_base32_encode, now_secs};
 use starling_wire::pairing::{
     compute_pair_claim, PairResponse, PairingClaimWire, RelayQrCard,
@@ -45,6 +47,12 @@ pub trait RelayControl: Send + Sync {
 
     /// Unpair an Owner: stop + unpublish the onion, then cascade-delete.
     async fn unpair_owner(&self, owner_pubkey: [u8; 32]) -> anyhow::Result<()>;
+
+    /// `(serving, total)` owner-task counts for `/health`. Default `None`
+    /// for implementations (e.g. test mocks) that run no serving tasks.
+    async fn liveness(&self) -> Option<(usize, usize)> {
+        None
+    }
 }
 
 #[derive(Clone)]
@@ -92,10 +100,15 @@ pub fn mint_pairing_token(
     let now = now_secs();
     let expires_at = now + ttl_secs;
 
-    pairings::prune_expired(conn, now).ok();
-    pairings::consume_all_unconsumed(conn, now)?;
+    // One IMMEDIATE transaction: prune → consume-all → insert. Concurrent
+    // mints (the web /pair auto-refresh racing a CLI `pair`) would otherwise
+    // interleave consume/insert and leave two live tokens, breaking the
+    // exactly-one-active-token invariant (M8).
+    let tx = immediate_tx(conn)?;
+    pairings::prune_expired(&tx, now).ok();
+    pairings::consume_all_unconsumed(&tx, now)?;
     pairings::insert(
-        conn,
+        &tx,
         &PendingPairing {
             token: token.clone(),
             created_at: now,
@@ -105,6 +118,7 @@ pub fn mint_pairing_token(
             label,
         },
     )?;
+    tx.commit()?;
 
     let card = RelayQrCard {
         relay_onion: admin_onion.to_string(),
@@ -441,12 +455,18 @@ async fn health(State(st): State<AdminState>) -> Response {
         .await
         .map(|v| v.len())
         .unwrap_or(0);
-    Json(serde_json::json!({
+    let mut body = serde_json::json!({
         "status": "ok",
         "version": st.relay_version,
         "owner_count": owner_count,
-    }))
-    .into_response()
+    });
+    // Per-Owner serving liveness (M5): `serving_owners < owner_count` flags
+    // an owner whose listener is down while its onion is still published.
+    if let Some((serving, total)) = st.ctrl.liveness().await {
+        body["serving_owners"] = serving.into();
+        body["degraded"] = (serving < total).into();
+    }
+    Json(body).into_response()
 }
 
 async fn api_owners(State(st): State<AdminState>) -> Response {

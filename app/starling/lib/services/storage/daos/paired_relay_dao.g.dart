@@ -8,6 +8,8 @@ mixin _$PairedRelayDaoMixin on DatabaseAccessor<AppDatabase> {
       attachedDatabase.pairedRelayEntries;
   $PendingCardDistributionEntriesTable get pendingCardDistributionEntries =>
       attachedDatabase.pendingCardDistributionEntries;
+  $RelayFanoutStateEntriesTable get relayFanoutStateEntries =>
+      attachedDatabase.relayFanoutStateEntries;
   PairedRelayDaoManager get managers => PairedRelayDaoManager(this);
 }
 
@@ -24,5 +26,10 @@ class PairedRelayDaoManager {
       $$PendingCardDistributionEntriesTableTableManager(
         _db.attachedDatabase,
         _db.pendingCardDistributionEntries,
+      );
+  $$RelayFanoutStateEntriesTableTableManager get relayFanoutStateEntries =>
+      $$RelayFanoutStateEntriesTableTableManager(
+        _db.attachedDatabase,
+        _db.relayFanoutStateEntries,
       );
 }

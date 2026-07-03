@@ -114,3 +114,100 @@ pub async fn request(path: &PathBuf, req: &Request) -> Result<Response> {
     reader.read_line(&mut line).await?;
     Ok(serde_json::from_str(line.trim())?)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    struct Fixture {
+        sock: PathBuf,
+        _dir: tempfile::TempDir,
+        server: tokio::task::JoinHandle<()>,
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            self.server.abort();
+        }
+    }
+
+    /// Boot a serve() loop on a tempdir socket and wait until it accepts.
+    async fn fixture() -> Fixture {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("admin.sock");
+        // Pre-create a stale socket file: serve() must replace it, not fail.
+        std::fs::write(&sock, b"stale").unwrap();
+        let db = Db::open_in_memory().unwrap();
+        let server = {
+            let sock = sock.clone();
+            tokio::spawn(async move {
+                let _ = serve(
+                    sock,
+                    db,
+                    "adminexample.onion".to_string(),
+                    "0.1.0-test".to_string(),
+                    600,
+                )
+                .await;
+            })
+        };
+        for _ in 0..100 {
+            if UnixStream::connect(&sock).await.is_ok() {
+                return Fixture { sock, _dir: dir, server };
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        panic!("admin socket never came up");
+    }
+
+    /// The CLI round-trip: one JSON line in, one JSON line out, token
+    /// minted against the DB with the admin onion in the pair URL.
+    #[tokio::test]
+    async fn pair_request_mints_token() {
+        let f = fixture().await;
+        let before = starling_wire::now_secs();
+        let resp = request(&f.sock, &Request::Pair { label: Some("ssh".into()) })
+            .await
+            .unwrap();
+        match resp {
+            Response::Ok { pair_url, expires_at } => {
+                assert!(
+                    pair_url.starts_with("starling-relay://pair?card="),
+                    "pair URL shape: {pair_url}"
+                );
+                assert!(expires_at >= before + 590 && expires_at <= before + 610);
+            }
+            Response::Error { message } => panic!("unexpected error: {message}"),
+        }
+    }
+
+    /// Garbage input gets a JSON error line, never a hangup or crash.
+    #[tokio::test]
+    async fn malformed_request_gets_error_response() {
+        let f = fixture().await;
+        let stream = UnixStream::connect(&f.sock).await.unwrap();
+        let mut reader = BufReader::new(stream);
+        reader
+            .get_mut()
+            .write_all(b"this is not json\n")
+            .await
+            .unwrap();
+        let mut line = String::new();
+        reader.read_line(&mut line).await.unwrap();
+        let resp: Response = serde_json::from_str(line.trim()).unwrap();
+        match resp {
+            Response::Error { message } => assert!(message.contains("bad request")),
+            Response::Ok { .. } => panic!("garbage must not mint a token"),
+        }
+    }
+
+    /// The socket is 0600 — the pairing channel must not be usable by
+    /// other local users.
+    #[tokio::test]
+    async fn socket_is_owner_only() {
+        let f = fixture().await;
+        let mode = std::fs::metadata(&f.sock).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600, "admin.sock mode {mode:o}");
+    }
+}

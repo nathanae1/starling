@@ -299,27 +299,34 @@ final class RelayPushCoordinatorProvider
 String _$relayPushCoordinatorHash() =>
     r'589047c820dc10b18181b32faa087e3c5cd2ea1d';
 
-/// Phone-side relay pairing orchestrator (Plan 15). Async because it
-/// depends on [relayPushCoordinator]. Null until Tor is ready.
+/// Phone-side relay pairing orchestrator (Plan 15). Constructed WITHOUT a
+/// Tor gate (A9): the Tor-dependent collaborators are lookups resolved at
+/// call time, so the local unpair mutation works with Tor down — only
+/// pairing itself (and the best-effort wire unpair notify, which the heal
+/// pass retries) needs Tor to be up.
 
 @ProviderFor(relayPairingService)
 final relayPairingServiceProvider = RelayPairingServiceProvider._();
 
-/// Phone-side relay pairing orchestrator (Plan 15). Async because it
-/// depends on [relayPushCoordinator]. Null until Tor is ready.
+/// Phone-side relay pairing orchestrator (Plan 15). Constructed WITHOUT a
+/// Tor gate (A9): the Tor-dependent collaborators are lookups resolved at
+/// call time, so the local unpair mutation works with Tor down — only
+/// pairing itself (and the best-effort wire unpair notify, which the heal
+/// pass retries) needs Tor to be up.
 
 final class RelayPairingServiceProvider
     extends
         $FunctionalProvider<
-          AsyncValue<RelayPairingService?>,
-          RelayPairingService?,
-          FutureOr<RelayPairingService?>
+          RelayPairingService,
+          RelayPairingService,
+          RelayPairingService
         >
-    with
-        $FutureModifier<RelayPairingService?>,
-        $FutureProvider<RelayPairingService?> {
-  /// Phone-side relay pairing orchestrator (Plan 15). Async because it
-  /// depends on [relayPushCoordinator]. Null until Tor is ready.
+    with $Provider<RelayPairingService> {
+  /// Phone-side relay pairing orchestrator (Plan 15). Constructed WITHOUT a
+  /// Tor gate (A9): the Tor-dependent collaborators are lookups resolved at
+  /// call time, so the local unpair mutation works with Tor down — only
+  /// pairing itself (and the best-effort wire unpair notify, which the heal
+  /// pass retries) needs Tor to be up.
   RelayPairingServiceProvider._()
     : super(
         from: null,
@@ -336,15 +343,23 @@ final class RelayPairingServiceProvider
 
   @$internal
   @override
-  $FutureProviderElement<RelayPairingService?> $createElement(
+  $ProviderElement<RelayPairingService> $createElement(
     $ProviderPointer pointer,
-  ) => $FutureProviderElement(pointer);
+  ) => $ProviderElement(pointer);
 
   @override
-  FutureOr<RelayPairingService?> create(Ref ref) {
+  RelayPairingService create(Ref ref) {
     return relayPairingService(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(RelayPairingService value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<RelayPairingService>(value),
+    );
   }
 }
 
 String _$relayPairingServiceHash() =>
-    r'cde01492ba486e195f17d25e7621d80b0fb61e2f';
+    r'0791bb6bd37ef8787e4aecc6b1945ac597814956';

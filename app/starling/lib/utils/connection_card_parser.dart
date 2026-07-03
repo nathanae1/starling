@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import '../models/connection_card.dart';
 import '../services/crypto/crockford_base32.dart';
 import '../services/relay_pairing_initiator.dart';
+import 'base64url.dart';
 
 /// Result of parsing scanned/pasted invite text.
 sealed class ParsedInvite {
@@ -81,7 +82,7 @@ ParsedInvite parseInvite(String input) {
 
   final Uint8List bytes;
   try {
-    bytes = base64Url.decode(_padBase64(b64));
+    bytes = base64UrlDecode(b64);
   } catch (_) {
     return const InvalidInvite('invite is not valid base64url');
   }
@@ -112,10 +113,4 @@ ParsedInvite parseInvite(String input) {
 String inviteUrlFor(ConnectionCard card) {
   final encoded = base64Url.encode(card.toBytes()).replaceAll('=', '');
   return 'starling://connect?card=$encoded';
-}
-
-String _padBase64(String input) {
-  final remainder = input.length % 4;
-  if (remainder == 0) return input;
-  return input + '=' * (4 - remainder);
 }

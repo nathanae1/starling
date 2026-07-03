@@ -25,6 +25,23 @@ pub fn insert(conn: &Connection, m: &ServedMedia) -> Result<bool> {
     Ok(n > 0)
 }
 
+/// Insert or refresh the row for `(pubkey, hash)`. A re-push may replace a
+/// torn or clobbered blob, so `size`/`created_at` must track the bytes
+/// actually written to disk rather than the first push's.
+pub fn upsert(conn: &Connection, m: &ServedMedia) -> Result<()> {
+    conn.execute(
+        "INSERT INTO served_media (pubkey, hash, size, created_at, path)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(pubkey, hash) DO UPDATE SET
+             size = excluded.size,
+             created_at = excluded.created_at,
+             path = excluded.path",
+        params![m.pubkey, m.hash, m.size, m.created_at, m.path],
+    )
+    .context("upsert served_media")?;
+    Ok(())
+}
+
 pub fn get(conn: &Connection, pubkey: &[u8], hash: &str) -> Result<Option<ServedMedia>> {
     conn.query_row(
         "SELECT pubkey, hash, size, created_at, path
@@ -42,6 +59,44 @@ pub fn get(conn: &Connection, pubkey: &[u8], hash: &str) -> Result<Option<Served
     )
     .optional()
     .context("get served_media")
+}
+
+/// Delete the `(pubkey, hash)` row, returning the removed row so the
+/// caller can unlink its file AFTER the delete commits (row first, file
+/// second — a crash in between leaves an orphan file for startup GC, never
+/// a row pointing at nothing). `None` when no row existed.
+pub fn delete(conn: &Connection, pubkey: &[u8], hash: &str) -> Result<Option<ServedMedia>> {
+    let row = get(conn, pubkey, hash)?;
+    if row.is_some() {
+        conn.execute(
+            "DELETE FROM served_media WHERE pubkey = ?1 AND hash = ?2",
+            params![pubkey, hash],
+        )
+        .context("delete served_media")?;
+    }
+    Ok(row)
+}
+
+/// Every media row stored for an Owner — the startup GC's input for
+/// diffing DB state against the files actually on disk.
+pub fn rows_for_owner(conn: &Connection, pubkey: &[u8]) -> Result<Vec<ServedMedia>> {
+    let mut stmt = conn.prepare(
+        "SELECT pubkey, hash, size, created_at, path
+         FROM served_media WHERE pubkey = ?1",
+    )?;
+    let rows = stmt
+        .query_map(params![pubkey], |row| {
+            Ok(ServedMedia {
+                pubkey: row.get(0)?,
+                hash: row.get(1)?,
+                size: row.get(2)?,
+                created_at: row.get(3)?,
+                path: row.get(4)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .context("query media rows for owner")?;
+    Ok(rows)
 }
 
 /// One page of an Owner's stored media hashes, `hash ASC`, keyset-paged

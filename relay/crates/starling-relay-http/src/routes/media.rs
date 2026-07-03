@@ -1,7 +1,7 @@
-//! `GET /media/<hash>` (read, no auth), `POST /media/<hash>`
-//! (Owner-signed), and `GET /media-manifest` (Owner-signed presence list
-//! for the phone's reconcile). Blobs are the raw `nonce || ciphertext`
-//! form; the relay never decrypts.
+//! `GET /media/<hash>` (read, no auth), `POST /media/<hash>` and
+//! `POST /media/delete` (Owner-signed), and `GET /media-manifest`
+//! (Owner-signed presence list for the phone's reconcile). Blobs are the
+//! raw `nonce || ciphertext` form; the relay never decrypts.
 
 use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
@@ -9,7 +9,8 @@ use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
 use serde::Deserialize;
 use starling_relay_storage::accounting::{self, CapCheck};
-use starling_relay_storage::{media, owners, ServedMedia};
+use starling_relay_storage::{immediate_tx, media, owners, ServedMedia};
+use starling_wire::delete::{DeleteMediaRequest, DeleteReceipt};
 use starling_wire::manifest::MediaManifestPage;
 
 use super::{cbor_ok, internal, now_secs};
@@ -84,7 +85,8 @@ pub async fn push_handler(
     if !is_valid_hash(&hash) {
         return (StatusCode::BAD_REQUEST, "invalid hash").into_response();
     }
-    if let Err((code, msg)) = verify_owner_request(&headers, &body, &ctx.owner_pubkey) {
+    let req_path = format!("/media/{hash}");
+    if let Err((code, msg)) = verify_owner_request(&headers, "POST", &req_path, &body, &ctx.owner_pubkey) {
         return (code, msg).into_response();
     }
 
@@ -98,19 +100,35 @@ pub async fn push_handler(
     let outcome = ctx
         .db
         .run(move |conn| {
-            // Idempotent: if we already have this blob, accept without
-            // rewriting.
-            if media::get(conn, &pubkey, &hash)?.is_some() {
-                return Ok(PushOutcome::Accepted);
+            // IMMEDIATE: write lock up front so the cap check below can't
+            // race a concurrent push, and same-hash pushes serialize
+            // instead of interleaving their file writes.
+            let tx = immediate_tx(conn)?;
+
+            let rel = owner_shard_path(&pubkey, &hash);
+            let full = media_dir.join(&rel);
+
+            // Idempotent re-push: accept without rewriting only when the
+            // row AND the on-disk blob both match the incoming size. A torn
+            // or clobbered write falls through and heals via the rewrite.
+            let existing = media::get(&tx, &pubkey, &hash)?;
+            if let Some(ref ex) = existing {
+                let disk_len = std::fs::metadata(&full).map(|m| m.len() as i64).ok();
+                if ex.size == body.len() as i64 && disk_len == Some(ex.size) {
+                    return Ok(PushOutcome::Accepted);
+                }
             }
 
             // Cap check at the shared accounting chokepoint (D4). 507 when
-            // the blob would bust the Owner's cap or the host disk cap.
-            let owner_cap = owners::get(conn, &pubkey)?
+            // the blob would bust the Owner's cap or the host disk cap. A
+            // replacement is charged only for the delta over the recorded
+            // size, so healing a torn blob can't 507 at the cap.
+            let owner_cap = owners::get(&tx, &pubkey)?
                 .and_then(|o| o.storage_cap_bytes)
                 .unwrap_or(per_owner_default);
-            match accounting::check_capacity(conn, &pubkey, body.len() as i64, owner_cap, disk_cap)?
-            {
+            let stored = existing.as_ref().map(|e| e.size).unwrap_or(0);
+            let incoming = (body.len() as i64 - stored).max(0);
+            match accounting::check_capacity(&tx, &pubkey, incoming, owner_cap, disk_cap)? {
                 CapCheck::Ok => {}
                 CapCheck::OwnerExceeded => {
                     return Ok(PushOutcome::CapExceeded("owner storage cap exceeded"))
@@ -120,12 +138,15 @@ pub async fn push_handler(
                 }
             }
 
-            let rel = owner_shard_path(&pubkey, &hash);
-            let full = media_dir.join(&rel);
             if let Some(parent) = full.parent() {
                 std::fs::create_dir_all(parent)?;
             }
-            std::fs::write(&full, &body)?;
+            // Write-then-rename: a crash mid-write can't leave a torn blob
+            // at the final path, which the idempotency check above would
+            // otherwise pin forever.
+            let tmp = full.with_extension("tmp");
+            std::fs::write(&tmp, &body)?;
+            std::fs::rename(&tmp, &full)?;
 
             let record = ServedMedia {
                 pubkey: pubkey.to_vec(),
@@ -134,7 +155,8 @@ pub async fn push_handler(
                 created_at: now_secs(),
                 path: rel,
             };
-            media::insert(conn, &record)?;
+            media::upsert(&tx, &record)?;
+            tx.commit()?;
             Ok(PushOutcome::Accepted)
         })
         .await;
@@ -152,6 +174,68 @@ enum PushOutcome {
     CapExceeded(&'static str),
 }
 
+/// `POST /media/delete` — Owner removes stored blobs by hash. CBOR
+/// `{hashes:[...]}` → `200 {deleted, missing}`; `400` if ANY hash is
+/// malformed (a bad hash is a client bug, not a missing blob). Rows are
+/// deleted in one transaction, then files are unlinked best-effort AFTER
+/// the commit — a crash in between leaves orphan files that the startup GC
+/// sweeps, never a row pointing at nothing.
+///
+/// Routed at the static `/media/delete` segment, which axum matches before
+/// the `/media/:hash` capture; `"delete"` also fails `is_valid_hash`, so
+/// the two routes can't collide even without that precedence.
+pub async fn delete_handler(
+    State(ctx): State<OwnerCtx>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    if let Err((code, msg)) =
+        verify_owner_request(&headers, "POST", "/media/delete", &body, &ctx.owner_pubkey)
+    {
+        return (code, msg).into_response();
+    }
+    let req = match DeleteMediaRequest::parse(&body) {
+        Some(r) => r,
+        None => return (StatusCode::BAD_REQUEST, "malformed cbor body").into_response(),
+    };
+    if !req.hashes.iter().all(|h| is_valid_hash(h)) {
+        return (StatusCode::BAD_REQUEST, "invalid hash").into_response();
+    }
+    let pubkey = ctx.owner_pubkey;
+    let media_dir = ctx.media_dir.clone();
+    let receipt = ctx
+        .db
+        .run(move |conn| {
+            let tx = immediate_tx(conn)?;
+            let requested = req.hashes.len() as i64;
+            let mut deleted = 0i64;
+            let mut unlink = Vec::new();
+            for hash in &req.hashes {
+                if let Some(row) = media::delete(&tx, &pubkey, hash)? {
+                    deleted += 1;
+                    unlink.push(row.path);
+                }
+            }
+            tx.commit()?;
+            for rel in unlink {
+                if let Err(e) = std::fs::remove_file(media_dir.join(&rel)) {
+                    if e.kind() != std::io::ErrorKind::NotFound {
+                        log::warn!("media delete: could not unlink {rel}: {e}");
+                    }
+                }
+            }
+            Ok(DeleteReceipt {
+                deleted,
+                missing: requested - deleted,
+            })
+        })
+        .await;
+    match receipt {
+        Ok(r) => cbor_ok(r.to_cbor()),
+        Err(e) => internal(e),
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct MediaManifestQuery {
     pub after: Option<String>,
@@ -167,7 +251,9 @@ pub async fn manifest_handler(
     headers: HeaderMap,
     Query(q): Query<MediaManifestQuery>,
 ) -> Response {
-    if let Err((code, msg)) = verify_owner_request(&headers, b"", &ctx.owner_pubkey) {
+    if let Err((code, msg)) =
+        verify_owner_request(&headers, "GET", "/media-manifest", b"", &ctx.owner_pubkey)
+    {
         return (code, msg).into_response();
     }
     let pubkey = ctx.owner_pubkey;

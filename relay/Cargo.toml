@@ -72,5 +72,13 @@ starling-relay-admin = { path = "crates/starling-relay-admin" }
 opt-level = "z"
 lto = true
 codegen-units = 1
+# `panic = "abort"` means any reachable panic in a request path (a poisoned
+# mutex, a serialize `expect`) tears down the WHOLE multi-owner process, not
+# just one request. Accepted because (a) the remaining panics are on
+# genuinely infallible paths (serializing fixed structs; with abort a lock
+# can't be poisoned since there is no unwinding), and (b) the process is
+# supervised: the systemd unit sets `Restart=on-failure`. Operators running
+# the Docker image should add a restart policy (`--restart unless-stopped`)
+# — distroless does not restart on its own.
 panic = "abort"
 strip = "symbols"

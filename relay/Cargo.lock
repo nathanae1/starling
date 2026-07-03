@@ -3599,6 +3599,7 @@ dependencies = [
  "starling-relay-http",
  "starling-relay-storage",
  "starling-wire",
+ "tempfile",
  "tokio",
  "toml 0.8.23",
 ]

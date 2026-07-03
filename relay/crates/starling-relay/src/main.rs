@@ -2,6 +2,7 @@
 
 mod admin_sock;
 mod config;
+mod gc;
 mod supervisor;
 
 use std::os::unix::fs::PermissionsExt;
@@ -102,6 +103,12 @@ async fn serve(cfg: Config) -> Result<()> {
     ensure_dirs(&cfg)?;
     let db = Db::open(&cfg.db_path())?;
 
+    // Media GC before any Owner router exists — nothing serves or writes
+    // media yet, so the sweep races nothing.
+    if let Err(e) = gc::sweep(&db, &cfg.media_dir()) {
+        log::warn!("media gc failed (continuing): {e:?}");
+    }
+
     log::info!("starting Tor (Arti) — this can take ~30s on first boot…");
     let arti = Arc::new(
         ArtiNode::start(cfg.arti_dir(), InitMode::Full, false)
@@ -127,12 +134,14 @@ async fn serve(cfg: Config) -> Result<()> {
     };
     let supervisor = Arc::new(Supervisor::new(
         db.clone(),
-        arti.clone(),
+        arti.clone() as Arc<dyn supervisor::OnionLauncher>,
         cfg.media_dir(),
         caps,
         admin_onion.clone(),
         (cfg.local_port_range[0], cfg.local_port_range[1]),
     ));
+    // Service wire `POST /unpair` requests from the per-Owner routers (A3).
+    supervisor.spawn_unpair_dispatcher();
     supervisor.restore_all().await?;
 
     let admin_state = AdminState {

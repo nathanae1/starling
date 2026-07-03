@@ -94,7 +94,19 @@ PairedRelay pairedRelayFromRow(PairedRelayEntry row) => PairedRelay(
   relayOnion: row.relayOnion,
   pairedAt: row.pairedAt,
   backfillComplete: row.relayBackfillComplete == 1,
+  relayPruneBefore: row.relayPruneBefore,
+  lastPushAt: row.lastPushAt,
+  lastError: row.lastError,
 );
+
+RelayFanoutState relayFanoutStateFromRow(RelayFanoutStateEntry? row) =>
+    row == null
+    ? const RelayFanoutState()
+    : RelayFanoutState(
+        pendingCardFanout: row.pendingCardFanout == 1,
+        pendingUnpairOnion: row.pendingUnpairOnion,
+        unpairNotifyAttempts: row.unpairNotifyAttempts,
+      );
 
 PendingCardDistribution pendingCardDistributionFromRow(
   PendingCardDistributionEntry row,

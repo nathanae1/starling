@@ -57,5 +57,13 @@ pub struct StatusJson {
     pub pubkey: String,
     pub version: String,
     pub event_count: i64,
+    /// Total bytes stored for this Owner: event payloads + media blobs.
+    /// This is what the cap and 507 threshold actually count.
+    pub storage_used: i64,
+    /// The Owner's storage cap in bytes, or `0` for unlimited. The phone
+    /// uses `(storage_used, storage_limit)` to predict a 507 before pushing.
+    pub storage_limit: i64,
+    /// Media-only bytes. Retained for older phones that read this field;
+    /// `storage_used` supersedes it.
     pub media_storage_used: i64,
 }

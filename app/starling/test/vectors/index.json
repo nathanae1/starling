@@ -1,5 +1,6 @@
 {
-  "_comment": "Canonical protocol test vectors for Starling crypto and the Dart<->Rust relay wire. Regenerate via test/vectors/vectors_gen.dart. These values are pinned to detect accidental protocol changes. Dart tests assert against them (vectors_test.dart); the Rust relay asserts the relay_wire section in relay/crates/starling-wire/tests/wire_vectors.rs.",
+  "_comment": "Canonical protocol test vectors for Starling crypto and the Dart<->Rust relay wire. Regenerate via STARLING_WRITE_VECTORS=1 flutter test test/vectors/vectors_gen.dart (which otherwise diff-asserts this file). Dart tests assert against them (vectors_test.dart, http_vectors_test.dart); the Rust relay asserts relay_wire in relay/crates/starling-wire/tests/wire_vectors.rs and http in relay/crates/starling-relay-http/tests/http_vectors.rs.",
+  "protocol_version": "2026-04-28",
   "keypair": {
     "seed_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
     "recovery_phrase": [
@@ -60,7 +61,7 @@
     "ciphertext_hex": "96df07542ad0675395b4498e2554062bbf1ac8ebbf95b4e56f1b2f0b2383c27ed288157dec095df6aec443e2a3d0816b892979dcaf6135e9d09215f34962f2a518a4d8a5941a905714636b7e8321403e69bc1afb9bf5dc092cfa735ce3f6c86dbb57d5a4461766a75acf68b82d5e2e03a776a3c97c0363c52366d0a872ff7d9f9580127cab0a7a7763fffa72264ed117bba36e79f49680d057ba03d18ff87617b812ea873cb740755ce9d7cc297ca2c2c1df54dd613f7c69ccfc2911a0165d7dfbbbabb06acf98875458512df17d522f45729a4aadeeb3b0f931b3719f4877a31bd5e36a0414deb6fa38e36bb920fc184b7efdcdc4b095d5e30b09647bca904450b0152dc79e92deef56ae342d94c20f64d680b40af27ff6c519f0b788b22ed8"
   },
   "relay_wire": {
-    "_comment": "Dart\u2194Rust wire surfaces (Plan 15). Rust consumer: relay/crates/starling-wire/tests/wire_vectors.rs. manifest_ack is Dart\u2194Dart only and skipped by the Rust test.",
+    "_comment": "Dart↔Rust wire surfaces (Plan 15). Rust consumer: relay/crates/starling-wire/tests/wire_vectors.rs. manifest_ack is Dart↔Dart only and skipped by the Rust test.",
     "crockford_base32": {
       "bytes_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
       "encoded": "000g40r40m30e209185gr38e1w8124gk2gahc5rr34d1p70x3rfg",
@@ -97,10 +98,40 @@
       "owner_sig_digest_hex": "8f01c4395b6336055b17156fee0285649a5d2a543592d66c5cd94e9adc9ff47d",
       "owner_sig_hex": "9b84c569d7cb91caa9575c0ee584f7f8af2bd5f9f07a39170090dbd4db61fb7bab3c8dae191030341795998a9cdd9e2d0e1c8f9a4e98f11bd76928906acbaf01"
     },
+    "push_batch_typed": {
+      "_comment": "F4 preserve-and-forward: a non-\"event\" item type must round-trip the relay tier unchanged.",
+      "item_id": "future-item-1",
+      "item_type": "future-thing",
+      "payload_hex": "eeeeeeeeeeeeeeee",
+      "cbor_hex": "a1656974656d7381a36269646d6675747572652d6974656d2d31677061796c6f616448eeeeeeeeeeeeeeee64747970656c6675747572652d7468696e67"
+    },
     "push_receipt": {
       "accepted": 1,
       "rejected": 0,
       "cbor_hex": "a2686163636570746564016872656a656374656400"
+    },
+    "delete_events_request": {
+      "ids": [
+        "217gtsr795tz28k0k57zwjmctectdp92h9vmkdrqtedd6qmym90g",
+        "evt-already-gone"
+      ],
+      "cbor_hex": "a16369647382783432313767747372373935747a32386b306b35377a776a6d6374656374647039326839766d6b6472717465646436716d796d393067706576742d616c72656164792d676f6e65",
+      "signed_ts": 1700000100,
+      "signed_path": "/events/delete",
+      "owner_req_digest_hex": "613de01f647e365ae4e64e5a621d5709e90e96475c74a535e6962628958b2701",
+      "owner_sig_hex": "e92b63c07d724e6c055e85f2795ebfacddfd13ce8f69874822f205c7bc278b6d582529efba6ce9dfe13ba22bc5a0f0384ed01bf3bc0be10c710ad2cf0f9b3906"
+    },
+    "delete_media_request": {
+      "hashes": [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      ],
+      "cbor_hex": "a16668617368657382784061616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161784062626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262"
+    },
+    "delete_receipt": {
+      "deleted": 1,
+      "missing": 1,
+      "cbor_hex": "a26764656c6574656401676d697373696e6701"
     },
     "manifest_page": {
       "cbor_hex": "a3667075626b657978343065676766667a6b7372386277376267766d6365656a79306b356b79396e68676b656a6774717278766a333638346a6e36367730666576656e747381a2626964783432313767747372373935747a32386b306b35377a776a6d6374656374647039326839766d6b6472717465646436716d796d3930676a637265617465645f61741a6553f100696861735f6f6c646572f5"
@@ -117,6 +148,88 @@
       "ack_rotation_at": 111,
       "card_seen_at": 222,
       "sig_hex": "1a1f95eb3b0941c77e0fa3876d29ad31cfe683dc61dfc3477d604d1079105ed06b60e7922e6e5edaf2780b34bbb3630b0109f0cd8ce2ce8b1def529e982ace09"
+    }
+  },
+  "http": {
+    "_comment": "HTTP-layer contract per relay endpoint: method, path, query param names, auth requirement, and success status. Client side asserted by test/vectors/http_vectors_test.dart (production RelayPushService/RelayPushCoordinator requests), server side by relay/crates/starling-relay-http/tests/http_vectors.rs (axum oneshot, including query-param EFFECT so a renamed param fails).",
+    "auth_headers": [
+      "x-starling-pubkey",
+      "x-starling-ts",
+      "x-starling-sig"
+    ],
+    "endpoints": {
+      "status": {
+        "method": "GET",
+        "path": "/status",
+        "auth": false,
+        "success_status": 200
+      },
+      "manifest": {
+        "method": "GET",
+        "path": "/manifest",
+        "query": [
+          "since",
+          "until",
+          "until_id"
+        ],
+        "auth": false,
+        "success_status": 200
+      },
+      "events_get": {
+        "method": "GET",
+        "path": "/events",
+        "query": [
+          "since",
+          "since_id"
+        ],
+        "auth": false,
+        "success_status": 200
+      },
+      "events_push": {
+        "method": "POST",
+        "path": "/events",
+        "auth": true,
+        "success_status": 202
+      },
+      "events_delete": {
+        "method": "POST",
+        "path": "/events/delete",
+        "auth": true,
+        "success_status": 200
+      },
+      "media_get": {
+        "method": "GET",
+        "path": "/media/{hash}",
+        "auth": false,
+        "success_status": 200
+      },
+      "media_push": {
+        "method": "POST",
+        "path": "/media/{hash}",
+        "auth": true,
+        "success_status": 202
+      },
+      "media_delete": {
+        "method": "POST",
+        "path": "/media/delete",
+        "auth": true,
+        "success_status": 200
+      },
+      "media_manifest": {
+        "method": "GET",
+        "path": "/media-manifest",
+        "query": [
+          "after"
+        ],
+        "auth": true,
+        "success_status": 200
+      },
+      "unpair": {
+        "method": "POST",
+        "path": "/unpair",
+        "auth": true,
+        "success_status": 200
+      }
     }
   }
 }

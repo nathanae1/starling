@@ -15,6 +15,7 @@
 //! `services/{relay_push_service,relay_pairing_initiator}.dart`.
 
 pub mod base32;
+pub mod delete;
 pub mod envelope;
 pub mod event_header;
 pub mod manifest;
@@ -27,7 +28,10 @@ pub mod sig;
 pub const PROTOCOL_VERSION: &str = "2026-04-28";
 
 pub use base32::{crockford_base32_decode, crockford_base32_encode};
-pub use sig::{blake2b256, verify_ed25519, verify_owner_sig};
+pub use sig::{
+    blake2b256, owner_request_digest, verify_ed25519, verify_owner_request_sig,
+    verify_owner_sig,
+};
 
 /// Current unix time in seconds. Shared by every relay crate (timestamps in
 /// wire payloads, token expiry, DB rows).

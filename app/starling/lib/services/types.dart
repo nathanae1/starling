@@ -210,17 +210,61 @@ class PendingCardDistribution {
 /// The single Relay this Owner has paired with (Plan 15). [relayOnion] is
 /// the per-Owner `.onion` the Relay launched at pair time; [backfillComplete]
 /// flips true once the one-shot history push has finished.
+/// [relayPruneBefore] is the persisted prune horizon: own posts with
+/// `createdAt < relayPruneBefore` were deliberately aged off the relay
+/// (prune-on-507) and are never re-pushed; 0 = nothing pruned.
+/// [lastPushAt]/[lastError] surface relay health (A7): the time of the
+/// last verified-converged pass and the most recent failure (null when
+/// healthy).
 class PairedRelay {
   const PairedRelay({
     required this.relayId,
     required this.relayOnion,
     required this.pairedAt,
     this.backfillComplete = false,
+    this.relayPruneBefore = 0,
+    this.lastPushAt = 0,
+    this.lastError,
   });
   final String relayId;
   final String relayOnion;
   final int pairedAt;
   final bool backfillComplete;
+  final int relayPruneBefore;
+  final int lastPushAt;
+  final String? lastError;
+
+  PairedRelay copyWith({
+    bool? backfillComplete,
+    int? relayPruneBefore,
+    int? lastPushAt,
+    String? lastError,
+    bool clearLastError = false,
+  }) => PairedRelay(
+    relayId: relayId,
+    relayOnion: relayOnion,
+    pairedAt: pairedAt,
+    backfillComplete: backfillComplete ?? this.backfillComplete,
+    relayPruneBefore: relayPruneBefore ?? this.relayPruneBefore,
+    lastPushAt: lastPushAt ?? this.lastPushAt,
+    lastError: clearLastError ? null : (lastError ?? this.lastError),
+  );
+}
+
+/// Singleton crash-safety markers for relay pair/unpair side effects
+/// (A2/A3). [pendingCardFanout] means a Connection card update is still
+/// owed to followers; [pendingUnpairOnion] names a relay not yet told
+/// about its unpair, with [unpairNotifyAttempts] counting retries so the
+/// heal pass eventually gives up on a relay that is simply gone.
+class RelayFanoutState {
+  const RelayFanoutState({
+    this.pendingCardFanout = false,
+    this.pendingUnpairOnion,
+    this.unpairNotifyAttempts = 0,
+  });
+  final bool pendingCardFanout;
+  final String? pendingUnpairOnion;
+  final int unpairNotifyAttempts;
 }
 
 class Follow {

@@ -23,8 +23,18 @@ pub use media::ServedMedia;
 pub use owners::PairedOwner;
 pub use pairings::PendingPairing;
 
+/// `BEGIN IMMEDIATE` on a shared connection ref — takes SQLite's write lock
+/// up front so a read-then-write sequence (cap check, then insert) can't
+/// interleave with another writer passing the same check against the same
+/// baseline.
+pub fn immediate_tx(conn: &Connection) -> Result<rusqlite::Transaction<'_>> {
+    rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)
+        .context("begin immediate transaction")
+}
+
 const MIGRATION_0001: &str = include_str!("../migrations/0001_init.sql");
 const MIGRATION_0002: &str = include_str!("../migrations/0002_event_size.sql");
+const MIGRATION_0003: &str = include_str!("../migrations/0003_event_type.sql");
 
 pub type PooledConn = r2d2::PooledConnection<SqliteConnectionManager>;
 
@@ -106,7 +116,11 @@ impl Db {
             conn.execute_batch(MIGRATION_0002)
                 .context("run migration 0002")?;
         }
-        conn.execute_batch("PRAGMA user_version = 2")
+        if version < 3 {
+            conn.execute_batch(MIGRATION_0003)
+                .context("run migration 0003")?;
+        }
+        conn.execute_batch("PRAGMA user_version = 3")
             .context("set user_version")?;
         Ok(())
     }

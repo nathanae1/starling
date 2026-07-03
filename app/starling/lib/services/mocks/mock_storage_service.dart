@@ -588,17 +588,84 @@ class MockStorageService implements StorageService {
   Future<void> markRelayBackfillComplete(String relayId) async {
     final relay = _pairedRelay;
     if (relay != null && relay.relayId == relayId) {
-      _pairedRelay = PairedRelay(
-        relayId: relay.relayId,
-        relayOnion: relay.relayOnion,
-        pairedAt: relay.pairedAt,
-        backfillComplete: true,
-      );
+      _pairedRelay = relay.copyWith(backfillComplete: true);
+    }
+  }
+
+  @override
+  Future<void> clearRelayBackfillComplete(String relayId) async {
+    final relay = _pairedRelay;
+    if (relay != null && relay.relayId == relayId) {
+      _pairedRelay = relay.copyWith(backfillComplete: false);
+    }
+  }
+
+  @override
+  Future<void> recordRelayPush(String relayId, int at) async {
+    final relay = _pairedRelay;
+    if (relay != null && relay.relayId == relayId) {
+      _pairedRelay = relay.copyWith(lastPushAt: at, clearLastError: true);
+    }
+  }
+
+  @override
+  Future<void> recordRelayError(String relayId, String message) async {
+    final relay = _pairedRelay;
+    if (relay != null && relay.relayId == relayId) {
+      _pairedRelay = relay.copyWith(lastError: message);
+    }
+  }
+
+  @override
+  Future<void> setRelayPruneBefore(String relayId, int pruneBefore) async {
+    final relay = _pairedRelay;
+    if (relay != null && relay.relayId == relayId) {
+      _pairedRelay = relay.copyWith(relayPruneBefore: pruneBefore);
     }
   }
 
   @override
   Future<void> clearPairedRelay() async {
+    _pairedRelay = null;
+  }
+
+  RelayFanoutState _fanoutState = const RelayFanoutState();
+
+  @override
+  Future<RelayFanoutState> getRelayFanoutState() async => _fanoutState;
+
+  @override
+  Future<void> setPendingCardFanout(bool pending) async {
+    _fanoutState = RelayFanoutState(
+      pendingCardFanout: pending,
+      pendingUnpairOnion: _fanoutState.pendingUnpairOnion,
+      unpairNotifyAttempts: _fanoutState.unpairNotifyAttempts,
+    );
+  }
+
+  @override
+  Future<void> setPendingUnpair(String? relayOnion) async {
+    _fanoutState = RelayFanoutState(
+      pendingCardFanout: _fanoutState.pendingCardFanout,
+      pendingUnpairOnion: relayOnion,
+    );
+  }
+
+  @override
+  Future<void> incrementUnpairNotifyAttempts() async {
+    _fanoutState = RelayFanoutState(
+      pendingCardFanout: _fanoutState.pendingCardFanout,
+      pendingUnpairOnion: _fanoutState.pendingUnpairOnion,
+      unpairNotifyAttempts: _fanoutState.unpairNotifyAttempts + 1,
+    );
+  }
+
+  @override
+  Future<void> beginRelayUnpair(String relayOnion) async {
+    _fanoutState = RelayFanoutState(
+      pendingCardFanout: true,
+      pendingUnpairOnion: relayOnion,
+    );
     _pairedRelay = null;
   }
 

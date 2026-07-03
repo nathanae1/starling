@@ -10,10 +10,31 @@ void main() {
   setUp(() => db = AppDatabase.memory());
   tearDown(() async => db.close());
 
-  test('schemaVersion is 11', () {
+  test('schemaVersion is 13', () {
     // v9 added the Plan 17 chatroom tables; v10 dropped the vestigial follow
-    // name/avatar columns; v11 added the voice-room missed-call flag.
-    expect(db.schemaVersion, 11);
+    // name/avatar columns; v11 added the voice-room missed-call flag; v12
+    // added the paired-relay prune horizon (deletion & retention); v13
+    // added the relay health columns (A7) + fan-out heal markers (A2/A3).
+    expect(db.schemaVersion, 13);
+  });
+
+  test('v13: paired_relay health columns + relay_fanout_state table exist',
+      () async {
+    final cols = await db
+        .customSelect("PRAGMA table_info('paired_relay_entries')")
+        .get();
+    final byName = {for (final c in cols) c.data['name'] as String: c.data};
+    expect(byName.containsKey('last_push_at'), isTrue);
+    expect(byName.containsKey('last_error'), isTrue);
+    expect(byName['last_error']!['notnull'], 0, reason: 'nullable');
+
+    final tables = await db
+        .customSelect(
+          "SELECT name FROM sqlite_master WHERE type='table' "
+          "AND name = 'relay_fanout_state_entries'",
+        )
+        .get();
+    expect(tables, hasLength(1));
   });
 
   test('the three chatroom tables exist', () async {

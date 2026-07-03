@@ -50,6 +50,7 @@ fn delete_owner_cascades_events_and_media() {
             msg_seq: 1,
             nonce: vec![0u8; 24],
             payload: vec![9u8; 16],
+            item_type: "event".into(),
         },
     )
     .unwrap();
@@ -64,6 +65,7 @@ fn delete_owner_cascades_events_and_media() {
             msg_seq: 1,
             nonce: vec![0u8; 24],
             payload: vec![9u8; 16],
+            item_type: "event".into(),
         },
     )
     .unwrap());
@@ -104,6 +106,7 @@ fn manifest_page_is_newest_first_and_bounded() {
                 msg_seq: i,
                 nonce: vec![0u8; 24],
                 payload: vec![0u8; 4],
+                item_type: "event".into(),
             },
         )
         .unwrap();
@@ -118,9 +121,61 @@ fn manifest_page_is_newest_first_and_bounded() {
     assert_eq!(older.len(), 2);
     assert_eq!(older[0].created_at, 200);
 
-    // payloads_since is chronological.
-    let payloads = events::payloads_since(&conn, &[1u8; 32], Some(200), 1000).unwrap();
-    assert_eq!(payloads.len(), 2);
+    // payloads_page is chronological, `since` inclusive.
+    let page = events::payloads_page(&conn, &[1u8; 32], Some(200), None, 1000, i64::MAX).unwrap();
+    assert_eq!(page.items.len(), 2);
+    assert!(page.next.is_none());
+}
+
+#[test]
+fn payloads_page_truncates_on_rows_and_bytes_with_keyset_resume() {
+    let db = Db::open_in_memory().unwrap();
+    let conn = db.get().unwrap();
+    owners::insert(&conn, &owner(1, 17000)).unwrap();
+    // Four events; two share created_at=100 to exercise the id tiebreaker.
+    for (id, ts, size) in [
+        ("evtA", 100i64, 4usize),
+        ("evtB", 100, 4),
+        ("evtC", 200, 4),
+        ("evtD", 300, 1000),
+    ] {
+        events::insert(
+            &conn,
+            &ServedEvent {
+                pubkey: vec![1u8; 32],
+                id: id.into(),
+                created_at: ts,
+                msg_seq: 0,
+                nonce: vec![0u8; 24],
+                payload: vec![0u8; size],
+                item_type: "event".into(),
+            },
+        )
+        .unwrap();
+    }
+
+    // Row-limit truncation: page of 2, cursor resumes mid same-second group.
+    let p1 = events::payloads_page(&conn, &[1u8; 32], None, None, 2, i64::MAX).unwrap();
+    assert_eq!(p1.items.len(), 2);
+    let (at, id) = p1.next.clone().expect("truncated page carries cursor");
+    assert_eq!((at, id.as_str()), (100, "evtB"));
+    // The strict cursor resumes past evtB: evtC + evtD complete the range,
+    // so the final page carries no cursor.
+    let p2 = events::payloads_page(&conn, &[1u8; 32], Some(at), Some(&id), 2, i64::MAX).unwrap();
+    assert_eq!(p2.items.len(), 2);
+    assert!(p2.next.is_none());
+    assert_eq!(p2.items[1].payload.len(), 1000); // evtD arrived exactly once
+
+    // Byte-budget truncation: budget 8 fits evtA+evtB, cursor at evtB.
+    let b1 = events::payloads_page(&conn, &[1u8; 32], None, None, 1000, 8).unwrap();
+    assert_eq!(b1.items.len(), 2);
+    assert_eq!(b1.next.as_ref().map(|(_, i)| i.as_str()), Some("evtB"));
+
+    // First row always fits even when it alone busts the budget.
+    let big = events::payloads_page(&conn, &[1u8; 32], Some(300), None, 1000, 1).unwrap();
+    assert_eq!(big.items.len(), 1);
+    assert_eq!(big.items[0].payload.len(), 1000);
+    assert!(big.next.is_none());
 }
 
 #[test]
@@ -140,6 +195,7 @@ fn manifest_page_keyset_tiebreaker_pages_same_second_losslessly() {
                 msg_seq: 0,
                 nonce: vec![0u8; 24],
                 payload: vec![0u8; 4],
+                item_type: "event".into(),
             },
         )
         .unwrap();
@@ -181,6 +237,7 @@ fn events_size_accounting_and_combined_usage() {
                 msg_seq: 0,
                 nonce: vec![0u8; 24],
                 payload: vec![9u8; len],
+                item_type: "event".into(),
             },
         )
         .unwrap();

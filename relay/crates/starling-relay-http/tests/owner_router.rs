@@ -51,6 +51,7 @@ fn fixture_with(caps: Caps, storage_cap_bytes: Option<i64>) -> Fixture {
         owner_pubkey: pubkey,
         media_dir: media.path().to_path_buf(),
         caps,
+        unpair: None,
     };
     Fixture {
         sk,
@@ -124,6 +125,7 @@ async fn push_then_read_events_and_manifest() {
         items: vec![PushItem {
             id: "evt1".into(),
             payload: payload.clone(),
+            item_type: "event".into(),
         }],
     };
     let body = cbor(&batch);
@@ -338,6 +340,7 @@ async fn events_push_over_owner_cap_507() {
         items: vec![PushItem {
             id: "evt-big".into(),
             payload: make_event_sized(&pubkey_text, 100, 0, 200),
+            item_type: "event".into(),
         }],
     };
     let (status, body) = send(&f.ctx, signed_events_push(&f, &batch)).await;
@@ -355,6 +358,7 @@ async fn media_push_counts_event_bytes_toward_cap() {
         items: vec![PushItem {
             id: "evt1".into(),
             payload: make_event_sized(&pubkey_text, 100, 0, 800),
+            item_type: "event".into(),
         }],
     };
     let (status, _) = send(&f.ctx, signed_events_push(&f, &batch)).await;
@@ -417,6 +421,7 @@ async fn host_disk_cap_spans_owners_507() {
                 owner_pubkey: pubkey,
                 media_dir: media.path().to_path_buf(),
                 caps,
+                unpair: None,
             },
             _media: tempfile::tempdir().unwrap(),
         });
@@ -478,6 +483,7 @@ async fn body_limit_is_4mib() {
         items: vec![PushItem {
             id: "evt-3mib".into(),
             payload: make_event_sized(&pubkey_text, 100, 0, 3 * 1024 * 1024),
+            item_type: "event".into(),
         }],
     };
     let (status, _) = send(&f.ctx, signed_events_push(&f, &batch)).await;
@@ -488,6 +494,7 @@ async fn body_limit_is_4mib() {
         items: vec![PushItem {
             id: "evt-5mib".into(),
             payload: make_event_sized(&pubkey_text, 100, 0, 5 * 1024 * 1024),
+            item_type: "event".into(),
         }],
     };
     let (status, _) = send(&f.ctx, signed_events_push(&f, &batch)).await;
@@ -543,6 +550,7 @@ async fn manifest_pages_to_completion_with_until_id() {
                     msg_seq: i,
                     nonce: vec![0u8; 24],
                     payload: vec![0u8; 4],
+                    item_type: "event".into(),
                 },
             )
             .unwrap();
@@ -693,6 +701,7 @@ async fn cross_owner_media_cannot_clobber() {
             owner_pubkey: pubkey,
             media_dir: media.path().to_path_buf(),
             caps: Caps::default(),
+            unpair: None,
         };
         owners_ctx.push((sk, ctx));
     }
@@ -738,4 +747,527 @@ async fn cross_owner_media_cannot_clobber() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(got_b, blob_b);
+}
+
+/// Build a request-bound signed POST (the `X-Starling-Ts` scheme).
+fn bound_signed_post(f: &Fixture, path: &str, body: Vec<u8>, ts: i64) -> Request<Body> {
+    let digest = starling_wire::owner_request_digest("POST", path, ts, &body);
+    let sig = f.sk.sign(&digest);
+    Request::post(path)
+        .header("x-starling-pubkey", b64(&f.pubkey))
+        .header("x-starling-sig", b64(&sig.to_bytes()))
+        .header("x-starling-ts", ts.to_string())
+        .header("content-type", "application/cbor")
+        .body(Body::from(body))
+        .unwrap()
+}
+
+/// The bound scheme: valid → 202; stale ts → 401; a signature minted for
+/// one path replayed against another → 401.
+#[tokio::test]
+async fn bound_owner_sig_accepted_and_replay_rejected() {
+    let f = fixture();
+    let body = cbor(&PushBatch { items: vec![] });
+    let now = starling_wire::now_secs();
+
+    let (status, _) = send(&f.ctx, bound_signed_post(&f, "/events", body.clone(), now)).await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+
+    // Stale timestamp → 401 even with a matching signature.
+    let (status, msg) = send(
+        &f.ctx,
+        bound_signed_post(&f, "/events", body.clone(), now - 3600),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(msg, b"stale x-starling-ts");
+
+    // Cross-path replay: headers minted for /events, replayed against
+    // /media-manifest (as a GET with those headers) → 401.
+    let digest = starling_wire::owner_request_digest("POST", "/events", now, &body);
+    let sig = f.sk.sign(&digest);
+    let (status, _) = send(
+        &f.ctx,
+        Request::get("/media-manifest")
+            .header("x-starling-pubkey", b64(&f.pubkey))
+            .header("x-starling-sig", b64(&sig.to_bytes()))
+            .header("x-starling-ts", now.to_string())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+/// M4: a torn blob on disk (row says N bytes, file has fewer) heals on
+/// re-push instead of being pinned forever by the idempotency check.
+#[tokio::test]
+async fn torn_media_blob_heals_on_repush() {
+    let f = fixture();
+    let hash = "f".repeat(64);
+    let blob = vec![9u8; 512];
+
+    let (status, _) = send(&f.ctx, signed_media_push(&f, &hash, &blob)).await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+
+    // Simulate the torn write: truncate the blob behind the relay's back.
+    let full = f.ctx.media_dir.join(owner_shard_path(&f.pubkey, &hash));
+    std::fs::write(&full, &blob[..100]).unwrap();
+
+    // Re-push: 202 and the full bytes are back.
+    let (status, _) = send(&f.ctx, signed_media_push(&f, &hash, &blob)).await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    assert_eq!(std::fs::read(&full).unwrap(), blob);
+
+    // Plain duplicate re-push stays idempotent.
+    let (status, _) = send(&f.ctx, signed_media_push(&f, &hash, &blob)).await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    assert_eq!(std::fs::read(&full).unwrap(), blob);
+}
+
+/// M1: an oversized `PushItem.id` is rejected (counted in the receipt),
+/// not stored as an unaccounted byte sink.
+#[tokio::test]
+async fn oversized_push_item_id_rejected() {
+    let f = fixture();
+    let pubkey_text = crockford_base32_encode(&f.pubkey);
+    let batch = PushBatch {
+        items: vec![
+            PushItem {
+                id: "x".repeat(65),
+                payload: make_event(&pubkey_text, 100, 0),
+                item_type: "event".into(),
+            },
+            PushItem {
+                id: "evt-ok".into(),
+                payload: make_event(&pubkey_text, 101, 1),
+                item_type: "event".into(),
+            },
+        ],
+    };
+    let (status, body) = send(&f.ctx, signed_events_push(&f, &batch)).await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    let receipt: Value = ciborium::from_reader(&body[..]).unwrap();
+    let field = |name: &str| {
+        receipt
+            .as_map()
+            .unwrap()
+            .iter()
+            .find(|(k, _)| k.as_text() == Some(name))
+            .and_then(|(_, v)| v.as_integer())
+            .map(i128::from)
+            .unwrap()
+    };
+    assert_eq!(field("accepted"), 1);
+    assert_eq!(field("rejected"), 1);
+}
+
+/// F4: an item with an unknown `type` is stored opaquely and served back in
+/// the `/events` envelope with its type + payload intact (preserve-and-forward).
+#[tokio::test]
+async fn unknown_item_type_round_trips() {
+    let f = fixture();
+    let batch = PushBatch {
+        items: vec![PushItem {
+            id: "future1".into(),
+            payload: vec![0xEE; 40], // not a valid EncryptedEvent header
+            item_type: "future-thing".into(),
+        }],
+    };
+    let (status, body) = send(&f.ctx, signed_events_push(&f, &batch)).await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    let receipt: Value = ciborium::from_reader(&body[..]).unwrap();
+    let accepted = receipt
+        .as_map()
+        .unwrap()
+        .iter()
+        .find(|(k, _)| k.as_text() == Some("accepted"))
+        .and_then(|(_, v)| v.as_integer())
+        .map(i128::from)
+        .unwrap();
+    assert_eq!(accepted, 1);
+
+    let (status, body) = send(&f.ctx, Request::get("/events").body(Body::empty()).unwrap()).await;
+    assert_eq!(status, StatusCode::OK);
+    let env: Value = ciborium::from_reader(&body[..]).unwrap();
+    let items_arr = env
+        .as_map()
+        .unwrap()
+        .iter()
+        .find(|(k, _)| k.as_text() == Some("items"))
+        .and_then(|(_, v)| v.as_array())
+        .unwrap()
+        .clone();
+    let item = items_arr[0].as_map().unwrap();
+    let typ = item
+        .iter()
+        .find(|(k, _)| k.as_text() == Some("type"))
+        .and_then(|(_, v)| v.as_text())
+        .unwrap();
+    assert_eq!(typ, "future-thing");
+    let payload = item
+        .iter()
+        .find(|(k, _)| k.as_text() == Some("payload"))
+        .and_then(|(_, v)| v.as_bytes())
+        .unwrap();
+    assert_eq!(payload, &vec![0xEE; 40]);
+}
+
+/// H2/L7: `GET /events` pages by keyset; a truncated page carries the
+/// `extensions["next"]` cursor, and walking it yields every payload
+/// exactly once.
+#[tokio::test]
+async fn events_get_pages_with_next_cursor() {
+    let f = fixture();
+    {
+        let conn = f.ctx.db.get().unwrap();
+        for i in 0..501 {
+            starling_relay_storage::events::insert(
+                &conn,
+                &starling_relay_storage::ServedEvent {
+                    pubkey: f.pubkey.to_vec(),
+                    id: format!("evt{i:04}"),
+                    created_at: 100, // all same second — pure id-tiebreak paging
+                    msg_seq: i,
+                    nonce: vec![0u8; 24],
+                    payload: vec![i as u8; 4],
+                    item_type: "event".into(),
+                },
+            )
+            .unwrap();
+        }
+    }
+
+    let parse_page = |body: &[u8]| -> (usize, Option<(i64, String)>) {
+        let env: Value = ciborium::from_reader(body).unwrap();
+        let map = env.as_map().unwrap();
+        let items = map
+            .iter()
+            .find(|(k, _)| k.as_text() == Some("items"))
+            .and_then(|(_, v)| v.as_array())
+            .unwrap()
+            .len();
+        let next = map
+            .iter()
+            .find(|(k, _)| k.as_text() == Some("extensions"))
+            .and_then(|(_, v)| v.as_map())
+            .and_then(|ext| {
+                ext.iter()
+                    .find(|(k, _)| k.as_text() == Some("next"))
+                    .and_then(|(_, v)| v.as_bytes().cloned())
+            })
+            .map(|bytes| {
+                let cursor: Value = ciborium::from_reader(bytes.as_slice()).unwrap();
+                let m = cursor.as_map().unwrap();
+                let at = m
+                    .iter()
+                    .find(|(k, _)| k.as_text() == Some("created_at"))
+                    .and_then(|(_, v)| v.as_integer())
+                    .map(|v| i128::from(v) as i64)
+                    .unwrap();
+                let id = m
+                    .iter()
+                    .find(|(k, _)| k.as_text() == Some("id"))
+                    .and_then(|(_, v)| v.as_text())
+                    .unwrap()
+                    .to_string();
+                (at, id)
+            });
+        (items, next)
+    };
+
+    let (status, body) = send(&f.ctx, Request::get("/events").body(Body::empty()).unwrap()).await;
+    assert_eq!(status, StatusCode::OK);
+    let (count1, next) = parse_page(&body);
+    assert_eq!(count1, 500);
+    let (at, id) = next.expect("truncated page carries next cursor");
+    assert_eq!((at, id.as_str()), (100, "evt0499"));
+
+    let (status, body) = send(
+        &f.ctx,
+        Request::get(format!("/events?since={at}&since_id={id}"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (count2, next) = parse_page(&body);
+    assert_eq!(count2, 1);
+    assert!(next.is_none());
+}
+
+// ---------------------------------------------------------------------------
+// Deletion (Phase 3): POST /events/delete + POST /media/delete
+// ---------------------------------------------------------------------------
+
+fn signed_delete(f: &Fixture, path: &str, body: Vec<u8>) -> Request<Body> {
+    let ts = starling_wire::now_secs();
+    let digest = starling_wire::owner_request_digest("POST", path, ts, &body);
+    let sig = f.sk.sign(&digest);
+    Request::post(path)
+        .header("x-starling-pubkey", b64(&f.pubkey))
+        .header("x-starling-sig", b64(&sig.to_bytes()))
+        .header("x-starling-ts", ts.to_string())
+        .header("content-type", "application/cbor")
+        .body(Body::from(body))
+        .unwrap()
+}
+
+fn parse_delete_receipt(body: &[u8]) -> (i64, i64) {
+    let v: Value = ciborium::from_reader(body).unwrap();
+    let field = |name: &str| {
+        v.as_map()
+            .unwrap()
+            .iter()
+            .find(|(k, _)| k.as_text() == Some(name))
+            .and_then(|(_, val)| val.as_integer())
+            .map(|i| i128::from(i) as i64)
+            .unwrap()
+    };
+    (field("deleted"), field("missing"))
+}
+
+/// Deleting an event removes it from BOTH read surfaces (`/manifest` and
+/// the `/events` envelope); a second identical delete is idempotent and
+/// counts the ids as missing.
+#[tokio::test]
+async fn events_delete_removes_and_is_idempotent() {
+    let f = fixture();
+    let pubkey_text = crockford_base32_encode(&f.pubkey);
+    let batch = PushBatch {
+        items: vec![
+            PushItem {
+                id: "evt-keep".into(),
+                payload: make_event(&pubkey_text, 100, 0),
+                item_type: "event".into(),
+            },
+            PushItem {
+                id: "evt-dead".into(),
+                payload: make_event(&pubkey_text, 101, 1),
+                item_type: "event".into(),
+            },
+        ],
+    };
+    let (status, _) = send(&f.ctx, signed_events_push(&f, &batch)).await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+
+    let body = cbor(&starling_wire::delete::DeleteEventsRequest {
+        ids: vec!["evt-dead".into(), "evt-never-existed".into()],
+    });
+    let (status, recv) = send(&f.ctx, signed_delete(&f, "/events/delete", body.clone())).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(parse_delete_receipt(&recv), (1, 1));
+
+    // Gone from the manifest…
+    let (status, man) = send(&f.ctx, Request::get("/manifest").body(Body::empty()).unwrap()).await;
+    assert_eq!(status, StatusCode::OK);
+    let (ids, _) = parse_manifest(&man);
+    assert_eq!(ids, vec!["evt-keep"]);
+
+    // …and from the /events envelope.
+    let (status, ev) = send(&f.ctx, Request::get("/events").body(Body::empty()).unwrap()).await;
+    assert_eq!(status, StatusCode::OK);
+    let env: Value = ciborium::from_reader(&ev[..]).unwrap();
+    let items = env
+        .as_map()
+        .unwrap()
+        .iter()
+        .find(|(k, _)| k.as_text() == Some("items"))
+        .and_then(|(_, v)| v.as_array())
+        .unwrap()
+        .len();
+    assert_eq!(items, 1);
+
+    // Replay the same delete: both ids now missing, still 200.
+    let (status, recv) = send(&f.ctx, signed_delete(&f, "/events/delete", body)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(parse_delete_receipt(&recv), (0, 2));
+}
+
+/// Both delete routes refuse anonymous (401) and wrong-owner (403)
+/// requests.
+#[tokio::test]
+async fn delete_routes_auth_matrix() {
+    let f = fixture();
+    let ev_body = cbor(&starling_wire::delete::DeleteEventsRequest { ids: vec!["e".into()] });
+    let md_body = cbor(&starling_wire::delete::DeleteMediaRequest {
+        hashes: vec!["a".repeat(64)],
+    });
+
+    for (path, body) in [("/events/delete", &ev_body), ("/media/delete", &md_body)] {
+        // Anonymous → 401.
+        let (status, _) = send(
+            &f.ctx,
+            Request::post(path).body(Body::from(body.clone())).unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "{path} anonymous");
+
+        // Valid signature by a DIFFERENT owner → 403.
+        let other_sk = SigningKey::from_bytes(&[9u8; 32]);
+        let ts = starling_wire::now_secs();
+        let digest = starling_wire::owner_request_digest("POST", path, ts, body);
+        let sig = other_sk.sign(&digest);
+        let (status, _) = send(
+            &f.ctx,
+            Request::post(path)
+                .header("x-starling-pubkey", b64(&other_sk.verifying_key().to_bytes()))
+                .header("x-starling-sig", b64(&sig.to_bytes()))
+                .header("x-starling-ts", ts.to_string())
+                .body(Body::from(body.clone()))
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{path} wrong owner");
+    }
+}
+
+/// Media delete removes the row, the blob file, and the manifest entry;
+/// re-delete is idempotent; any malformed hash rejects the whole request.
+#[tokio::test]
+async fn media_delete_removes_row_file_and_manifest() {
+    let f = fixture();
+    let hash = "a".repeat(64);
+    let blob = vec![7u8; 256];
+    let (status, _) = send(&f.ctx, signed_media_push(&f, &hash, &blob)).await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    let full = f.ctx.media_dir.join(owner_shard_path(&f.pubkey, &hash));
+    assert!(full.exists());
+
+    let body = cbor(&starling_wire::delete::DeleteMediaRequest {
+        hashes: vec![hash.clone(), "b".repeat(64)],
+    });
+    let (status, recv) = send(&f.ctx, signed_delete(&f, "/media/delete", body.clone())).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(parse_delete_receipt(&recv), (1, 1));
+    assert!(!full.exists(), "blob file unlinked");
+
+    // Gone from /media-manifest.
+    let (status, man) = send(&f.ctx, media_manifest_req(&f, None)).await;
+    assert_eq!(status, StatusCode::OK);
+    let page: Value = ciborium::from_reader(&man[..]).unwrap();
+    let hashes = page
+        .as_map()
+        .unwrap()
+        .iter()
+        .find(|(k, _)| k.as_text() == Some("hashes"))
+        .and_then(|(_, v)| v.as_array())
+        .unwrap()
+        .len();
+    assert_eq!(hashes, 0);
+
+    // GET now 404s.
+    let (status, _) = send(
+        &f.ctx,
+        Request::get(format!("/media/{hash}")).body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // Idempotent replay.
+    let (status, recv) = send(&f.ctx, signed_delete(&f, "/media/delete", body)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(parse_delete_receipt(&recv), (0, 2));
+
+    // A single malformed hash 400s the whole request.
+    let bad = cbor(&starling_wire::delete::DeleteMediaRequest {
+        hashes: vec!["not-a-hash".into()],
+    });
+    let (status, _) = send(&f.ctx, signed_delete(&f, "/media/delete", bad)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+/// The whole point of pruning: a 507'd Owner deletes old events and the
+/// next push fits (delete frees cap).
+#[tokio::test]
+async fn delete_frees_cap_507_then_202() {
+    let f = fixture_with(Caps::default(), Some(1000));
+    let pubkey_text = crockford_base32_encode(&f.pubkey);
+
+    let old = PushBatch {
+        items: vec![PushItem {
+            id: "evt-old".into(),
+            payload: make_event_sized(&pubkey_text, 100, 0, 800),
+            item_type: "event".into(),
+        }],
+    };
+    let (status, _) = send(&f.ctx, signed_events_push(&f, &old)).await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+
+    let new = PushBatch {
+        items: vec![PushItem {
+            id: "evt-new".into(),
+            payload: make_event_sized(&pubkey_text, 200, 1, 700),
+            item_type: "event".into(),
+        }],
+    };
+    let (status, _) = send(&f.ctx, signed_events_push(&f, &new)).await;
+    assert_eq!(status, StatusCode::INSUFFICIENT_STORAGE);
+
+    let body = cbor(&starling_wire::delete::DeleteEventsRequest {
+        ids: vec!["evt-old".into()],
+    });
+    let (status, recv) = send(&f.ctx, signed_delete(&f, "/events/delete", body)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(parse_delete_receipt(&recv), (1, 0));
+
+    let (status, _) = send(&f.ctx, signed_events_push(&f, &new)).await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+}
+
+// ---------------------------------------------------------------------------
+// Wire unpair (A3): POST /unpair
+// ---------------------------------------------------------------------------
+
+/// `/unpair` auth matrix: anonymous → 401, a valid signature by a
+/// DIFFERENT owner → 403 — and in both cases the supervisor hook must NOT
+/// fire. With no hook wired (test/bare contexts) a valid owner signature
+/// answers 501 instead of silently pretending to unpair.
+#[tokio::test]
+async fn unpair_auth_matrix_and_unwired_501() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    let mut f = fixture();
+    let fired = Arc::new(AtomicUsize::new(0));
+    let fired_in_hook = fired.clone();
+    f.ctx.unpair = Some(Arc::new(move || {
+        fired_in_hook.fetch_add(1, Ordering::SeqCst);
+    }) as starling_relay_http::UnpairHandle);
+
+    // Anonymous → 401.
+    let (status, _) = send(
+        &f.ctx,
+        Request::post("/unpair").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED, "anonymous");
+
+    // Valid signature by a DIFFERENT owner → 403.
+    let other_sk = SigningKey::from_bytes(&[9u8; 32]);
+    let ts = starling_wire::now_secs();
+    let digest = starling_wire::owner_request_digest("POST", "/unpair", ts, &[]);
+    let sig = other_sk.sign(&digest);
+    let (status, _) = send(
+        &f.ctx,
+        Request::post("/unpair")
+            .header("x-starling-pubkey", b64(&other_sk.verifying_key().to_bytes()))
+            .header("x-starling-sig", b64(&sig.to_bytes()))
+            .header("x-starling-ts", ts.to_string())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "wrong owner");
+    assert_eq!(fired.load(Ordering::SeqCst), 0, "hook never fired unauthorized");
+
+    // The real owner → 200 + exactly one hook invocation.
+    let (status, _) = send(&f.ctx, signed_delete(&f, "/unpair", Vec::new())).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(fired.load(Ordering::SeqCst), 1, "hook fired once");
+
+    // No hook wired → 501, never a phantom success.
+    f.ctx.unpair = None;
+    let (status, _) = send(&f.ctx, signed_delete(&f, "/unpair", Vec::new())).await;
+    assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
 }

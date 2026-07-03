@@ -364,7 +364,43 @@ class DriftStorageService implements StorageService {
       _db.pairedRelayDao.markBackfillComplete(relayId);
 
   @override
+  Future<void> clearRelayBackfillComplete(String relayId) =>
+      _db.pairedRelayDao.clearBackfillComplete(relayId);
+
+  @override
+  Future<void> recordRelayPush(String relayId, int at) =>
+      _db.pairedRelayDao.recordRelayPush(relayId, at);
+
+  @override
+  Future<void> recordRelayError(String relayId, String message) =>
+      _db.pairedRelayDao.recordRelayError(relayId, message);
+
+  @override
+  Future<void> setRelayPruneBefore(String relayId, int pruneBefore) =>
+      _db.pairedRelayDao.setRelayPruneBefore(relayId, pruneBefore);
+
+  @override
   Future<void> clearPairedRelay() => _db.pairedRelayDao.clearPairedRelay();
+
+  @override
+  Future<RelayFanoutState> getRelayFanoutState() async =>
+      relayFanoutStateFromRow(await _db.pairedRelayDao.getFanoutState());
+
+  @override
+  Future<void> setPendingCardFanout(bool pending) =>
+      _db.pairedRelayDao.setPendingCardFanout(pending);
+
+  @override
+  Future<void> setPendingUnpair(String? relayOnion) =>
+      _db.pairedRelayDao.setPendingUnpair(relayOnion);
+
+  @override
+  Future<void> incrementUnpairNotifyAttempts() =>
+      _db.pairedRelayDao.incrementUnpairNotifyAttempts();
+
+  @override
+  Future<void> beginRelayUnpair(String relayOnion) =>
+      _db.pairedRelayDao.beginUnpair(relayOnion);
 
   @override
   Future<void> queueCardDistribution({

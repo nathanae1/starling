@@ -32,7 +32,9 @@ class _ConfirmRelayPairingSheetState
   @override
   Widget build(BuildContext context) {
     final starling = StarlingTheme.of(context);
-    final ready = ref.watch(relayPairingServiceProvider).value != null;
+    // Pairing dials the relay's admin onion, so it genuinely needs Tor;
+    // the initiator provider is null until Tor is ready.
+    final ready = ref.watch(relayPairingInitiatorProvider) != null;
     final onion = widget.payload.relayOnion;
     final shortOnion = onion.length > 18 ? '${onion.substring(0, 18)}…' : onion;
     return Column(
@@ -118,25 +120,24 @@ class _ConfirmRelayPairingSheetState
       _error = null;
     });
     try {
-      final service = ref.read(relayPairingServiceProvider).value;
-      if (service == null) {
+      if (ref.read(relayPairingInitiatorProvider) == null) {
         setState(() {
           _pairing = false;
           _error = 'Tor isn’t ready yet.';
         });
         return;
       }
-      await service.pair(widget.payload);
+      await ref.read(relayPairingServiceProvider).pair(widget.payload);
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } on RelayPairingException catch (e) {
       if (!mounted) return;
       setState(() {
         _pairing = false;
-        // 409 = the relay already claimed this token, routinely because our
-        // earlier attempt timed out mid-launch; once the launch finishes,
-        // retrying the same claim succeeds idempotently.
-        _error = e.statusCode == 409
+        // tokenAlreadyClaimed routinely means our earlier attempt timed
+        // out mid-launch; once the launch finishes, retrying the same
+        // claim succeeds idempotently.
+        _error = e.kind == RelayPairingErrorKind.tokenAlreadyClaimed
             ? 'That pairing code was already claimed — if your earlier '
                   'attempt timed out, the relay may still be finishing. Try '
                   'again in a minute, or scan a fresh code from the relay’s '

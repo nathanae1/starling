@@ -28,7 +28,8 @@ void main() {
 
   /// Real [RelayPairingService] over a mock `/pair` transport so the sheet's
   /// error mapping is exercised through the real initiator code path.
-  Future<RelayPairingService> buildService({
+  /// Returns the initiator too — the sheet gates readiness on its provider.
+  Future<(RelayPairingService, RelayPairingInitiator)> buildService({
     required http.Client pairClient,
     Duration timeout = const Duration(seconds: 90),
   }) async {
@@ -41,13 +42,14 @@ void main() {
         createdAt: 0,
       ),
     );
-    return RelayPairingService(
-      initiator: RelayPairingInitiator(
-        crypto: crypto,
-        httpClient: pairClient,
-        timeout: timeout,
-      ),
-      pushCoordinator: RelayPushCoordinator(
+    final initiator = RelayPairingInitiator(
+      crypto: crypto,
+      httpClient: pairClient,
+      timeout: timeout,
+    );
+    final service = RelayPairingService(
+      initiatorLookup: () => initiator,
+      pushCoordinatorLookup: () async => RelayPushCoordinator(
         pushService: RelayPushService(
           crypto: crypto,
           httpClient: MockClient((_) async => http.Response('', 202)),
@@ -58,6 +60,7 @@ void main() {
         ownSecretKeyLookup: () async => kp.secretKey,
         mediaBytesLookup: (_) async => null,
       ),
+      pushServiceLookup: () => null,
       crypto: crypto,
       storage: storage,
       clock: MockClock(),
@@ -66,12 +69,15 @@ void main() {
       ownEndpointsLookup: () => const [],
       reloadPairedRelay: () async {},
     );
+    return (service, initiator);
   }
 
-  Widget harness(RelayPairingService service) {
+  Widget harness((RelayPairingService, RelayPairingInitiator) wired) {
+    final (service, initiator) = wired;
     final container = ProviderContainer(
       overrides: [
-        relayPairingServiceProvider.overrideWith((ref) async => service),
+        relayPairingServiceProvider.overrideWith((ref) => service),
+        relayPairingInitiatorProvider.overrideWith((ref) => initiator),
       ],
     );
     addTearDown(container.dispose);

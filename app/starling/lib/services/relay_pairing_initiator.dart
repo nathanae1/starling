@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:cbor/simple.dart';
 import 'package:http/http.dart' as http;
 
+import '../utils/base64url.dart';
 import 'crypto/crockford_base32.dart';
 import 'crypto_service.dart';
 
@@ -100,14 +101,12 @@ class RelayPairingPayload {
   final String relayVersion;
 
   /// Decode the base64url-encoded CBOR map carried as the `card` query
-  /// parameter of a `starling-relay://pair` URL.
-  factory RelayPairingPayload.fromBase64(String base64Url) {
-    final padded = _padBase64Url(base64Url);
-    final bytes = base64Url.contains('-') || base64Url.contains('_')
-        ? base64Url == padded
-              ? base64UrlDecode(base64Url)
-              : base64UrlDecode(padded)
-        : base64.decode(padded);
+  /// parameter of a `starling-relay://pair` URL. Standard-alphabet input
+  /// (no `-`/`_`) is accepted too — some encoders emit it.
+  factory RelayPairingPayload.fromBase64(String input) {
+    final bytes = input.contains('-') || input.contains('_')
+        ? base64UrlDecode(input)
+        : base64.decode(padBase64(input));
     final decoded = cbor.decode(bytes);
     if (decoded is! Map) {
       throw const FormatException('pair card not a CBOR map');
@@ -132,23 +131,29 @@ class RelayPairingResult {
   final String relayId;
 }
 
+/// What went wrong with a `/pair` handshake, typed so UI copy can branch
+/// without matching on raw status codes (A11).
+enum RelayPairingErrorKind {
+  /// HTTP 409 — the relay already consumed this pairing token. Routinely
+  /// a first attempt that timed out client-side but succeeded relay-side;
+  /// retrying the same claim succeeds idempotently once the launch lands.
+  tokenAlreadyClaimed,
+
+  /// Any other failure: bad status, malformed response.
+  failure,
+}
+
 class RelayPairingException implements Exception {
   const RelayPairingException(this.message, this.statusCode);
   final String message;
   final int statusCode;
+
+  RelayPairingErrorKind get kind => statusCode == 409
+      ? RelayPairingErrorKind.tokenAlreadyClaimed
+      : RelayPairingErrorKind.failure;
+
   @override
   String toString() => 'RelayPairingException($statusCode): $message';
-}
-
-Uint8List base64UrlDecode(String input) {
-  final padded = _padBase64Url(input);
-  return base64Url.decode(padded);
-}
-
-String _padBase64Url(String input) {
-  final mod = input.length % 4;
-  if (mod == 0) return input;
-  return input + ('=' * (4 - mod));
 }
 
 // Domain-separation tag for the signed pairing claim. Bound into

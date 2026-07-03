@@ -226,8 +226,46 @@ abstract class StorageService {
   /// media history has been pushed to the Relay.
   Future<void> markRelayBackfillComplete(String relayId);
 
+  /// Un-flip the backfill flag when a later pass finds the relay diverged
+  /// (rejected pushes, failed deletes) so the UI reads "syncing" again (A5).
+  Future<void> clearRelayBackfillComplete(String relayId);
+
+  /// A7: stamp a verified-successful push/reconcile at [at] and clear any
+  /// persisted error.
+  Future<void> recordRelayPush(String relayId, int at);
+
+  /// A7: persist the most recent relay failure for the settings screen.
+  Future<void> recordRelayError(String relayId, String message);
+
+  /// Persist the prune horizon for [relayId]: own posts with
+  /// `createdAt < pruneBefore` were deliberately aged off the relay
+  /// (prune-on-507) and must never be re-pushed. Written BEFORE the
+  /// deletes are issued so a crash mid-prune re-derives the same set.
+  Future<void> setRelayPruneBefore(String relayId, int pruneBefore);
+
   /// Forget the paired Relay (unpair).
   Future<void> clearPairedRelay();
+
+  /// Crash-safety markers for pair/unpair side effects (A2/A3). The heal
+  /// pass reads this to re-run card fan-out / the wire unpair notify.
+  Future<RelayFanoutState> getRelayFanoutState();
+
+  /// Set (before mutating pairing state) or clear (after the card is
+  /// sealed + queued for every follower) the card fan-out marker.
+  Future<void> setPendingCardFanout(bool pending);
+
+  /// Record (or clear, with null) the relay onion still owed a
+  /// `POST /unpair`. Setting or clearing resets the attempt counter.
+  Future<void> setPendingUnpair(String? relayOnion);
+
+  /// Bump the unpair-notify retry counter (heal pass gives up at a cap).
+  Future<void> incrementUnpairNotifyAttempts();
+
+  /// The local unpair mutation as ONE atomic step (A2/A3): set the card
+  /// fan-out marker, record [relayOnion] as owed a `POST /unpair`, and
+  /// delete the paired-relay row — so a crash can never leave the relay
+  /// notified-but-still-paired or cleared-but-never-notified.
+  Future<void> beginRelayUnpair(String relayOnion);
 
   /// Queue a sealed Connection card update for [targetPubkey], delivered on
   /// that follower's next `/manifest` response.

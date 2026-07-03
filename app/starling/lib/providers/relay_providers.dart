@@ -1,7 +1,7 @@
 import 'package:http/http.dart' as http;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../server/handlers/media_handler.dart';
+import '../services/media/media_files.dart';
 import '../services/relay_pairing_initiator.dart';
 import '../services/relay_pairing_service.dart';
 import '../services/relay_push_coordinator.dart';
@@ -95,17 +95,18 @@ Future<RelayPushCoordinator?> relayPushCoordinator(Ref ref) async {
   );
 }
 
-/// Phone-side relay pairing orchestrator (Plan 15). Async because it
-/// depends on [relayPushCoordinator]. Null until Tor is ready.
+/// Phone-side relay pairing orchestrator (Plan 15). Constructed WITHOUT a
+/// Tor gate (A9): the Tor-dependent collaborators are lookups resolved at
+/// call time, so the local unpair mutation works with Tor down — only
+/// pairing itself (and the best-effort wire unpair notify, which the heal
+/// pass retries) needs Tor to be up.
 @Riverpod(keepAlive: true)
-Future<RelayPairingService?> relayPairingService(Ref ref) async {
-  final initiator = ref.watch(relayPairingInitiatorProvider);
-  final coordinator = await ref.watch(relayPushCoordinatorProvider.future);
-  if (initiator == null || coordinator == null) return null;
+RelayPairingService relayPairingService(Ref ref) {
   final storage = ref.watch(storageServiceProvider);
   return RelayPairingService(
-    initiator: initiator,
-    pushCoordinator: coordinator,
+    initiatorLookup: () => ref.read(relayPairingInitiatorProvider),
+    pushCoordinatorLookup: () => ref.read(relayPushCoordinatorProvider.future),
+    pushServiceLookup: () => ref.read(relayPushServiceProvider),
     crypto: ref.watch(cryptoServiceProvider),
     storage: storage,
     clock: ref.watch(clockProvider),

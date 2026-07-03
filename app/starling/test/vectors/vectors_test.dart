@@ -3,11 +3,16 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:cbor/simple.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:starling/models/models.dart';
+import 'package:starling/models/protocol_version.dart';
 import 'package:starling/services/crypto/crockford_base32.dart';
 import 'package:starling/services/crypto/feed_key_ratchet.dart';
 import 'package:starling/services/crypto/sodium_crypto_service.dart';
 import 'package:starling/services/crypto_service.dart';
+import 'package:starling/services/relay_pairing_initiator.dart';
+import 'package:starling/services/relay_push_service.dart';
 import 'package:starling/sync/manifest_ack.dart';
 import 'package:starling/sync/manifest_codec.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -50,6 +55,12 @@ void main() {
   setUpAll(() async {
     crypto = await SodiumCryptoService.init();
     vectors = _loadVectors();
+  });
+
+  test('protocol version constant pins to the shared vector entry (F3)', () {
+    // The Rust mirror (wire_vectors.rs) asserts PROTOCOL_VERSION against
+    // this SAME entry, so a one-sided bump fails the other side's tests.
+    expect(kStarlingProtocolVersion, vectors['protocol_version']);
   });
 
   test('vector 1: keypair from fixed seed', () async {
@@ -153,28 +164,50 @@ void main() {
       );
     });
 
-    test('pair claim digest, signature, and claim CBOR', () {
+    test('production RelayPairingInitiator.claim() POSTs the pinned claim '
+        'CBOR (A8: no reimplementation)', () async {
       final v = rw['pair_claim'] as Map<String, dynamic>;
+      final relayIdV = rw['relay_id'] as Map<String, dynamic>;
       final token = fromHex(v['pairing_token_hex'] as String);
-      final claimBytes = Uint8List.fromList([
-        ...utf8.encode('starling-relay-pair-v1'),
-        ...ownerPk,
-        ...utf8.encode(v['admin_onion'] as String),
-        ...token,
-      ]);
-      expect(hex(claimBytes), v['claim_bytes_hex'] as String);
+
+      // Drive the REAL initiator against a captured client, so the claim
+      // bytes, digest, signature, and body CBOR are all the production
+      // code path — a drift in _buildClaimBytes fails this test.
+      late http.Request captured;
+      final client = MockClient((req) async {
+        captured = req;
+        return http.Response.bytes(
+          fromHex(relayIdV['pair_response_cbor_hex'] as String),
+          200,
+          headers: {'content-type': 'application/cbor'},
+        );
+      });
+      final initiator = RelayPairingInitiator(
+        crypto: crypto,
+        httpClient: client,
+      );
+      final result = await initiator.claim(
+        payload: RelayPairingPayload(
+          relayOnion: v['admin_onion'] as String,
+          pairingToken: token,
+          relayVersion: '0.1.0-test',
+        ),
+        ownerPubkeyStoredText: crockfordBase32Encode(ownerPk),
+        ownerSecretKey: ownerSk,
+      );
+
+      expect(captured.url.toString(), 'http://${v['admin_onion']}/pair');
+      expect(hex(captured.bodyBytes), v['claim_cbor_hex'] as String);
+      // The pinned response decodes through the production path too.
+      expect(result.relayOnion, relayIdV['owner_onion']);
+      expect(result.relayId, relayIdV['relay_id_hex']);
+
+      // The intermediate pins stay asserted (they're what the Rust side
+      // rebuilds): claim bytes → digest → signature.
+      final claimBytes = fromHex(v['claim_bytes_hex'] as String);
       final digest = crypto.blake2b256(claimBytes);
       expect(hex(digest), v['claim_digest_hex'] as String);
-      final sig = crypto.sign(ownerSk, digest);
-      expect(hex(sig), v['sig_hex'] as String);
-      final claimCbor = Uint8List.fromList(
-        cbor.encode(<String, dynamic>{
-          'owner_pubkey': base64.encode(ownerPk),
-          'pairing_token': token,
-          'sig': sig,
-        }),
-      );
-      expect(hex(claimCbor), v['claim_cbor_hex'] as String);
+      expect(hex(crypto.sign(ownerSk, digest)), v['sig_hex'] as String);
     });
 
     test('relay_id derivation and PairResponse decode', () {
@@ -253,6 +286,92 @@ void main() {
       final decoded = cbor.decode(fromHex(v['cbor_hex'] as String)) as Map;
       expect(decoded['accepted'], v['accepted'] as int);
       expect(decoded['rejected'], v['rejected'] as int);
+    });
+
+    test('typed PushBatch pins the F4 preserve-and-forward shape', () {
+      final v = rw['push_batch_typed'] as Map<String, dynamic>;
+      final decoded = cbor.decode(fromHex(v['cbor_hex'] as String)) as Map;
+      final item = (decoded['items'] as List).single as Map;
+      expect(item['id'], v['item_id']);
+      expect(item['type'], v['item_type']);
+      expect(
+        hex(Uint8List.fromList((item['payload'] as List).cast<int>())),
+        v['payload_hex'],
+      );
+    });
+
+    test('production deleteEvents emits the pinned request CBOR; the bound '
+        'signature domain pins cross-language', () async {
+      final v = rw['delete_events_request'] as Map<String, dynamic>;
+      final receiptV = rw['delete_receipt'] as Map<String, dynamic>;
+
+      late http.Request captured;
+      final client = MockClient((req) async {
+        captured = req;
+        return http.Response.bytes(
+          fromHex(receiptV['cbor_hex'] as String),
+          200,
+          headers: {'content-type': 'application/cbor'},
+        );
+      });
+      final svc = RelayPushService(crypto: crypto, httpClient: client);
+      final receipt = await svc.deleteEvents(
+        relayBaseUrl: 'http://relay.onion:80',
+        ownerPubkeyBytes: ownerPk,
+        ownerSecretKey: ownerSk,
+        ids: (v['ids'] as List).cast<String>(),
+      );
+
+      // Production body is byte-identical to the pinned request.
+      expect(captured.url.path, v['signed_path']);
+      expect(hex(captured.bodyBytes), v['cbor_hex'] as String);
+      // The Rust-produced receipt decodes through the production decoder.
+      expect(receipt.deleted, receiptV['deleted']);
+      expect(receipt.missing, receiptV['missing']);
+
+      // The bound-signature domain (M2) at the PINNED timestamp: rebuilt
+      // through the production digest function, it must reproduce the
+      // pinned digest and signature that wire_vectors.rs verifies.
+      final digest = ownerRequestDigest(
+        crypto: crypto,
+        method: 'POST',
+        path: v['signed_path'] as String,
+        unixTs: v['signed_ts'] as int,
+        body: fromHex(v['cbor_hex'] as String),
+      );
+      expect(hex(digest), v['owner_req_digest_hex'] as String);
+      expect(
+        hex(crypto.sign(ownerSk, digest)),
+        v['owner_sig_hex'] as String,
+      );
+      expect(
+        crypto.verify(ownerPk, digest, fromHex(v['owner_sig_hex'] as String)),
+        isTrue,
+      );
+    });
+
+    test('production deleteMedia emits the pinned request CBOR', () async {
+      final v = rw['delete_media_request'] as Map<String, dynamic>;
+      late http.Request captured;
+      final client = MockClient((req) async {
+        captured = req;
+        return http.Response.bytes(
+          fromHex(
+            (rw['delete_receipt'] as Map<String, dynamic>)['cbor_hex']
+                as String,
+          ),
+          200,
+        );
+      });
+      final svc = RelayPushService(crypto: crypto, httpClient: client);
+      await svc.deleteMedia(
+        relayBaseUrl: 'http://relay.onion:80',
+        ownerPubkeyBytes: ownerPk,
+        ownerSecretKey: ownerSk,
+        hashes: (v['hashes'] as List).cast<String>(),
+      );
+      expect(captured.url.path, '/media/delete');
+      expect(hex(captured.bodyBytes), v['cbor_hex'] as String);
     });
 
     test('manifest page decodes through parseManifestResponse', () {

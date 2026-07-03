@@ -5217,12 +5217,50 @@ class $PairedRelayEntriesTable extends PairedRelayEntries
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _relayPruneBeforeMeta = const VerificationMeta(
+    'relayPruneBefore',
+  );
+  @override
+  late final GeneratedColumn<int> relayPruneBefore = GeneratedColumn<int>(
+    'relay_prune_before',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _lastPushAtMeta = const VerificationMeta(
+    'lastPushAt',
+  );
+  @override
+  late final GeneratedColumn<int> lastPushAt = GeneratedColumn<int>(
+    'last_push_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _lastErrorMeta = const VerificationMeta(
+    'lastError',
+  );
+  @override
+  late final GeneratedColumn<String> lastError = GeneratedColumn<String>(
+    'last_error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     relayId,
     relayOnion,
     pairedAt,
     relayBackfillComplete,
+    relayPruneBefore,
+    lastPushAt,
+    lastError,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -5269,6 +5307,30 @@ class $PairedRelayEntriesTable extends PairedRelayEntries
         ),
       );
     }
+    if (data.containsKey('relay_prune_before')) {
+      context.handle(
+        _relayPruneBeforeMeta,
+        relayPruneBefore.isAcceptableOrUnknown(
+          data['relay_prune_before']!,
+          _relayPruneBeforeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_push_at')) {
+      context.handle(
+        _lastPushAtMeta,
+        lastPushAt.isAcceptableOrUnknown(
+          data['last_push_at']!,
+          _lastPushAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_error')) {
+      context.handle(
+        _lastErrorMeta,
+        lastError.isAcceptableOrUnknown(data['last_error']!, _lastErrorMeta),
+      );
+    }
     return context;
   }
 
@@ -5294,6 +5356,18 @@ class $PairedRelayEntriesTable extends PairedRelayEntries
         DriftSqlType.int,
         data['${effectivePrefix}relay_backfill_complete'],
       )!,
+      relayPruneBefore: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}relay_prune_before'],
+      )!,
+      lastPushAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_push_at'],
+      )!,
+      lastError: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_error'],
+      ),
     );
   }
 
@@ -5309,11 +5383,17 @@ class PairedRelayEntry extends DataClass
   final String relayOnion;
   final int pairedAt;
   final int relayBackfillComplete;
+  final int relayPruneBefore;
+  final int lastPushAt;
+  final String? lastError;
   const PairedRelayEntry({
     required this.relayId,
     required this.relayOnion,
     required this.pairedAt,
     required this.relayBackfillComplete,
+    required this.relayPruneBefore,
+    required this.lastPushAt,
+    this.lastError,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -5322,6 +5402,11 @@ class PairedRelayEntry extends DataClass
     map['relay_onion'] = Variable<String>(relayOnion);
     map['paired_at'] = Variable<int>(pairedAt);
     map['relay_backfill_complete'] = Variable<int>(relayBackfillComplete);
+    map['relay_prune_before'] = Variable<int>(relayPruneBefore);
+    map['last_push_at'] = Variable<int>(lastPushAt);
+    if (!nullToAbsent || lastError != null) {
+      map['last_error'] = Variable<String>(lastError);
+    }
     return map;
   }
 
@@ -5331,6 +5416,11 @@ class PairedRelayEntry extends DataClass
       relayOnion: Value(relayOnion),
       pairedAt: Value(pairedAt),
       relayBackfillComplete: Value(relayBackfillComplete),
+      relayPruneBefore: Value(relayPruneBefore),
+      lastPushAt: Value(lastPushAt),
+      lastError: lastError == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastError),
     );
   }
 
@@ -5346,6 +5436,9 @@ class PairedRelayEntry extends DataClass
       relayBackfillComplete: serializer.fromJson<int>(
         json['relayBackfillComplete'],
       ),
+      relayPruneBefore: serializer.fromJson<int>(json['relayPruneBefore']),
+      lastPushAt: serializer.fromJson<int>(json['lastPushAt']),
+      lastError: serializer.fromJson<String?>(json['lastError']),
     );
   }
   @override
@@ -5356,6 +5449,9 @@ class PairedRelayEntry extends DataClass
       'relayOnion': serializer.toJson<String>(relayOnion),
       'pairedAt': serializer.toJson<int>(pairedAt),
       'relayBackfillComplete': serializer.toJson<int>(relayBackfillComplete),
+      'relayPruneBefore': serializer.toJson<int>(relayPruneBefore),
+      'lastPushAt': serializer.toJson<int>(lastPushAt),
+      'lastError': serializer.toJson<String?>(lastError),
     };
   }
 
@@ -5364,11 +5460,17 @@ class PairedRelayEntry extends DataClass
     String? relayOnion,
     int? pairedAt,
     int? relayBackfillComplete,
+    int? relayPruneBefore,
+    int? lastPushAt,
+    Value<String?> lastError = const Value.absent(),
   }) => PairedRelayEntry(
     relayId: relayId ?? this.relayId,
     relayOnion: relayOnion ?? this.relayOnion,
     pairedAt: pairedAt ?? this.pairedAt,
     relayBackfillComplete: relayBackfillComplete ?? this.relayBackfillComplete,
+    relayPruneBefore: relayPruneBefore ?? this.relayPruneBefore,
+    lastPushAt: lastPushAt ?? this.lastPushAt,
+    lastError: lastError.present ? lastError.value : this.lastError,
   );
   PairedRelayEntry copyWithCompanion(PairedRelayEntriesCompanion data) {
     return PairedRelayEntry(
@@ -5380,6 +5482,13 @@ class PairedRelayEntry extends DataClass
       relayBackfillComplete: data.relayBackfillComplete.present
           ? data.relayBackfillComplete.value
           : this.relayBackfillComplete,
+      relayPruneBefore: data.relayPruneBefore.present
+          ? data.relayPruneBefore.value
+          : this.relayPruneBefore,
+      lastPushAt: data.lastPushAt.present
+          ? data.lastPushAt.value
+          : this.lastPushAt,
+      lastError: data.lastError.present ? data.lastError.value : this.lastError,
     );
   }
 
@@ -5389,14 +5498,24 @@ class PairedRelayEntry extends DataClass
           ..write('relayId: $relayId, ')
           ..write('relayOnion: $relayOnion, ')
           ..write('pairedAt: $pairedAt, ')
-          ..write('relayBackfillComplete: $relayBackfillComplete')
+          ..write('relayBackfillComplete: $relayBackfillComplete, ')
+          ..write('relayPruneBefore: $relayPruneBefore, ')
+          ..write('lastPushAt: $lastPushAt, ')
+          ..write('lastError: $lastError')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(relayId, relayOnion, pairedAt, relayBackfillComplete);
+  int get hashCode => Object.hash(
+    relayId,
+    relayOnion,
+    pairedAt,
+    relayBackfillComplete,
+    relayPruneBefore,
+    lastPushAt,
+    lastError,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -5404,7 +5523,10 @@ class PairedRelayEntry extends DataClass
           other.relayId == this.relayId &&
           other.relayOnion == this.relayOnion &&
           other.pairedAt == this.pairedAt &&
-          other.relayBackfillComplete == this.relayBackfillComplete);
+          other.relayBackfillComplete == this.relayBackfillComplete &&
+          other.relayPruneBefore == this.relayPruneBefore &&
+          other.lastPushAt == this.lastPushAt &&
+          other.lastError == this.lastError);
 }
 
 class PairedRelayEntriesCompanion extends UpdateCompanion<PairedRelayEntry> {
@@ -5412,12 +5534,18 @@ class PairedRelayEntriesCompanion extends UpdateCompanion<PairedRelayEntry> {
   final Value<String> relayOnion;
   final Value<int> pairedAt;
   final Value<int> relayBackfillComplete;
+  final Value<int> relayPruneBefore;
+  final Value<int> lastPushAt;
+  final Value<String?> lastError;
   final Value<int> rowid;
   const PairedRelayEntriesCompanion({
     this.relayId = const Value.absent(),
     this.relayOnion = const Value.absent(),
     this.pairedAt = const Value.absent(),
     this.relayBackfillComplete = const Value.absent(),
+    this.relayPruneBefore = const Value.absent(),
+    this.lastPushAt = const Value.absent(),
+    this.lastError = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   PairedRelayEntriesCompanion.insert({
@@ -5425,6 +5553,9 @@ class PairedRelayEntriesCompanion extends UpdateCompanion<PairedRelayEntry> {
     required String relayOnion,
     required int pairedAt,
     this.relayBackfillComplete = const Value.absent(),
+    this.relayPruneBefore = const Value.absent(),
+    this.lastPushAt = const Value.absent(),
+    this.lastError = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : relayId = Value(relayId),
        relayOnion = Value(relayOnion),
@@ -5434,6 +5565,9 @@ class PairedRelayEntriesCompanion extends UpdateCompanion<PairedRelayEntry> {
     Expression<String>? relayOnion,
     Expression<int>? pairedAt,
     Expression<int>? relayBackfillComplete,
+    Expression<int>? relayPruneBefore,
+    Expression<int>? lastPushAt,
+    Expression<String>? lastError,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -5442,6 +5576,9 @@ class PairedRelayEntriesCompanion extends UpdateCompanion<PairedRelayEntry> {
       if (pairedAt != null) 'paired_at': pairedAt,
       if (relayBackfillComplete != null)
         'relay_backfill_complete': relayBackfillComplete,
+      if (relayPruneBefore != null) 'relay_prune_before': relayPruneBefore,
+      if (lastPushAt != null) 'last_push_at': lastPushAt,
+      if (lastError != null) 'last_error': lastError,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -5451,6 +5588,9 @@ class PairedRelayEntriesCompanion extends UpdateCompanion<PairedRelayEntry> {
     Value<String>? relayOnion,
     Value<int>? pairedAt,
     Value<int>? relayBackfillComplete,
+    Value<int>? relayPruneBefore,
+    Value<int>? lastPushAt,
+    Value<String?>? lastError,
     Value<int>? rowid,
   }) {
     return PairedRelayEntriesCompanion(
@@ -5459,6 +5599,9 @@ class PairedRelayEntriesCompanion extends UpdateCompanion<PairedRelayEntry> {
       pairedAt: pairedAt ?? this.pairedAt,
       relayBackfillComplete:
           relayBackfillComplete ?? this.relayBackfillComplete,
+      relayPruneBefore: relayPruneBefore ?? this.relayPruneBefore,
+      lastPushAt: lastPushAt ?? this.lastPushAt,
+      lastError: lastError ?? this.lastError,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -5480,6 +5623,15 @@ class PairedRelayEntriesCompanion extends UpdateCompanion<PairedRelayEntry> {
         relayBackfillComplete.value,
       );
     }
+    if (relayPruneBefore.present) {
+      map['relay_prune_before'] = Variable<int>(relayPruneBefore.value);
+    }
+    if (lastPushAt.present) {
+      map['last_push_at'] = Variable<int>(lastPushAt.value);
+    }
+    if (lastError.present) {
+      map['last_error'] = Variable<String>(lastError.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -5493,6 +5645,9 @@ class PairedRelayEntriesCompanion extends UpdateCompanion<PairedRelayEntry> {
           ..write('relayOnion: $relayOnion, ')
           ..write('pairedAt: $pairedAt, ')
           ..write('relayBackfillComplete: $relayBackfillComplete, ')
+          ..write('relayPruneBefore: $relayPruneBefore, ')
+          ..write('lastPushAt: $lastPushAt, ')
+          ..write('lastError: $lastError, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -5891,6 +6046,338 @@ class PendingCardDistributionEntriesCompanion
           ..write('createdAt: $createdAt, ')
           ..write('distributed: $distributed, ')
           ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $RelayFanoutStateEntriesTable extends RelayFanoutStateEntries
+    with TableInfo<$RelayFanoutStateEntriesTable, RelayFanoutStateEntry> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RelayFanoutStateEntriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _pendingCardFanoutMeta = const VerificationMeta(
+    'pendingCardFanout',
+  );
+  @override
+  late final GeneratedColumn<int> pendingCardFanout = GeneratedColumn<int>(
+    'pending_card_fanout',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _pendingUnpairOnionMeta =
+      const VerificationMeta('pendingUnpairOnion');
+  @override
+  late final GeneratedColumn<String> pendingUnpairOnion =
+      GeneratedColumn<String>(
+        'pending_unpair_onion',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _unpairNotifyAttemptsMeta =
+      const VerificationMeta('unpairNotifyAttempts');
+  @override
+  late final GeneratedColumn<int> unpairNotifyAttempts = GeneratedColumn<int>(
+    'unpair_notify_attempts',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    pendingCardFanout,
+    pendingUnpairOnion,
+    unpairNotifyAttempts,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'relay_fanout_state_entries';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<RelayFanoutStateEntry> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('pending_card_fanout')) {
+      context.handle(
+        _pendingCardFanoutMeta,
+        pendingCardFanout.isAcceptableOrUnknown(
+          data['pending_card_fanout']!,
+          _pendingCardFanoutMeta,
+        ),
+      );
+    }
+    if (data.containsKey('pending_unpair_onion')) {
+      context.handle(
+        _pendingUnpairOnionMeta,
+        pendingUnpairOnion.isAcceptableOrUnknown(
+          data['pending_unpair_onion']!,
+          _pendingUnpairOnionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('unpair_notify_attempts')) {
+      context.handle(
+        _unpairNotifyAttemptsMeta,
+        unpairNotifyAttempts.isAcceptableOrUnknown(
+          data['unpair_notify_attempts']!,
+          _unpairNotifyAttemptsMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  RelayFanoutStateEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RelayFanoutStateEntry(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      pendingCardFanout: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}pending_card_fanout'],
+      )!,
+      pendingUnpairOnion: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pending_unpair_onion'],
+      ),
+      unpairNotifyAttempts: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}unpair_notify_attempts'],
+      )!,
+    );
+  }
+
+  @override
+  $RelayFanoutStateEntriesTable createAlias(String alias) {
+    return $RelayFanoutStateEntriesTable(attachedDatabase, alias);
+  }
+}
+
+class RelayFanoutStateEntry extends DataClass
+    implements Insertable<RelayFanoutStateEntry> {
+  /// Always 1 — a one-row table.
+  final int id;
+  final int pendingCardFanout;
+  final String? pendingUnpairOnion;
+  final int unpairNotifyAttempts;
+  const RelayFanoutStateEntry({
+    required this.id,
+    required this.pendingCardFanout,
+    this.pendingUnpairOnion,
+    required this.unpairNotifyAttempts,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['pending_card_fanout'] = Variable<int>(pendingCardFanout);
+    if (!nullToAbsent || pendingUnpairOnion != null) {
+      map['pending_unpair_onion'] = Variable<String>(pendingUnpairOnion);
+    }
+    map['unpair_notify_attempts'] = Variable<int>(unpairNotifyAttempts);
+    return map;
+  }
+
+  RelayFanoutStateEntriesCompanion toCompanion(bool nullToAbsent) {
+    return RelayFanoutStateEntriesCompanion(
+      id: Value(id),
+      pendingCardFanout: Value(pendingCardFanout),
+      pendingUnpairOnion: pendingUnpairOnion == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pendingUnpairOnion),
+      unpairNotifyAttempts: Value(unpairNotifyAttempts),
+    );
+  }
+
+  factory RelayFanoutStateEntry.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RelayFanoutStateEntry(
+      id: serializer.fromJson<int>(json['id']),
+      pendingCardFanout: serializer.fromJson<int>(json['pendingCardFanout']),
+      pendingUnpairOnion: serializer.fromJson<String?>(
+        json['pendingUnpairOnion'],
+      ),
+      unpairNotifyAttempts: serializer.fromJson<int>(
+        json['unpairNotifyAttempts'],
+      ),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'pendingCardFanout': serializer.toJson<int>(pendingCardFanout),
+      'pendingUnpairOnion': serializer.toJson<String?>(pendingUnpairOnion),
+      'unpairNotifyAttempts': serializer.toJson<int>(unpairNotifyAttempts),
+    };
+  }
+
+  RelayFanoutStateEntry copyWith({
+    int? id,
+    int? pendingCardFanout,
+    Value<String?> pendingUnpairOnion = const Value.absent(),
+    int? unpairNotifyAttempts,
+  }) => RelayFanoutStateEntry(
+    id: id ?? this.id,
+    pendingCardFanout: pendingCardFanout ?? this.pendingCardFanout,
+    pendingUnpairOnion: pendingUnpairOnion.present
+        ? pendingUnpairOnion.value
+        : this.pendingUnpairOnion,
+    unpairNotifyAttempts: unpairNotifyAttempts ?? this.unpairNotifyAttempts,
+  );
+  RelayFanoutStateEntry copyWithCompanion(
+    RelayFanoutStateEntriesCompanion data,
+  ) {
+    return RelayFanoutStateEntry(
+      id: data.id.present ? data.id.value : this.id,
+      pendingCardFanout: data.pendingCardFanout.present
+          ? data.pendingCardFanout.value
+          : this.pendingCardFanout,
+      pendingUnpairOnion: data.pendingUnpairOnion.present
+          ? data.pendingUnpairOnion.value
+          : this.pendingUnpairOnion,
+      unpairNotifyAttempts: data.unpairNotifyAttempts.present
+          ? data.unpairNotifyAttempts.value
+          : this.unpairNotifyAttempts,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RelayFanoutStateEntry(')
+          ..write('id: $id, ')
+          ..write('pendingCardFanout: $pendingCardFanout, ')
+          ..write('pendingUnpairOnion: $pendingUnpairOnion, ')
+          ..write('unpairNotifyAttempts: $unpairNotifyAttempts')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    pendingCardFanout,
+    pendingUnpairOnion,
+    unpairNotifyAttempts,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RelayFanoutStateEntry &&
+          other.id == this.id &&
+          other.pendingCardFanout == this.pendingCardFanout &&
+          other.pendingUnpairOnion == this.pendingUnpairOnion &&
+          other.unpairNotifyAttempts == this.unpairNotifyAttempts);
+}
+
+class RelayFanoutStateEntriesCompanion
+    extends UpdateCompanion<RelayFanoutStateEntry> {
+  final Value<int> id;
+  final Value<int> pendingCardFanout;
+  final Value<String?> pendingUnpairOnion;
+  final Value<int> unpairNotifyAttempts;
+  const RelayFanoutStateEntriesCompanion({
+    this.id = const Value.absent(),
+    this.pendingCardFanout = const Value.absent(),
+    this.pendingUnpairOnion = const Value.absent(),
+    this.unpairNotifyAttempts = const Value.absent(),
+  });
+  RelayFanoutStateEntriesCompanion.insert({
+    this.id = const Value.absent(),
+    this.pendingCardFanout = const Value.absent(),
+    this.pendingUnpairOnion = const Value.absent(),
+    this.unpairNotifyAttempts = const Value.absent(),
+  });
+  static Insertable<RelayFanoutStateEntry> custom({
+    Expression<int>? id,
+    Expression<int>? pendingCardFanout,
+    Expression<String>? pendingUnpairOnion,
+    Expression<int>? unpairNotifyAttempts,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (pendingCardFanout != null) 'pending_card_fanout': pendingCardFanout,
+      if (pendingUnpairOnion != null)
+        'pending_unpair_onion': pendingUnpairOnion,
+      if (unpairNotifyAttempts != null)
+        'unpair_notify_attempts': unpairNotifyAttempts,
+    });
+  }
+
+  RelayFanoutStateEntriesCompanion copyWith({
+    Value<int>? id,
+    Value<int>? pendingCardFanout,
+    Value<String?>? pendingUnpairOnion,
+    Value<int>? unpairNotifyAttempts,
+  }) {
+    return RelayFanoutStateEntriesCompanion(
+      id: id ?? this.id,
+      pendingCardFanout: pendingCardFanout ?? this.pendingCardFanout,
+      pendingUnpairOnion: pendingUnpairOnion ?? this.pendingUnpairOnion,
+      unpairNotifyAttempts: unpairNotifyAttempts ?? this.unpairNotifyAttempts,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (pendingCardFanout.present) {
+      map['pending_card_fanout'] = Variable<int>(pendingCardFanout.value);
+    }
+    if (pendingUnpairOnion.present) {
+      map['pending_unpair_onion'] = Variable<String>(pendingUnpairOnion.value);
+    }
+    if (unpairNotifyAttempts.present) {
+      map['unpair_notify_attempts'] = Variable<int>(unpairNotifyAttempts.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RelayFanoutStateEntriesCompanion(')
+          ..write('id: $id, ')
+          ..write('pendingCardFanout: $pendingCardFanout, ')
+          ..write('pendingUnpairOnion: $pendingUnpairOnion, ')
+          ..write('unpairNotifyAttempts: $unpairNotifyAttempts')
           ..write(')'))
         .toString();
   }
@@ -8306,6 +8793,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $PairedRelayEntriesTable(this);
   late final $PendingCardDistributionEntriesTable
   pendingCardDistributionEntries = $PendingCardDistributionEntriesTable(this);
+  late final $RelayFanoutStateEntriesTable relayFanoutStateEntries =
+      $RelayFanoutStateEntriesTable(this);
   late final $VoiceRoomEntriesTable voiceRoomEntries = $VoiceRoomEntriesTable(
     this,
   );
@@ -8355,6 +8844,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     pendingKeyDistributionEntries,
     pairedRelayEntries,
     pendingCardDistributionEntries,
+    relayFanoutStateEntries,
     voiceRoomEntries,
     voiceRoomParticipantEntries,
     roomEntries,
@@ -11130,6 +11620,9 @@ typedef $$PairedRelayEntriesTableCreateCompanionBuilder =
       required String relayOnion,
       required int pairedAt,
       Value<int> relayBackfillComplete,
+      Value<int> relayPruneBefore,
+      Value<int> lastPushAt,
+      Value<String?> lastError,
       Value<int> rowid,
     });
 typedef $$PairedRelayEntriesTableUpdateCompanionBuilder =
@@ -11138,6 +11631,9 @@ typedef $$PairedRelayEntriesTableUpdateCompanionBuilder =
       Value<String> relayOnion,
       Value<int> pairedAt,
       Value<int> relayBackfillComplete,
+      Value<int> relayPruneBefore,
+      Value<int> lastPushAt,
+      Value<String?> lastError,
       Value<int> rowid,
     });
 
@@ -11167,6 +11663,21 @@ class $$PairedRelayEntriesTableFilterComposer
 
   ColumnFilters<int> get relayBackfillComplete => $composableBuilder(
     column: $table.relayBackfillComplete,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get relayPruneBefore => $composableBuilder(
+    column: $table.relayPruneBefore,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastPushAt => $composableBuilder(
+    column: $table.lastPushAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastError => $composableBuilder(
+    column: $table.lastError,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -11199,6 +11710,21 @@ class $$PairedRelayEntriesTableOrderingComposer
     column: $table.relayBackfillComplete,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get relayPruneBefore => $composableBuilder(
+    column: $table.relayPruneBefore,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastPushAt => $composableBuilder(
+    column: $table.lastPushAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastError => $composableBuilder(
+    column: $table.lastError,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$PairedRelayEntriesTableAnnotationComposer
@@ -11225,6 +11751,19 @@ class $$PairedRelayEntriesTableAnnotationComposer
     column: $table.relayBackfillComplete,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get relayPruneBefore => $composableBuilder(
+    column: $table.relayPruneBefore,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get lastPushAt => $composableBuilder(
+    column: $table.lastPushAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get lastError =>
+      $composableBuilder(column: $table.lastError, builder: (column) => column);
 }
 
 class $$PairedRelayEntriesTableTableManager
@@ -11271,12 +11810,18 @@ class $$PairedRelayEntriesTableTableManager
                 Value<String> relayOnion = const Value.absent(),
                 Value<int> pairedAt = const Value.absent(),
                 Value<int> relayBackfillComplete = const Value.absent(),
+                Value<int> relayPruneBefore = const Value.absent(),
+                Value<int> lastPushAt = const Value.absent(),
+                Value<String?> lastError = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PairedRelayEntriesCompanion(
                 relayId: relayId,
                 relayOnion: relayOnion,
                 pairedAt: pairedAt,
                 relayBackfillComplete: relayBackfillComplete,
+                relayPruneBefore: relayPruneBefore,
+                lastPushAt: lastPushAt,
+                lastError: lastError,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -11285,12 +11830,18 @@ class $$PairedRelayEntriesTableTableManager
                 required String relayOnion,
                 required int pairedAt,
                 Value<int> relayBackfillComplete = const Value.absent(),
+                Value<int> relayPruneBefore = const Value.absent(),
+                Value<int> lastPushAt = const Value.absent(),
+                Value<String?> lastError = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PairedRelayEntriesCompanion.insert(
                 relayId: relayId,
                 relayOnion: relayOnion,
                 pairedAt: pairedAt,
                 relayBackfillComplete: relayBackfillComplete,
+                relayPruneBefore: relayPruneBefore,
+                lastPushAt: lastPushAt,
+                lastError: lastError,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -11545,6 +12096,206 @@ typedef $$PendingCardDistributionEntriesTableProcessedTableManager =
         >,
       ),
       PendingCardDistributionEntry,
+      PrefetchHooks Function()
+    >;
+typedef $$RelayFanoutStateEntriesTableCreateCompanionBuilder =
+    RelayFanoutStateEntriesCompanion Function({
+      Value<int> id,
+      Value<int> pendingCardFanout,
+      Value<String?> pendingUnpairOnion,
+      Value<int> unpairNotifyAttempts,
+    });
+typedef $$RelayFanoutStateEntriesTableUpdateCompanionBuilder =
+    RelayFanoutStateEntriesCompanion Function({
+      Value<int> id,
+      Value<int> pendingCardFanout,
+      Value<String?> pendingUnpairOnion,
+      Value<int> unpairNotifyAttempts,
+    });
+
+class $$RelayFanoutStateEntriesTableFilterComposer
+    extends Composer<_$AppDatabase, $RelayFanoutStateEntriesTable> {
+  $$RelayFanoutStateEntriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get pendingCardFanout => $composableBuilder(
+    column: $table.pendingCardFanout,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get pendingUnpairOnion => $composableBuilder(
+    column: $table.pendingUnpairOnion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get unpairNotifyAttempts => $composableBuilder(
+    column: $table.unpairNotifyAttempts,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$RelayFanoutStateEntriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $RelayFanoutStateEntriesTable> {
+  $$RelayFanoutStateEntriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get pendingCardFanout => $composableBuilder(
+    column: $table.pendingCardFanout,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get pendingUnpairOnion => $composableBuilder(
+    column: $table.pendingUnpairOnion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get unpairNotifyAttempts => $composableBuilder(
+    column: $table.unpairNotifyAttempts,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$RelayFanoutStateEntriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RelayFanoutStateEntriesTable> {
+  $$RelayFanoutStateEntriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get pendingCardFanout => $composableBuilder(
+    column: $table.pendingCardFanout,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get pendingUnpairOnion => $composableBuilder(
+    column: $table.pendingUnpairOnion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get unpairNotifyAttempts => $composableBuilder(
+    column: $table.unpairNotifyAttempts,
+    builder: (column) => column,
+  );
+}
+
+class $$RelayFanoutStateEntriesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $RelayFanoutStateEntriesTable,
+          RelayFanoutStateEntry,
+          $$RelayFanoutStateEntriesTableFilterComposer,
+          $$RelayFanoutStateEntriesTableOrderingComposer,
+          $$RelayFanoutStateEntriesTableAnnotationComposer,
+          $$RelayFanoutStateEntriesTableCreateCompanionBuilder,
+          $$RelayFanoutStateEntriesTableUpdateCompanionBuilder,
+          (
+            RelayFanoutStateEntry,
+            BaseReferences<
+              _$AppDatabase,
+              $RelayFanoutStateEntriesTable,
+              RelayFanoutStateEntry
+            >,
+          ),
+          RelayFanoutStateEntry,
+          PrefetchHooks Function()
+        > {
+  $$RelayFanoutStateEntriesTableTableManager(
+    _$AppDatabase db,
+    $RelayFanoutStateEntriesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RelayFanoutStateEntriesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$RelayFanoutStateEntriesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$RelayFanoutStateEntriesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> pendingCardFanout = const Value.absent(),
+                Value<String?> pendingUnpairOnion = const Value.absent(),
+                Value<int> unpairNotifyAttempts = const Value.absent(),
+              }) => RelayFanoutStateEntriesCompanion(
+                id: id,
+                pendingCardFanout: pendingCardFanout,
+                pendingUnpairOnion: pendingUnpairOnion,
+                unpairNotifyAttempts: unpairNotifyAttempts,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> pendingCardFanout = const Value.absent(),
+                Value<String?> pendingUnpairOnion = const Value.absent(),
+                Value<int> unpairNotifyAttempts = const Value.absent(),
+              }) => RelayFanoutStateEntriesCompanion.insert(
+                id: id,
+                pendingCardFanout: pendingCardFanout,
+                pendingUnpairOnion: pendingUnpairOnion,
+                unpairNotifyAttempts: unpairNotifyAttempts,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$RelayFanoutStateEntriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $RelayFanoutStateEntriesTable,
+      RelayFanoutStateEntry,
+      $$RelayFanoutStateEntriesTableFilterComposer,
+      $$RelayFanoutStateEntriesTableOrderingComposer,
+      $$RelayFanoutStateEntriesTableAnnotationComposer,
+      $$RelayFanoutStateEntriesTableCreateCompanionBuilder,
+      $$RelayFanoutStateEntriesTableUpdateCompanionBuilder,
+      (
+        RelayFanoutStateEntry,
+        BaseReferences<
+          _$AppDatabase,
+          $RelayFanoutStateEntriesTable,
+          RelayFanoutStateEntry
+        >,
+      ),
+      RelayFanoutStateEntry,
       PrefetchHooks Function()
     >;
 typedef $$VoiceRoomEntriesTableCreateCompanionBuilder =
@@ -12864,6 +13615,11 @@ class $AppDatabaseManager {
       $$PendingCardDistributionEntriesTableTableManager(
         _db,
         _db.pendingCardDistributionEntries,
+      );
+  $$RelayFanoutStateEntriesTableTableManager get relayFanoutStateEntries =>
+      $$RelayFanoutStateEntriesTableTableManager(
+        _db,
+        _db.relayFanoutStateEntries,
       );
   $$VoiceRoomEntriesTableTableManager get voiceRoomEntries =>
       $$VoiceRoomEntriesTableTableManager(_db, _db.voiceRoomEntries);

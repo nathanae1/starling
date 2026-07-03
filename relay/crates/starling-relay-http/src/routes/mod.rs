@@ -1,9 +1,10 @@
-//! The six relay endpoints, split by resource.
+//! The relay endpoints, split by resource.
 
 pub mod events;
 pub mod manifest;
 pub mod media;
 pub mod status;
+pub mod unpair;
 
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
