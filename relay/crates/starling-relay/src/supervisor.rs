@@ -11,8 +11,9 @@ use std::time::Duration;
 use anyhow::{anyhow, Context, Result};
 use starling_arti::ArtiNode;
 use starling_relay_admin::RelayControl;
-use starling_relay_http::{owner_router, Caps, OwnerCtx, UnpairHandle};
+use starling_relay_http::{owner_router, Caps, OwnerCtx, SlotRegistrar, UnpairHandle, VoiceCtx};
 use starling_relay_storage::{owners, Db, PairedOwner};
+use starling_relay_voice::{voice_ws_router, VoiceHandle};
 use starling_wire::now_secs;
 use starling_wire::pairing::relay_id;
 use tokio::net::TcpListener;
@@ -68,6 +69,10 @@ pub struct Supervisor {
     caps: Caps,
     admin_onion: String,
     port_range: (u16, u16),
+    /// The shared SFU (`(handle, max_participants)`) when `[voice]` is
+    /// enabled. One server for all owners; each owner's router gets the
+    /// `/ws/voice` route and a slot-registrar hook.
+    voice: Option<(VoiceHandle, u16)>,
     owners: Mutex<HashMap<[u8; 32], OwnerTask>>,
     /// Count of Owner tasks currently holding a live listener. Surfaced in
     /// `/health` so a wedged owner (onion up, listener flapping) is visible.
@@ -108,6 +113,7 @@ impl Supervisor {
         caps: Caps,
         admin_onion: String,
         port_range: (u16, u16),
+        voice: Option<(VoiceHandle, u16)>,
     ) -> Self {
         let (unpair_tx, unpair_rx) = mpsc::unbounded_channel();
         Supervisor {
@@ -117,6 +123,7 @@ impl Supervisor {
             caps,
             admin_onion,
             port_range,
+            voice,
             owners: Mutex::new(HashMap::new()),
             serving: Arc::new(AtomicUsize::new(0)),
             pair_lock: Mutex::new(()),
@@ -203,6 +210,19 @@ impl Supervisor {
         let address = onion.address().to_string();
 
         let unpair_tx = self.unpair_tx.clone();
+        // Voice: the registrar mirrors owner-signed slot pushes into the
+        // live SFU registry (best-effort — the DB row is the durable truth
+        // and the registry reloads from it at boot).
+        let voice_ctx = self.voice.as_ref().map(|(handle, max_participants)| {
+            let handle = handle.clone();
+            let registrar: SlotRegistrar = Arc::new(move |slots| {
+                let handle = handle.clone();
+                tokio::spawn(async move {
+                    handle.register_slots(pubkey, slots).await;
+                });
+            });
+            VoiceCtx { max_participants: *max_participants, registrar }
+        });
         let ctx = OwnerCtx {
             db: self.db.clone(),
             owner_pubkey: pubkey,
@@ -213,7 +233,9 @@ impl Supervisor {
             unpair: Some(Arc::new(move || {
                 let _ = unpair_tx.send(pubkey);
             }) as UnpairHandle),
+            voice: voice_ctx,
         };
+        let voice_handle = self.voice.as_ref().map(|(handle, _)| handle.clone());
         let listener = TcpListener::bind(("127.0.0.1", port))
             .await
             .with_context(|| format!("bind owner router on 127.0.0.1:{port}"))?;
@@ -241,7 +263,16 @@ impl Supervisor {
                         }
                     },
                 };
-                match axum::serve(l, owner_router(ctx.clone())).await {
+                // Same onion, same URL surface: `/ws/voice` rides the
+                // per-owner router. The handler lives in the voice crate —
+                // an http→voice dependency would put the DTLS-SRTP tree
+                // inside the zero-knowledge dep walk.
+                let app = match &voice_handle {
+                    Some(handle) => owner_router(ctx.clone())
+                        .merge(voice_ws_router(handle.clone(), pubkey)),
+                    None => owner_router(ctx.clone()),
+                };
+                match axum::serve(l, app).await {
                     Ok(()) => {
                         // Graceful return only happens on shutdown wiring we
                         // don't use here; treat as a signal to stop looping.
@@ -357,10 +388,22 @@ impl RelayControl for Supervisor {
         Some(Supervisor::liveness(self).await)
     }
 
+    async fn voice_overview(&self) -> Option<HashMap<[u8; 32], usize>> {
+        match &self.voice {
+            Some((handle, _)) => Some(handle.overview().await),
+            None => None,
+        }
+    }
+
     async fn unpair_owner(&self, owner_pubkey: [u8; 32]) -> Result<()> {
         // Serialize against a concurrent (re-)pair of the same pubkey.
         let _guard = self.pair_lock.lock().await;
         self.stop_owner(owner_pubkey).await;
+        // End the owner's live calls and drop their slots from the live
+        // registry (the DB rows go via the owner-delete cascade below).
+        if let Some((handle, _)) = &self.voice {
+            handle.drop_owner(owner_pubkey).await;
+        }
         let conn = self.db.get()?;
         owners::delete(&conn, &owner_pubkey)?;
         drop(conn);
@@ -487,6 +530,7 @@ mod tests {
             Caps::default(),
             "admin.onion".into(),
             range,
+            None,
         );
         (sup, db, media)
     }
@@ -673,5 +717,81 @@ mod tests {
             assert!(owners::get(&conn, &pk).unwrap().is_none());
         }
         assert_eq!(sup.liveness().await, (0, 0));
+    }
+
+    /// Plan 20 end-to-end at the supervisor level: a paired owner's router
+    /// serves `/ws/voice`; a token join reaches the shared SFU; unpair
+    /// drops the owner's slots AND ends the live call.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn voice_ws_served_and_unpair_ends_calls(
+    ) {
+        use futures::{SinkExt, StreamExt};
+        use starling_relay_voice::{VoiceServer, VoiceServerCfg};
+        use starling_wire::voice::{ClientFrame, ServerFrame};
+        use tokio_tungstenite::tungstenite::Message;
+
+        let voice = VoiceServer::start(VoiceServerCfg {
+            bind: "127.0.0.1:0".parse().unwrap(),
+            advertised_addrs: Vec::new(),
+            max_participants: 12,
+            max_concurrent_calls: 4,
+            idle_reap: std::time::Duration::from_secs(60),
+        })
+        .await
+        .unwrap();
+
+        let arti = StubArti::new();
+        let db = Db::open_in_memory().unwrap();
+        let media = tempfile::tempdir().unwrap();
+        let sup = Supervisor::new(
+            db.clone(),
+            arti as Arc<dyn OnionLauncher>,
+            media.path().to_path_buf(),
+            Caps::default(),
+            "admin.onion".into(),
+            (28970, 28979),
+            Some((voice.clone(), 12)),
+        );
+
+        let pk = [7u8; 32];
+        sup.pair_owner(pk, None).await.unwrap();
+        let token = [0x99u8; 32];
+        voice
+            .register_slots(
+                pk,
+                vec![starling_wire::voice::VoiceSlotEntry {
+                    token_hash: starling_wire::blake2b256(&token).to_vec(),
+                    max_participants: None,
+                }],
+            )
+            .await;
+
+        // The owner's loopback router serves the merged /ws/voice route.
+        let (mut ws, resp) =
+            tokio_tungstenite::connect_async("ws://127.0.0.1:28970/ws/voice").await.unwrap();
+        assert_eq!(resp.status().as_u16(), 101);
+        ws.send(Message::Binary(ClientFrame::Join { token: token.to_vec() }.to_cbor()))
+            .await
+            .unwrap();
+        let ack = ws.next().await.unwrap().unwrap();
+        let Message::Binary(bytes) = ack else { panic!("expected binary JoinAck") };
+        assert!(matches!(
+            ServerFrame::parse(&bytes).unwrap(),
+            ServerFrame::JoinAck { .. }
+        ));
+        assert_eq!(voice.overview().await.get(&pk), Some(&1), "one live call");
+
+        // Unpair: live call ends (Bye + close) and the token is dead.
+        sup.unpair_owner(pk).await.unwrap();
+        let mut got_bye = false;
+        while let Some(Ok(msg)) = ws.next().await {
+            if let Message::Binary(bytes) = msg {
+                if matches!(ServerFrame::parse(&bytes), Some(ServerFrame::Bye {})) {
+                    got_bye = true;
+                }
+            }
+        }
+        assert!(got_bye, "unpair sends bye to live participants");
+        assert!(voice.overview().await.is_empty(), "no live calls remain");
     }
 }

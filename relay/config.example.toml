@@ -26,3 +26,34 @@ pairing_token_ttl_seconds = 600
 # Loopback port range Arti reverse-proxies each Owner's onion to.
 # Env form is a hyphenated pair: STARLING_RELAY_LOCAL_PORT_RANGE=17000-17999.
 local_port_range = [17000, 17999]
+
+# --- Voice (SFU) hosting — Plan 20 ------------------------------------------
+# When enabled, live calls in rooms created by paired owners are hosted on
+# this relay as a forwarding-only SFU: every participant sends one audio
+# stream up, the relay fans it out. The relay forwards END-TO-END ENCRYPTED
+# frames it cannot decrypt, and never learns participant identities — only
+# blinded room tokens, ephemeral ids, and (unavoidably) participant IPs.
+#
+# NOTE: this opens the relay's FIRST clearnet socket (one UDP port for
+# media). Signaling stays on the per-owner onions. Participants must be able
+# to reach the UDP port directly: port-forward it, or run with public
+# v4/global v6. Env overrides: STARLING_RELAY_VOICE_ENABLED,
+# STARLING_RELAY_VOICE_UDP_PORT, STARLING_RELAY_VOICE_MAX_PARTICIPANTS,
+# STARLING_RELAY_VOICE_MAX_CONCURRENT_CALLS, and
+# STARLING_RELAY_VOICE_ADVERTISED_ADDRS (comma-separated).
+[voice]
+enabled = false
+
+# UDP media port. 0 = OS-assigned each boot — fine for LAN/v6 testing,
+# useless behind a port-forward: set an explicit port to forward.
+udp_port = 0
+
+# Extra ICE host candidates ("ip" or "ip:port") for the port-forwarded
+# home-NAT case; interface addresses are auto-detected.
+advertised_addrs = []
+
+# Per-call participant ceiling (2..=24). A room can lower it, never raise.
+max_participants = 12
+
+# Live (non-empty) calls across all owners.
+max_concurrent_calls = 4

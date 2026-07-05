@@ -53,7 +53,7 @@ Owner signature headers below.
 
 | Method | Path | Auth | Body | Response |
 |---|---|---|---|---|
-| `GET` | `/status` | none | — | JSON `{pubkey, version, event_count, storage_used, storage_limit, media_storage_used}` |
+| `GET` | `/status` | none | — | JSON `{pubkey, version, event_count, storage_used, storage_limit, media_storage_used, voice:{enabled, max_participants, slot_count}}` |
 | `GET` | `/manifest?since=&until=&until_id=` | none | — | CBOR `{pubkey, events:[{id,created_at}], has_older}` |
 | `GET` | `/events?since=&since_id=` | none | — | CBOR `Envelope` of stored items; truncated pages carry the next keyset cursor in `extensions["next"]` |
 | `GET` | `/media/<hash>` | none | — | raw `nonce‖ciphertext` blob (`application/octet-stream`) |
@@ -63,6 +63,8 @@ Owner signature headers below.
 | `POST` | `/media/delete` | owner-sig | CBOR `{hashes:[...]}` | `200` CBOR `{deleted, missing}`; `400` if any hash is malformed |
 | `GET` | `/media-manifest?after=` | owner-sig | — | CBOR `{hashes, has_older}` |
 | `POST` | `/unpair` | owner-sig | empty | `200`; the wipe runs ~0.5s later |
+| `POST` | `/voice/rooms` | owner-sig | CBOR `{slots:[{token_hash, max_participants?}]}` | `200` CBOR `{slots}`; replace-the-set; `404` when voice is disabled |
+| `GET` | `/ws/voice` | room token | WS upgrade; first CBOR frame is `join{token}` | `101`; SFU signaling frames (see "Voice (SFU)") |
 
 Admin onion: `POST /pair` only (see "Pairing").
 
@@ -244,6 +246,52 @@ keystore) exposes the admin web UI (on `bind_admin`, loopback by default) and
 A captured token is useless without the Owner's signing key — the signature
 binds `owner_pubkey` to `(admin_onion, token)`.
 
+## Voice (SFU) — Plan 20
+
+When `[voice] enabled = true`, live calls in a paired Owner's rooms are
+hosted on the relay as a **forwarding-only SFU**: each participant sends one
+audio stream up over a DTLS-SRTP leg the relay terminates; the relay fans
+the RTP payloads out **byte-identically** to the other participants. The
+payloads are FrameCryptor ciphertext end-to-end encrypted by the clients —
+the relay cannot decrypt them, links no audio codec (enforced by the
+dep-walk tests), and has no transcode path.
+
+- **Blinded slots.** The Owner's phone registers rooms as
+  `token_hash = BLAKE2b-256(voiceToken)` via `POST /voice/rooms`
+  (replace-the-set: the body is always the full slot set; rows live in
+  `voice_slots`, cascade on unpair, and reload into the live registry at
+  boot). The relay never sees a preimage until a participant joins.
+- **Join.** `GET /ws/voice` on the Owner's onion upgrades to a CBOR-framed
+  WebSocket. First frame `join{token}` (the 32-byte preimage) within 10s;
+  hash match admits with a relay-assigned ephemeral `sfu_id` — no Ed25519,
+  no identities on this path. Frames: client `join/offer/answer/ice/bye`;
+  server `join_ack{sfu_id, candidates, cap, participants}`,
+  `offer/answer/ice`, `peer_joined{sfu_id, mid}`, `peer_left`, `full`,
+  `bye`, `error{code∈bad_token|busy|protocol|internal}`. The client offers
+  exactly once (sendonly mic); all later SDP changes are serialized server
+  re-offers. Clients map `sfu_id → pubkey` via the Plan 16 roster gossip;
+  the relay never holds that mapping.
+- **Caps.** Effective per-call cap = `min(slot.max_participants,
+  voice.max_participants)`; joins beyond it get `full`. Live (non-empty)
+  calls are bounded by `max_concurrent_calls` (`busy`). Empty calls are
+  reaped after 60s.
+- **Transport posture.** This is the relay's **first clearnet socket**: one
+  UDP port for media (ICE-Lite, host candidates = auto-detected interface
+  addresses + `advertised_addrs`). Signaling stays on the onions. Off by
+  default.
+
+### `voice_slots` schema
+
+```sql
+CREATE TABLE voice_slots (
+    pubkey BLOB NOT NULL REFERENCES paired_owners(pubkey) ON DELETE CASCADE,
+    token_hash BLOB NOT NULL,
+    max_participants INTEGER,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (pubkey, token_hash)
+);
+```
+
 ## Configuration (`/etc/starling-relay/config.toml`)
 
 ```toml
@@ -254,6 +302,13 @@ per_owner_default_cap_bytes = 1073741824         # 1 GiB per Owner  (0 = unlimit
 log_level                   = "info"
 pairing_token_ttl_seconds   = 600
 local_port_range            = [17000, 17999]     # per-Owner loopback ports
+
+[voice]                       # SFU voice hosting — OFF by default (Plan 20)
+enabled              = false
+udp_port             = 0      # 0 = OS-assigned per boot; set explicitly to port-forward
+advertised_addrs     = []     # extra ICE host candidates ("ip" or "ip:port")
+max_participants     = 12     # per-call ceiling, 2..=24
+max_concurrent_calls = 4      # live calls across all owners
 ```
 
 Every field is overridable with `STARLING_RELAY_<UPPER_SNAKE>`. Unparseable
@@ -270,8 +325,10 @@ startup rather than silently keeping a default. Arti's data directory is
 - **systemd/Debian:** `relay/scripts/install-debian.sh`
   (`relay/systemd/starling-relay.service`, `Restart=on-failure`, hardened).
 - **Proxmox LXC:** `relay/scripts/proxmox-install.sh`.
-- Tor-only. Clearnet TLS ingress is deferred (v2); there is no `listen_addr`,
-  `tls_cert`, or Windows/macOS target — the binary is Linux/unix.
+- Tor-only for the store-and-forward tier. Clearnet TLS ingress is deferred
+  (v2); there is no `listen_addr`, `tls_cert`, or Windows/macOS target — the
+  binary is Linux/unix. The opt-in voice SFU is the single exception: one
+  clearnet UDP port for media (`[voice]`, off by default).
 
 ## Security considerations
 
@@ -290,6 +347,19 @@ startup rather than silently keeping a default. Arti's data directory is
   a read flood cannot starve the Owner's own pushes.
 - The admin UI is loopback-bound by default; LAN exposure requires an argon2id
   password. The CLI control channel is a `0700`-parent Unix socket.
+- **Voice.** Rooms are blinded slots (hash only); joins are token-authed
+  with no identities on the path; audio is E2E-encrypted frames the relay
+  forwards byte-identically (DTLS-SRTP is hop transport it terminates by
+  design). What a hosting relay learns about a call: that one of its
+  owner's slots is live, participant count, join/leave times, participant
+  **IP addresses** (media is direct UDP — unavoidable), and speech-activity
+  rhythm from packet timing (inherent to non-padded real-time media). What
+  it cannot learn: audio content, participant identities, room names, or
+  linkage to feed content. A stolen `voiceToken` (relay compromise) admits
+  a silent listener to *ciphertext only* — and every client renders that
+  session as an unmapped participant, which the UI flags (Plan 20 Phase E).
+  Token rotation rides room-key rotation and applies at next join. The
+  admin dashboard shows aggregate counts only, never per-participant data.
 
 ## Cross-language enforcement
 
@@ -301,4 +371,6 @@ is enforced by byte-pinned shared vectors in
 decoded in Rust, Rust-produced surfaces are encode-pinned. Covered surfaces:
 Crockford base32; the pairing claim (digest, sig, CBOR); `relay_id`;
 `PairResponse`; the QR card; `EncryptedEvent`; `PushBatch` + owner sig;
-`PushReceipt`; `ManifestPage`; `MediaManifestPage`; the `/events` Envelope.
+`PushReceipt`; `ManifestPage`; `MediaManifestPage`; the `/events` Envelope;
+`VoiceSlotPush` + its request-bound owner sig; `VoiceSlotReceipt`; the
+`/status` JSON including `voice`.

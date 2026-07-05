@@ -148,6 +148,37 @@
       "ack_rotation_at": 111,
       "card_seen_at": 222,
       "sig_hex": "1a1f95eb3b0941c77e0fa3876d29ad31cfe683dc61dfc3477d604d1079105ed06b60e7922e6e5edaf2780b34bbb3630b0109f0cd8ce2ce8b1def529e982ace09"
+    },
+    "voice_slot_push": {
+      "_comment": "Plan 20 SFU voice: POST /voice/rooms replaces the owner's full blinded-slot set. token_hash = blake2b256(voiceToken); the relay never sees the preimage until a participant joins.",
+      "token_hex": "7777777777777777777777777777777777777777777777777777777777777777",
+      "token_hash_hex": "f69f7c57a25aeb7717e5a050c8fbea31d3d57466f8ce8f73015762ffccabfd10",
+      "token2_hash_hex": "ba012ca7fa479b9134af7c1cc1d22167ba6a3b96eabd315e5ba4b0e68faa76ba",
+      "cbor_hex": "a165736c6f747382a26a746f6b656e5f686173685820f69f7c57a25aeb7717e5a050c8fbea31d3d57466f8ce8f73015762ffccabfd10706d61785f7061727469636970616e747308a16a746f6b656e5f686173685820ba012ca7fa479b9134af7c1cc1d22167ba6a3b96eabd315e5ba4b0e68faa76ba",
+      "signed_ts": 1700000100,
+      "signed_path": "/voice/rooms",
+      "owner_req_digest_hex": "9ad9001173fd5d03f599d9f9d16a72dac498a2c4ba01c27166550a327271ca5b",
+      "owner_sig_hex": "a24e560e6c78f17af2f4516bc2dd150b430d7936d247298899db6e985c097427e855caf820a33b7950a5a7d772417745b74eb7d441ea14a28439fc48968a1b03"
+    },
+    "voice_slot_receipt": {
+      "slots": 2,
+      "cbor_hex": "a165736c6f747302"
+    },
+    "status_json": {
+      "_comment": "GET /status JSON shape including the always-present voice object (Plan 20): a voice-disabled relay reports enabled=false so the phone capability-detects with a plain field read. Rust asserts the encode side; the Dart reader lands with Phase C.",
+      "json": {
+        "pubkey": "0eggffzksr8bw7bgvmceejy0k5ky9nhgkejgtqrxvj3684jn66w0",
+        "version": "0.1.0-test",
+        "event_count": 1,
+        "storage_used": 2048,
+        "storage_limit": 0,
+        "media_storage_used": 1024,
+        "voice": {
+          "enabled": true,
+          "max_participants": 12,
+          "slot_count": 2
+        }
+      }
     }
   },
   "http": {
@@ -229,6 +260,18 @@
         "path": "/unpair",
         "auth": true,
         "success_status": 200
+      },
+      "voice_rooms": {
+        "method": "POST",
+        "path": "/voice/rooms",
+        "auth": true,
+        "success_status": 200
+      },
+      "ws_voice": {
+        "method": "GET",
+        "path": "/ws/voice",
+        "auth": false,
+        "success_status": 101
       }
     }
   }

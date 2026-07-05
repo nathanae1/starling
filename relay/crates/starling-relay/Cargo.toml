@@ -19,6 +19,7 @@ starling-wire.workspace = true
 starling-relay-storage.workspace = true
 starling-relay-http.workspace = true
 starling-relay-admin.workspace = true
+starling-relay-voice.workspace = true
 
 tokio = { workspace = true }
 axum = "0.7"
@@ -35,3 +36,6 @@ qrcode = { version = "0.14", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"
+# Supervisor voice test: drive /ws/voice on a paired owner's router.
+tokio-tungstenite = "0.21"
+futures = { workspace = true }

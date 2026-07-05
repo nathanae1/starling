@@ -128,6 +128,15 @@ async fn serve(cfg: Config) -> Result<()> {
     let admin_onion = admin_onion_handle.address().to_string();
     log::info!("admin onion: http://{admin_onion}/pair");
 
+    // Voice (SFU, Plan 20): one shared server for all owners when enabled.
+    // This is the relay's ONLY clearnet socket — one UDP port for media;
+    // signaling stays on the per-Owner onions.
+    let voice = if cfg.voice.enabled {
+        Some(start_voice(&cfg, &db).await?)
+    } else {
+        None
+    };
+
     let caps = Caps {
         per_owner_default: cfg.per_owner_default_cap_bytes,
         disk_cap: cfg.disk_cap_bytes,
@@ -139,6 +148,7 @@ async fn serve(cfg: Config) -> Result<()> {
         caps,
         admin_onion.clone(),
         (cfg.local_port_range[0], cfg.local_port_range[1]),
+        voice,
     ));
     // Service wire `POST /unpair` requests from the per-Owner routers (A3).
     supervisor.spawn_unpair_dispatcher();
@@ -199,6 +209,67 @@ async fn serve(cfg: Config) -> Result<()> {
     drop(admin_onion_handle);
     let _ = std::fs::remove_file(cfg.admin_sock());
     Ok(())
+}
+
+/// Start the SFU and boot-load the slot registry from `voice_slots`.
+/// Returns `(handle, max_participants)` for the supervisor.
+async fn start_voice(
+    cfg: &Config,
+    db: &Db,
+) -> Result<(starling_relay_voice::VoiceHandle, u16)> {
+    use starling_relay_voice::{VoiceServer, VoiceServerCfg};
+
+    if cfg.voice.udp_port == 0 {
+        log::warn!(
+            "[voice] udp_port = 0: the OS assigns a fresh port every boot — \
+             fine on a LAN or with direct v6, useless behind a port-forward. \
+             Set an explicit udp_port to forward."
+        );
+    }
+    let advertised = cfg
+        .voice
+        .advertised_addrs
+        .iter()
+        .map(|s| s.parse())
+        .collect::<Result<Vec<_>>>()
+        .context("parse voice.advertised_addrs")?;
+    let handle = VoiceServer::start(VoiceServerCfg {
+        bind: std::net::SocketAddr::from(([0, 0, 0, 0], cfg.voice.udp_port)),
+        advertised_addrs: advertised,
+        max_participants: cfg.voice.max_participants,
+        max_concurrent_calls: cfg.voice.max_concurrent_calls as usize,
+        idle_reap: std::time::Duration::from_secs(60),
+    })
+    .await
+    .context("start voice (SFU) server")?;
+
+    // Boot-load the live registry from the durable rows.
+    let rows = db
+        .run(|conn| starling_relay_storage::voice_slots::list_all(conn))
+        .await
+        .context("load voice_slots")?;
+    let mut by_owner: std::collections::HashMap<[u8; 32], Vec<starling_wire::voice::VoiceSlotEntry>> =
+        std::collections::HashMap::new();
+    for row in rows {
+        let Ok(pubkey) = <[u8; 32]>::try_from(row.pubkey.as_slice()) else {
+            continue;
+        };
+        by_owner.entry(pubkey).or_default().push(starling_wire::voice::VoiceSlotEntry {
+            token_hash: row.token_hash,
+            max_participants: row.max_participants,
+        });
+    }
+    let owner_count = by_owner.len();
+    for (owner, slots) in by_owner {
+        handle.register_slots(owner, slots).await;
+    }
+    log::info!(
+        "voice: enabled (max {} participants/call, {} concurrent calls, slots for {} owners)",
+        cfg.voice.max_participants,
+        cfg.voice.max_concurrent_calls,
+        owner_count,
+    );
+    Ok((handle, cfg.voice.max_participants))
 }
 
 async fn cmd_pair(cfg: Config, label: Option<String>) -> Result<()> {

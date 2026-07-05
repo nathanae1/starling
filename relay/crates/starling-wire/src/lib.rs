@@ -22,6 +22,7 @@ pub mod manifest;
 pub mod pairing;
 pub mod push;
 pub mod sig;
+pub mod voice;
 
 /// Starling protocol version string (`kStarlingProtocolVersion`). Stamped
 /// into the `version` field of every `/events` Envelope and `/status`.

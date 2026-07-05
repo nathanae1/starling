@@ -15,6 +15,7 @@ pub mod events;
 pub mod media;
 pub mod owners;
 pub mod pairings;
+pub mod voice_slots;
 
 pub use creds::AdminCreds;
 pub use events::ServedEvent;
@@ -35,6 +36,7 @@ pub fn immediate_tx(conn: &Connection) -> Result<rusqlite::Transaction<'_>> {
 const MIGRATION_0001: &str = include_str!("../migrations/0001_init.sql");
 const MIGRATION_0002: &str = include_str!("../migrations/0002_event_size.sql");
 const MIGRATION_0003: &str = include_str!("../migrations/0003_event_type.sql");
+const MIGRATION_0004: &str = include_str!("../migrations/0004_voice_slots.sql");
 
 pub type PooledConn = r2d2::PooledConnection<SqliteConnectionManager>;
 
@@ -120,7 +122,11 @@ impl Db {
             conn.execute_batch(MIGRATION_0003)
                 .context("run migration 0003")?;
         }
-        conn.execute_batch("PRAGMA user_version = 3")
+        if version < 4 {
+            conn.execute_batch(MIGRATION_0004)
+                .context("run migration 0004")?;
+        }
+        conn.execute_batch("PRAGMA user_version = 4")
             .context("set user_version")?;
         Ok(())
     }

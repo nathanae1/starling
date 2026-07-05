@@ -87,6 +87,7 @@ fn fixture() -> Fixture {
         media_dir: media.path().to_path_buf(),
         caps: Caps::default(),
         unpair: None,
+        voice: None,
     };
     Fixture { sk, pubkey, ctx, _media: media }
 }
@@ -374,4 +375,106 @@ async fn media_manifest_contract() {
     assert_eq!(status.as_u16(), success(e));
     let hashes = cbor_map_field(&body, "hashes").as_array().unwrap().len();
     assert_eq!(hashes, 1, "after cursor excludes the first hash");
+}
+
+/// Plan 20: `POST /voice/rooms` — owner-sig gate, replace-the-set DB
+/// effect, live-registry hook, receipt shape, and the disabled-404.
+#[tokio::test]
+async fn voice_rooms_contract() {
+    use std::sync::{Arc, Mutex};
+
+    use starling_relay_storage::voice_slots;
+    use starling_wire::voice::{VoiceSlotEntry, VoiceSlotPush};
+
+    let v = vectors();
+    let e = endpoint(&v, "voice_rooms");
+    assert_eq!(method(e), "POST");
+
+    let mut f = fixture();
+    let registrar_calls: Arc<Mutex<Vec<Vec<VoiceSlotEntry>>>> = Arc::default();
+    let calls = registrar_calls.clone();
+    f.ctx.voice = Some(starling_relay_http::VoiceCtx {
+        max_participants: 12,
+        registrar: Arc::new(move |slots| calls.lock().unwrap().push(slots)),
+    });
+
+    let push = VoiceSlotPush {
+        slots: vec![
+            VoiceSlotEntry { token_hash: vec![0xaa; 32], max_participants: Some(8) },
+            VoiceSlotEntry { token_hash: vec![0xbb; 32], max_participants: None },
+        ],
+    };
+    let body = encode_cbor(&push);
+
+    // Unsigned → 401 before anything else happens.
+    let req = Request::post(path(e)).body(Body::from(body.clone())).unwrap();
+    let (status, _) = send(&f.ctx, req).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert!(registrar_calls.lock().unwrap().is_empty());
+
+    // Signed → pinned success status + receipt, DB rows, registrar fired.
+    let req = signed(&v, &f, method(e), path(e), path(e), body.clone());
+    let (status, resp) = send(&f.ctx, req).await;
+    assert_eq!(status.as_u16(), success(e));
+    let slots = cbor_map_field(&resp, "slots");
+    assert_eq!(slots.as_integer(), Some(2.into()));
+    {
+        let conn = f.ctx.db.get().unwrap();
+        let rows = voice_slots::list_for_owner(&conn, &f.pubkey).unwrap();
+        assert_eq!(rows.len(), 2);
+    }
+    assert_eq!(registrar_calls.lock().unwrap().len(), 1);
+
+    // Replace-the-set: a smaller push deletes the missing slots.
+    let replacement = VoiceSlotPush {
+        slots: vec![VoiceSlotEntry { token_hash: vec![0xcc; 32], max_participants: None }],
+    };
+    let req = signed(&v, &f, method(e), path(e), path(e), encode_cbor(&replacement));
+    let (status, _) = send(&f.ctx, req).await;
+    assert_eq!(status.as_u16(), success(e));
+    {
+        let conn = f.ctx.db.get().unwrap();
+        let rows = voice_slots::list_for_owner(&conn, &f.pubkey).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].token_hash, vec![0xcc; 32]);
+    }
+
+    // Validation: bad hash length and out-of-range caps → 400.
+    let bad_hash = VoiceSlotPush {
+        slots: vec![VoiceSlotEntry { token_hash: vec![0xaa; 16], max_participants: None }],
+    };
+    let req = signed(&v, &f, method(e), path(e), path(e), encode_cbor(&bad_hash));
+    let (status, _) = send(&f.ctx, req).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let bad_cap = VoiceSlotPush {
+        slots: vec![VoiceSlotEntry { token_hash: vec![0xaa; 32], max_participants: Some(24) }],
+    };
+    let req = signed(&v, &f, method(e), path(e), path(e), encode_cbor(&bad_cap));
+    let (status, _) = send(&f.ctx, req).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "cap above the relay max is rejected");
+
+    // /status reflects the enabled capability and the live slot count.
+    let (status, body) = send(
+        &f.ctx,
+        Request::get("/status").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["voice"]["enabled"], Value::Bool(true));
+    assert_eq!(json["voice"]["max_participants"], 12);
+    assert_eq!(json["voice"]["slot_count"], 1);
+
+    // Voice disabled → 404 on push, and /status reports enabled=false.
+    let disabled = fixture();
+    let req = signed(&v, &disabled, method(e), path(e), path(e), body);
+    let (status, _) = send(&disabled.ctx, req).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (_, body) = send(
+        &disabled.ctx,
+        Request::get("/status").body(Body::empty()).unwrap(),
+    )
+    .await;
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["voice"]["enabled"], Value::Bool(false));
 }

@@ -14,11 +14,14 @@ use base64::Engine;
 use serde_json::Value;
 use starling_wire::delete::{DeleteEventsRequest, DeleteMediaRequest, DeleteReceipt};
 use starling_wire::event_header::EncryptedEventHeader;
-use starling_wire::manifest::{ManifestEntry, ManifestPage, MediaManifestPage};
+use starling_wire::manifest::{
+    ManifestEntry, ManifestPage, MediaManifestPage, StatusJson, VoiceStatusJson,
+};
 use starling_wire::pairing::{
     compute_pair_claim, relay_id, PairResponse, PairingClaimWire, RelayQrCard,
 };
 use starling_wire::push::{PushBatch, PushReceipt};
+use starling_wire::voice::{VoiceSlotPush, VoiceSlotReceipt};
 use starling_wire::{
     crockford_base32_decode, crockford_base32_encode, owner_request_digest, verify_ed25519,
     verify_owner_request_sig, verify_owner_sig, PROTOCOL_VERSION,
@@ -281,6 +284,66 @@ fn media_manifest_page_encode() {
         has_older: false,
     };
     assert_eq!(page.to_cbor(), unhex(&c["cbor_hex"]));
+}
+
+/// Plan 20: the Dart-produced `POST /voice/rooms` body decodes (including
+/// the optional per-slot cap), its blinded hashes match blake2b256 of the
+/// never-pushed preimage, and the request-bound signature verifies.
+#[test]
+fn voice_slot_push_decodes_and_bound_sig_verifies() {
+    let v = vectors();
+    let c = &rw(&v)["voice_slot_push"];
+    let body = unhex(&c["cbor_hex"]);
+    let push = VoiceSlotPush::parse(&body).expect("parse voice slot push");
+    assert_eq!(push.slots.len(), 2);
+    assert_eq!(push.slots[0].token_hash, unhex(&c["token_hash_hex"]));
+    assert_eq!(push.slots[0].max_participants, Some(8));
+    assert_eq!(push.slots[1].token_hash, unhex(&c["token2_hash_hex"]));
+    assert_eq!(push.slots[1].max_participants, None);
+    // The slot is blinded: hash of the preimage a joiner will present.
+    assert_eq!(
+        starling_wire::blake2b256(&unhex(&c["token_hex"])).to_vec(),
+        push.slots[0].token_hash
+    );
+
+    let ts = c["signed_ts"].as_i64().unwrap();
+    let path = c["signed_path"].as_str().unwrap();
+    let digest = owner_request_digest("POST", path, ts, &body);
+    assert_eq!(hex::encode(digest), c["owner_req_digest_hex"].as_str().unwrap());
+    assert!(verify_owner_request_sig(
+        &owner_pk(&v),
+        "POST",
+        path,
+        ts,
+        &body,
+        &unhex(&c["owner_sig_hex"]),
+    ));
+}
+
+/// The Rust-produced VoiceSlotReceipt must emit the pinned bytes.
+#[test]
+fn voice_slot_receipt_encode() {
+    let v = vectors();
+    let c = &rw(&v)["voice_slot_receipt"];
+    let receipt = VoiceSlotReceipt { slots: c["slots"].as_i64().unwrap() };
+    assert_eq!(receipt.to_cbor(), unhex(&c["cbor_hex"]));
+}
+
+/// `GET /status` including the always-present `voice` object (Plan 20).
+#[test]
+fn status_json_encode_includes_voice() {
+    let v = vectors();
+    let c = &rw(&v)["status_json"];
+    let status = StatusJson {
+        pubkey: c["json"]["pubkey"].as_str().unwrap().to_string(),
+        version: c["json"]["version"].as_str().unwrap().to_string(),
+        event_count: 1,
+        storage_used: 2048,
+        storage_limit: 0,
+        media_storage_used: 1024,
+        voice: VoiceStatusJson { enabled: true, max_participants: 12, slot_count: 2 },
+    };
+    assert_eq!(serde_json::to_value(&status).unwrap(), c["json"]);
 }
 
 #[test]

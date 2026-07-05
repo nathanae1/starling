@@ -23,7 +23,7 @@ use bytes::Bytes;
 use rand::RngCore;
 use starling_relay_http::{internal, rate_limit_mw, RateLimiter};
 use starling_relay_storage::{
-    events, immediate_tx, media, owners, pairings, Connection, Db, PendingPairing,
+    events, immediate_tx, media, owners, pairings, voice_slots, Connection, Db, PendingPairing,
 };
 use starling_wire::{crockford_base32_encode, now_secs};
 use starling_wire::pairing::{
@@ -51,6 +51,13 @@ pub trait RelayControl: Send + Sync {
     /// `(serving, total)` owner-task counts for `/health`. Default `None`
     /// for implementations (e.g. test mocks) that run no serving tasks.
     async fn liveness(&self) -> Option<(usize, usize)> {
+        None
+    }
+
+    /// Live (non-empty) voice-call counts per owner — aggregate only, no
+    /// per-participant attribution (Plan 20). `None` = voice hosting
+    /// disabled.
+    async fn voice_overview(&self) -> Option<std::collections::HashMap<[u8; 32], usize>> {
         None
     }
 }
@@ -300,14 +307,31 @@ struct OwnerView {
     onion: String,
     event_count: i64,
     media_used: i64,
+    /// Aggregate voice cell ("off" / "on (2 slots, 1 active call)") — never
+    /// per-participant detail, consistent with the dashboard rule.
+    voice: String,
     pubkey_hex: String,
 }
 
-fn load_owner_views(conn: &Connection) -> anyhow::Result<Vec<OwnerView>> {
+fn load_owner_views(
+    conn: &Connection,
+    voice_calls: Option<&std::collections::HashMap<[u8; 32], usize>>,
+) -> anyhow::Result<Vec<OwnerView>> {
     let mut views = Vec::new();
     for o in owners::list(conn)? {
         let event_count = events::count(conn, &o.pubkey).unwrap_or(0);
         let media_used = media::total_bytes(conn, &o.pubkey).unwrap_or(0);
+        let voice = match voice_calls {
+            None => "off".to_string(),
+            Some(calls) => {
+                let slots = voice_slots::count_for_owner(conn, &o.pubkey).unwrap_or(0);
+                let active = <[u8; 32]>::try_from(o.pubkey.as_slice())
+                    .ok()
+                    .and_then(|pk| calls.get(&pk).copied())
+                    .unwrap_or(0);
+                format!("on ({slots} slots, {active} active calls)")
+            }
+        };
         let pk32 = crockford_base32_encode(&o.pubkey);
         let short = pk32.chars().rev().take(8).collect::<String>();
         let short: String = short.chars().rev().collect();
@@ -317,6 +341,7 @@ fn load_owner_views(conn: &Connection) -> anyhow::Result<Vec<OwnerView>> {
             onion: o.relay_onion_address,
             event_count,
             media_used,
+            voice,
             pubkey_hex: hex::encode(&o.pubkey),
         });
     }
@@ -335,11 +360,12 @@ table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:.4rem .6
 <h1>Starling Relay <span class="muted">v{{ relay_version }}</span></h1>
 <p><a class="btn" href="/pair">+ Pair a phone</a></p>
 {% if owners.is_empty() %}<p class="muted">No paired owners yet.</p>{% else %}
-<table><thead><tr><th>Owner</th><th>Label</th><th>Onion</th><th>Events</th><th>Media</th><th></th></tr></thead>
+<table><thead><tr><th>Owner</th><th>Label</th><th>Onion</th><th>Events</th><th>Media</th><th>Voice</th><th></th></tr></thead>
 <tbody>{% for o in owners %}<tr>
 <td><code>{{ o.pubkey_short }}</code></td><td>{{ o.label }}</td>
 <td class="muted"><code>{{ o.onion }}</code></td><td>{{ o.event_count }}</td>
 <td>{{ o.media_used }}</td>
+<td class="muted">{{ o.voice }}</td>
 <td><button onclick="unpair('{{ o.pubkey_hex }}')">Unpair</button></td>
 </tr>{% endfor %}</tbody></table>{% endif %}
 <script>
@@ -389,7 +415,12 @@ struct PairTemplate {
 // ---------------------------------------------------------------------------
 
 async fn index(State(st): State<AdminState>) -> Response {
-    let owners = match st.db.run(|conn| load_owner_views(conn)).await {
+    let voice_calls = st.ctrl.voice_overview().await;
+    let owners = match st
+        .db
+        .run(move |conn| load_owner_views(conn, voice_calls.as_ref()))
+        .await
+    {
         Ok(o) => o,
         Err(e) => return internal(e),
     };

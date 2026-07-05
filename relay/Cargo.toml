@@ -67,6 +67,7 @@ starling-wire = { path = "crates/starling-wire" }
 starling-relay-storage = { path = "crates/starling-relay-storage" }
 starling-relay-http = { path = "crates/starling-relay-http" }
 starling-relay-admin = { path = "crates/starling-relay-admin" }
+starling-relay-voice = { path = "crates/starling-relay-voice" }
 
 [profile.release]
 opt-level = "z"

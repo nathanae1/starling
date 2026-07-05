@@ -5,6 +5,7 @@ pub mod manifest;
 pub mod media;
 pub mod status;
 pub mod unpair;
+pub mod voice;
 
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};

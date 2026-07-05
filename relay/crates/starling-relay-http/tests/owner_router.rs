@@ -52,6 +52,7 @@ fn fixture_with(caps: Caps, storage_cap_bytes: Option<i64>) -> Fixture {
         media_dir: media.path().to_path_buf(),
         caps,
         unpair: None,
+        voice: None,
     };
     Fixture {
         sk,
@@ -422,6 +423,7 @@ async fn host_disk_cap_spans_owners_507() {
                 media_dir: media.path().to_path_buf(),
                 caps,
                 unpair: None,
+                voice: None,
             },
             _media: tempfile::tempdir().unwrap(),
         });
@@ -702,6 +704,7 @@ async fn cross_owner_media_cannot_clobber() {
             media_dir: media.path().to_path_buf(),
             caps: Caps::default(),
             unpair: None,
+            voice: None,
         };
         owners_ctx.push((sk, ctx));
     }

@@ -65,6 +65,23 @@ impl Default for Caps {
 /// so an inline wipe would kill the request before its 200 flushes.
 pub type UnpairHandle = Arc<dyn Fn() + Send + Sync>;
 
+/// Applies an owner's replaced slot set to the live voice registry
+/// (`starling-relay-voice`), wired by the supervisor (the `UnpairHandle`
+/// pattern — this crate must NOT depend on the voice crate: its DTLS-SRTP
+/// dependency tree would fail the zero-knowledge dep walk). Called only
+/// after the DB write commits.
+pub type SlotRegistrar = Arc<dyn Fn(Vec<starling_wire::voice::VoiceSlotEntry>) + Send + Sync>;
+
+/// Voice-hosting context for one Owner's router. `None` on [`OwnerCtx`]
+/// means voice is disabled: `/voice/rooms` answers 404 and `/status`
+/// reports `voice.enabled: false`.
+#[derive(Clone)]
+pub struct VoiceCtx {
+    /// Relay-wide per-call participant ceiling (`[voice] max_participants`).
+    pub max_participants: u16,
+    pub registrar: SlotRegistrar,
+}
+
 /// Everything one Owner's router needs.
 #[derive(Clone)]
 pub struct OwnerCtx {
@@ -78,6 +95,8 @@ pub struct OwnerCtx {
     pub caps: Caps,
     /// `None` (e.g. in tests without a supervisor) → `/unpair` answers 501.
     pub unpair: Option<UnpairHandle>,
+    /// `None` → voice hosting disabled for this relay.
+    pub voice: Option<VoiceCtx>,
 }
 
 /// Build the per-Owner router with the relay endpoints. Reads and
@@ -102,6 +121,7 @@ pub fn owner_router(ctx: OwnerCtx) -> Router {
         .route("/media/:hash", post(routes::media::push_handler))
         .route("/media-manifest", get(routes::media::manifest_handler))
         .route("/unpair", post(routes::unpair::handler))
+        .route("/voice/rooms", post(routes::voice::rooms_handler))
         .layer(axum::middleware::from_fn_with_state(
             RateLimiter::per_minute(OWNER_RATE_PER_MIN, OWNER_BURST),
             rate_limit_mw,

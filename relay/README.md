@@ -33,6 +33,7 @@ OnionBalance, no C-tor, no supervisord.
 | `starling-relay-storage` | SQLite (paired owners, pending pairings, served events + media). |
 | `starling-relay-http` | Per-Owner Follower-facing reads + Owner-signed push. |
 | `starling-relay-admin` | Admin web UI + onion-facing `/pair` handler. |
+| `starling-relay-voice` | Audio SFU forwarder (Plan 20): DTLS-SRTP per participant, byte-identical forwarding of E2E-encrypted frames. Never decodes audio. |
 | `starling-relay` | The binary: config, Arti, supervisor, CLI. |
 
 ## Endpoints
@@ -46,6 +47,8 @@ Per-Owner onion (read = no auth; write = `X-Starling-Pubkey` +
 - `GET  /media/<hash>` — raw encrypted blob
 - `POST /events` — Owner pushes `{items:[{id,payload}]}`
 - `POST /media/<hash>` — Owner pushes a raw blob
+- `POST /voice/rooms` — Owner replaces their blinded voice-slot set (Plan 20)
+- `GET  /ws/voice` — SFU signaling WebSocket (token-authed, no identities)
 
 Admin onion: `POST /pair` only.
 
@@ -104,3 +107,21 @@ password first: `starling-relay set-password --config config.toml`.
 - **systemd/Debian:** `relay/scripts/install-debian.sh`
 - **Proxmox LXC:** `relay/scripts/proxmox-install.sh <ctid> <binary>`
 - **CI/releases:** `.github/workflows/relay.yml` (tag `relay-v*`)
+
+### Voice (SFU) hosting
+
+Off by default. When `[voice] enabled = true`, live calls in rooms created
+by paired owners are hosted on the relay as a forwarding-only SFU, raising
+the call cap past the phone mesh's 4. The relay forwards **end-to-end
+encrypted audio frames it cannot decrypt** and never learns participant
+identities — only blinded room tokens, ephemeral ids, join/leave times, and
+(unavoidably, media is direct UDP) participant IP addresses.
+
+This is the relay's **first clearnet socket**: one UDP port for media.
+Signaling stays on the per-owner onions. Every participant must be able to
+reach that UDP port directly — port-forward `udp_port` on a home NAT (and
+list the external address in `advertised_addrs` if it differs), or run with
+public v4 / global v6. Docker: add
+`-e STARLING_RELAY_VOICE_ENABLED=true -e STARLING_RELAY_VOICE_UDP_PORT=47000 -p 47000:47000/udp`.
+See the `[voice]` block in `config.example.toml` for the knobs
+(`max_participants` default 12, ceiling 24; `max_concurrent_calls` 4).

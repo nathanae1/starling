@@ -52,6 +52,13 @@ EXPOSE 8088
 # outside the container until the operator opts in. To expose it: set a
 # password first (`docker run … set-password`), then run with
 # `-e STARLING_RELAY_BIND_ADMIN=0.0.0.0:8088 -p 127.0.0.1:8088:8088`.
+#
+# Voice (SFU) hosting is opt-in and runtime-configured (no EXPOSE — the UDP
+# port is operator-chosen). Enable with:
+#   -e STARLING_RELAY_VOICE_ENABLED=true \
+#   -e STARLING_RELAY_VOICE_UDP_PORT=47000 -p 47000:47000/udp
+# Participants need a direct UDP path: port-forward the chosen port, or run
+# the container with public v4 / global v6 reachability.
 ENV STARLING_RELAY_DATA_DIR=/var/lib/starling-relay
 ENTRYPOINT ["/usr/local/bin/starling-relay"]
 CMD ["serve"]

@@ -1,0 +1,33 @@
+[package]
+name = "starling-relay-voice"
+description = "Audio SFU forwarder for the Starling relay: terminates DTLS-SRTP per participant and forwards E2E-encrypted RTP payloads byte-identically. Never decodes, mixes, or inspects audio."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+# Sans-IO WebRTC built for SFU use. `rust-crypto` is the pure-Rust DTLS
+# backend — the default `aws-lc-rs` needs cmake + a C toolchain, which the
+# cargo-zigbuild/musl release pipeline does not have.
+str0m = { version = "0.21", default-features = false, features = ["rust-crypto"] }
+tokio = { workspace = true }
+anyhow.workspace = true
+log.workspace = true
+hex.workspace = true
+if-addrs = "0.14"
+starling-wire.workspace = true
+# ONLY for the shared rate limiter. The reverse dependency (http → voice)
+# must never exist: it would put this crate's DTLS-SRTP AEAD tree inside
+# the zero-knowledge dep walk (see starling-relay-http/tests/zero_knowledge.rs).
+starling-relay-http.workspace = true
+# First ws-feature use in the tree (pulls tokio-tungstenite + sha1).
+axum = { version = "0.7", features = ["ws"] }
+
+[dev-dependencies]
+env_logger = "0.11"
+# str0m logs through `tracing`; surface it in tests via RUST_LOG.
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio-tungstenite = "0.21"
+futures = { workspace = true }
+serde_json = { workspace = true }

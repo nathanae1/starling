@@ -233,6 +233,39 @@ Future<Map<String, dynamic>> buildProtocolVectors() async {
     }),
   );
 
+  // Voice (SFU) slot push (Plan 20): POST /voice/rooms body carrying the
+  // owner's full blinded-slot set, owner-signed with the request-bound
+  // scheme at the pinned timestamp. One slot with the optional cap and one
+  // without, pinning the Option handling on both sides.
+  final voiceToken = fromHex('77' * 32);
+  final voiceTokenHash = crypto.blake2b256(voiceToken);
+  final voiceToken2 = fromHex('78' * 32);
+  final voiceTokenHash2 = crypto.blake2b256(voiceToken2);
+  final voiceSlotPushCbor = Uint8List.fromList(
+    cbor.encode(<String, dynamic>{
+      'slots': [
+        <String, dynamic>{
+          'token_hash': voiceTokenHash,
+          'max_participants': 8,
+        },
+        <String, dynamic>{'token_hash': voiceTokenHash2},
+      ],
+    }),
+  );
+  final voiceSlotPushDigest = ownerRequestDigest(
+    crypto: crypto,
+    method: 'POST',
+    path: '/voice/rooms',
+    unixTs: kVectorSignedTs,
+    body: voiceSlotPushCbor,
+  );
+  final voiceSlotPushSig = crypto.sign(kp.secretKey, voiceSlotPushDigest);
+
+  // VoiceSlotReceipt (Rust-produced).
+  final voiceSlotReceiptCbor = Uint8List.fromList(
+    cbor.encode(<String, dynamic>{'slots': 2}),
+  );
+
   // Manifest ack possession proof (S3a). Dart↔Dart only (phone owner ↔
   // phone follower); pinned here against Dart-side drift, skipped by the
   // Rust test.
@@ -376,6 +409,45 @@ Future<Map<String, dynamic>> buildProtocolVectors() async {
         'card_seen_at': 222,
         'sig_hex': hex(ackSig),
       },
+      'voice_slot_push': {
+        '_comment':
+            'Plan 20 SFU voice: POST /voice/rooms replaces the owner\'s '
+            'full blinded-slot set. token_hash = blake2b256(voiceToken); '
+            'the relay never sees the preimage until a participant joins.',
+        'token_hex': hex(voiceToken),
+        'token_hash_hex': hex(voiceTokenHash),
+        'token2_hash_hex': hex(voiceTokenHash2),
+        'cbor_hex': hex(voiceSlotPushCbor),
+        'signed_ts': kVectorSignedTs,
+        'signed_path': '/voice/rooms',
+        'owner_req_digest_hex': hex(voiceSlotPushDigest),
+        'owner_sig_hex': hex(voiceSlotPushSig),
+      },
+      'voice_slot_receipt': {
+        'slots': 2,
+        'cbor_hex': hex(voiceSlotReceiptCbor),
+      },
+      'status_json': {
+        '_comment':
+            'GET /status JSON shape including the always-present voice '
+            'object (Plan 20): a voice-disabled relay reports '
+            'enabled=false so the phone capability-detects with a plain '
+            'field read. Rust asserts the encode side; the Dart reader '
+            'lands with Phase C.',
+        'json': {
+          'pubkey': crockfordBase32Encode(kp.publicKey),
+          'version': '0.1.0-test',
+          'event_count': 1,
+          'storage_used': 2048,
+          'storage_limit': 0,
+          'media_storage_used': 1024,
+          'voice': {
+            'enabled': true,
+            'max_participants': 12,
+            'slot_count': 2,
+          },
+        },
+      },
     },
     'http': {
       '_comment':
@@ -449,6 +521,18 @@ Future<Map<String, dynamic>> buildProtocolVectors() async {
           'path': '/unpair',
           'auth': true,
           'success_status': 200,
+        },
+        'voice_rooms': {
+          'method': 'POST',
+          'path': '/voice/rooms',
+          'auth': true,
+          'success_status': 200,
+        },
+        'ws_voice': {
+          'method': 'GET',
+          'path': '/ws/voice',
+          'auth': false,
+          'success_status': 101,
         },
       },
     },

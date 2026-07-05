@@ -66,4 +66,24 @@ pub struct StatusJson {
     /// Media-only bytes. Retained for older phones that read this field;
     /// `storage_used` supersedes it.
     pub media_storage_used: i64,
+    /// Voice (SFU) hosting capability. **Always present** — a disabled
+    /// relay reports `enabled: false` so the phone's capability detection
+    /// at pair/reconcile time is a plain field read (Plan 20).
+    pub voice: VoiceStatusJson,
+}
+
+/// The `voice` object inside [`StatusJson`].
+#[derive(Debug, Clone, Serialize)]
+pub struct VoiceStatusJson {
+    pub enabled: bool,
+    /// Relay-wide per-call participant ceiling (`[voice] max_participants`).
+    pub max_participants: u16,
+    /// Number of registered voice slots for this Owner.
+    pub slot_count: i64,
+}
+
+impl VoiceStatusJson {
+    pub fn disabled() -> Self {
+        VoiceStatusJson { enabled: false, max_participants: 0, slot_count: 0 }
+    }
 }

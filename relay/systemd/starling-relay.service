@@ -31,6 +31,9 @@ ProtectKernelTunables=true
 RestrictNamespaces=true
 RestrictSUIDSGID=true
 LockPersonality=true
+# INET/INET6 cover Tor and the opt-in voice (SFU) UDP socket; NETLINK is
+# needed by the voice interface-address discovery (getifaddrs).
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 
 [Install]
 WantedBy=multi-user.target

@@ -16,6 +16,38 @@ pub struct Config {
     pub log_level: String,
     pub pairing_token_ttl_seconds: i64,
     pub local_port_range: [u16; 2],
+    pub voice: VoiceConfig,
+}
+
+/// `[voice]` — SFU voice hosting (Plan 20). Off by default: enabling it
+/// opens the relay's first clearnet socket (one UDP port for media;
+/// signaling stays on the per-Owner onions).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct VoiceConfig {
+    pub enabled: bool,
+    /// UDP media port. `0` = OS-assigned each boot — fine for LAN/v6
+    /// testing, useless behind a port-forward (a startup warning says so).
+    pub udp_port: u16,
+    /// Extra ICE host candidates ("ip" or "ip:port") for the
+    /// port-forwarded-home-NAT case; interface addresses are auto-detected.
+    pub advertised_addrs: Vec<String>,
+    /// Per-call participant ceiling. A room slot can lower it, never raise.
+    pub max_participants: u16,
+    /// Live (non-empty) calls across all owners.
+    pub max_concurrent_calls: u32,
+}
+
+impl Default for VoiceConfig {
+    fn default() -> Self {
+        VoiceConfig {
+            enabled: false,
+            udp_port: 0,
+            advertised_addrs: Vec::new(),
+            max_participants: 12,
+            max_concurrent_calls: 4,
+        }
+    }
 }
 
 impl Default for Config {
@@ -30,6 +62,7 @@ impl Default for Config {
             log_level: "info".to_string(),
             pairing_token_ttl_seconds: 600,
             local_port_range: [17000, 17999],
+            voice: VoiceConfig::default(),
         }
     }
 }
@@ -76,6 +109,24 @@ impl Config {
                 anyhow::anyhow!("STARLING_RELAY_LOCAL_PORT_RANGE must be \"start-end\": got {v:?}")
             })?;
         }
+        self.voice.enabled = env_parse("STARLING_RELAY_VOICE_ENABLED", self.voice.enabled)?;
+        self.voice.udp_port = env_parse("STARLING_RELAY_VOICE_UDP_PORT", self.voice.udp_port)?;
+        self.voice.max_participants = env_parse(
+            "STARLING_RELAY_VOICE_MAX_PARTICIPANTS",
+            self.voice.max_participants,
+        )?;
+        self.voice.max_concurrent_calls = env_parse(
+            "STARLING_RELAY_VOICE_MAX_CONCURRENT_CALLS",
+            self.voice.max_concurrent_calls,
+        )?;
+        if let Ok(v) = std::env::var("STARLING_RELAY_VOICE_ADVERTISED_ADDRS") {
+            self.voice.advertised_addrs = v
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect();
+        }
         Ok(())
     }
 
@@ -102,6 +153,24 @@ impl Config {
                 "local_port_range start must be <= end, got {:?}",
                 self.local_port_range
             );
+        }
+        // Voice bounds hold even when disabled — a typo'd cap should fail
+        // at boot, not on the day the operator flips `enabled`.
+        if !(2..=24).contains(&self.voice.max_participants) {
+            bail!(
+                "voice.max_participants must be in 2..=24, got {}",
+                self.voice.max_participants
+            );
+        }
+        if self.voice.max_concurrent_calls < 1 {
+            bail!("voice.max_concurrent_calls must be >= 1");
+        }
+        for addr in &self.voice.advertised_addrs {
+            addr.parse::<starling_relay_voice::AdvertisedAddr>().map_err(|_| {
+                anyhow::anyhow!(
+                    "voice.advertised_addrs entry must be an IP or ip:port, got {addr:?}"
+                )
+            })?;
         }
         Ok(())
     }
@@ -193,5 +262,40 @@ mod tests {
         assert!(cfg.validate().is_err());
         // A clean default validates.
         assert!(Config::default().validate().is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_bad_voice_values() {
+        let mut cfg = Config::default();
+        cfg.voice.max_participants = 25;
+        assert!(cfg.validate().is_err(), "cap ceiling is 24");
+        cfg = Config::default();
+        cfg.voice.max_participants = 1;
+        assert!(cfg.validate().is_err(), "a 1-person call is not a call");
+        cfg = Config::default();
+        cfg.voice.max_concurrent_calls = 0;
+        assert!(cfg.validate().is_err());
+        cfg = Config::default();
+        cfg.voice.advertised_addrs = vec!["not-an-ip".into()];
+        assert!(cfg.validate().is_err());
+        cfg = Config::default();
+        cfg.voice.advertised_addrs =
+            vec!["203.0.113.7".into(), "203.0.113.7:47000".into(), "2001:db8::1".into()];
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn voice_toml_parses_and_unknown_voice_key_rejected() {
+        let cfg: Config = toml::from_str(
+            "[voice]\nenabled = true\nudp_port = 47000\nmax_participants = 16\n",
+        )
+        .unwrap();
+        assert!(cfg.voice.enabled);
+        assert_eq!(cfg.voice.udp_port, 47000);
+        assert_eq!(cfg.voice.max_participants, 16);
+        assert_eq!(cfg.voice.max_concurrent_calls, 4, "unset keys keep defaults");
+
+        let err: Result<Config, _> = toml::from_str("[voice]\nudp_prot = 47000\n");
+        assert!(err.is_err(), "deny_unknown_fields covers the [voice] table");
     }
 }
